@@ -1,0 +1,1135 @@
+﻿The Report committee for Marcus Mitchell Tyler Certifies that this is the approved 
+version of the following report: 
+Topic Modeling via Scatter/Gather Clustering 
+APPROVED BY 
+SUPERVISING COMMITTEE 
+Supervisor: 
+___________________________________________________ 
+Joydeep Ghosh 
+___________________________________________________ 
+Alan Bovik
+Topic Modeling via Scatter/Gather Clustering
+by 
+Marcus Mitchell Tyler, B.S.E.E. 
+Report 
+Presented to the Faculty of the Graduate School 
+of the University of Texas at Austin 
+in Partial Fulfillment 
+of the Requirements 
+for the Degree of 
+Master of Science in Engineering 
+The University of Texas at Austin 
+May 2015 
+iii 
+Topic Modeling via Scatter/Gather Clustering
+by 
+Marcus Mitchell Tyler, MSE 
+The University of Texas at Austin, 2015 
+SUPERVISOR: Joydeep Ghosh 
+Latent variable models such as Latent Dirichlet Allocation provide rich tools 
+for analyzing large document corpora. They can uncover a wide range of hidden 
+information such as topics in text, communities in social networks, and patterns in 
+images. Scatter/Gather is a clustering technique that allows users to interactively 
+combine and split groups. When joined with latent variable models, Scatter/Gather 
+organizes topics into themes, enables topic browsing, and improves processing time 
+for large numbers of topics. 
+iv 
+Table of Contents 
+1 Introduction ............................................................................................................................................. 1 
+2 Prior Work ................................................................................................................................................ 2 
+2.1 Scatter/Gather Clustering ......................................................................................................... 4 
+2.2 Latent Dirichlet Allocation ........................................................................................................ 5 
+3 Datasets ...................................................................................................................................................... 6 
+3.1 20 Newsgroups Corpus .............................................................................................................. 6 
+3.2 Enron Corpus .................................................................................................................................. 6 
+3.3 Twitter Corpus ............................................................................................................................... 7 
+4 Scatter-­‐Only LDA Evaluation ............................................................................................................ 8 
+4.1 Algorithm .......................................................................................................................................... 8 
+4.2 Complexity ..................................................................................................................................... 10 
+4.3 Perplexity ....................................................................................................................................... 14 
+4.3.1 Definition .................................................................................................................................... 14 
+4.3.2 Experimental Results ............................................................................................................. 16 
+4.4 Themes and Constraints .......................................................................................................... 17 
+4.5 Topic Browsing ............................................................................................................................ 22 
+5 Scatter/Gather LDA Evaluation ..................................................................................................... 26 
+5.1 Algorithm ........................................................................................................................................ 26 
+5.2 Perplexity ....................................................................................................................................... 26 
+5.3 Topic Browsing ............................................................................................................................ 28 
+6 Conclusion .............................................................................................................................................. 32 
+References .................................................................................................................................................. 33 
+1 
+1 Introduction 
+A variety of tools exist for modeling large document corpora. Two common 
+approaches are clustering and latent variable modeling. This report discusses a way 
+to integrate these approaches. Specifically, the goal is to integrate Scatter/Gather 
+clustering with Latent Dirichlet Allocation (LDA). This allows a human analyst to 
+browse topics in large document corpora and to organize topics by similarity. In this 
+framework, constraints are applied in a way that organizes similar topics into 
+themes—i.e., each theme is a distribution of topics. It will be shown that 
+Scatter/Gather LDA improves algorithmic complexity for large numbers of topics, 
+which is an important consideration for a human analyst. Several practical use 
+scenarios will be explored. 
+2 
+2 Prior Work 
+The primary papers of interest in this report are Scatter/Gather clustering [1] and 
+Latent Dirichlet Allocation (LDA) [2]. Scatter/Gather describes a method of 
+browsing large document corpora, while LDA uncovers latent topics in documents—
+these are each discussed in greater depth in sections 2.1 and 2.2. Scatter/Gather has 
+been used to explore topic structure in large sets of documents using single-­‐linkage 
+hierarchical clustering [4]. The work in this report aims to combine Scatter/Gather 
+with LDA as a method of topic exploration. 
+The model proposed in this report is effectively a two-­‐level topic model with a fixed 
+tree hierarchy of topics. This is similar conceptually to Hierarchical LDA [3], which 
+uses an infinite tree structure to model topics. The primary difference is that in 
+Hierarchical LDA, the tree is generated by a nested Chinese Restaurant Process, and 
+each topic in a document mixture is associated with a different level in the tree. In 
+the proposed model, the tree is generated by Scatter/Gather clustering, and the 
+topics are associated with leaves in the tree. 
+Scatter/Gather LDA is most similar to the Theme Topic Mixture Model (TTMM) 
+created by Keller and Bengio [18]. Their model has a hierarchical topic structure 
+with two levels: themes and topics. In TTMM, each document is associated with one 
+and only one theme, and topics are shared across themes, with document-­‐topic 
+3 
+distributions conditioned on the document theme. This is similar to Scatter/Gather, 
+where each document is associated with one and only one cluster. But since TTMM 
+shares topics across themes, the topic hierarchy cannot be represented as a tree. 
+This is the primary structural difference with Scatter/Gather LDA, where each topic 
+is unique to a theme. 
+A number of topic models impose constraints on output. Andrzejewski et al. 
+incorporate domain knowledge by replacing the Dirichlet Prior with a Dirichlet Tree 
+Prior [5]. In this manner they enforce must-­‐link and cannot-­‐link constraints on 
+words across topics, effectively creating a tree structure amongst words. Some 
+methods incorporate domain knowledge by providing seed words for the topics, 
+such as the lexical prior method outlined by Jagarlamudi et al. [6] 
+Text documents are not the only data source that benefits from latent variable 
+modeling. Another common application is social network modeling, such as in the 
+Mixed Membership Stochastic Blockmodel (MMSB) [7]. MMSB takes a set of edges 
+and returns communities, with memberships as a probability vector for each node. 
+Other models aim to analyze images. For example, Spatial LDA is a latent variable 
+model that incorporates a spatial distance measure between words [8]. In this 
+manner, patterns can be found within images that correspond to topics. 
+4 
+Scatter/Gather could potentially be integrated with any of these latent variable 
+models and utilized in a wide range of applications. 
+2.1 Scatter/Gather Clustering 
+When exploring large document corpora, it is sometimes necessary to see a high-­‐
+level overview rather than querying for a specific document. These are denoted as 
+browsing and searching, respectively. Scatter/Gather clustering is a browsing 
+method that generates summaries of document groups [1]. This method 
+interactively clusters and re-­‐clusters documents according to a document similarity 
+measure. 
+The first step in Scatter/Gather clustering is the Scatter phase, where the documents 
+in the corpora are grouped into clusters. The clusters can be defined by any 
+similarity measure, although the original paper focused on Buckshot and 
+Fractionation clustering, both of which were introduced by the authors. After 
+clustering, a summary of each cluster is presented to the user. 
+The next step is the Gather phase, where the user selects one or more document 
+clusters to combine and re-­‐cluster. In this manner, Scatter/Gather can be viewed as 
+a hierarchical organization method, where clusters are first obtained and then 
+5 
+subclusters are obtained. This process can be repeated ad infinitum according to 
+user preferences. 
+The Scatter step is explored independently in section 4, while the combined 
+Scatter/Gather method is discussed in section 5. In this study, only one iteration is 
+implemented. The document similarity measure selected for this study is topic 
+similarity. The topics are derived from Latent Dirichlet Allocation (LDA). 
+2.2 Latent Dirichlet Allocation 
+LDA is a generative model for uncovering latent topics in document corpora [2]. In 
+LDA, documents are modeled as a distribution of topics, and topics as a distribution 
+of words. The topics for each document are drawn from a Dirichlet distribution, 
+while words are drawn from a multinomial distribution conditioned on the topics. 
+The words are the observed variables, while the topics are the latent variables. 
+Topics are inferred typically through Gibbs sampling or variational methods [2, 9]. 
+6 
+3 Datasets 
+Several datasets were used for the experiments in this report. In order to prepare 
+the original documents for topic modeling, several preprocessing steps were 
+performed. First, special characters were removed from the corpus, as well as 
+common English stop words. Then words appearing in fewer than 100 documents 
+were removed, as well as words appearing in more than 50% of the documents. The 
+dictionary for that corpus was the set of all remaining words. The remainder of this 
+section describes the datasets selected. 
+3.1 20 Newsgroups Corpus 
+The 20 Newsgroups dataset comprises 18,846 articles partitioned into 20 different 
+news categories [10]. Each partition is roughly equal. There are six overall themes: 
+computing, advertising, recreation, politics, science, and religion. Therefore, there is 
+some overlap between topics, e.g. there are separate computing topics for Apple and 
+Microsoft. This makes it a good contender for Scatter/Gather modeling. The 
+dictionary contains 3,529 words. 
+3.2 Enron Corpus 
+During the Enron investigation, a number of emails were released publicly by the 
+Federal Energy Regulatory Commission. They were primarily associated with senior 
+Enron employees. They were then collected by researchers and became a standard 
+7 
+corpus in machine learning. Researchers from the University of Southern California 
+Information Sciences Institute (USC ISI) cleaned the corpus and released it as a 
+MySQL database. They removed duplicate messages and emails with junk data such 
+as attachments and empty content [11]. In this report the USC ISI Enron corpus is 
+used. It contains 252,759 messages from 151 employees. The dictionary contains 
+7,374 words. 
+3.3 Twitter Corpus 
+The Twitter dataset was collected by Dr. Jason Baldridge [12], and comprises a set of 
+geotagged tweets. All tweets originated in North America from September 2011 to 
+November 2011. Tweets were aggregated by user so that each user corresponds to 
+one document. The final corpus contains 449,694 documents. The dictionary 
+contains 50,489 words. 
+8 
+4 Scatter-­‐Only LDA Evaluation 
+The following section describes implementation and experimental results for 
+Scatter-­‐Only LDA. Both qualitative and quantitative results are obtained, with 
+perplexity being used to describe the overall fitness of the model and Kullback-­‐
+Leibler (KL) divergence used to demonstrate the model’s ability to group topics into 
+themes. 
+4.1 Algorithm 
+In this version of the algorithm, Scattering is implemented without Gathering. This 
+means that an initial set of clusters is obtained, and each cluster is split a second 
+time into subclusters. No clusters are combined. 
+It is assumed that the clusters are hard clusters, i.e. that there are no mixed 
+memberships. To apply this framework in the context of LDA, it is assumed that the 
+documents are the data points being clustered, and that each document belongs to 
+one and only one cluster. Thus the clusters can be thought of as partitions of the 
+document space. The cluster labels are identified with the following steps: 
+1.
+Train an LDA model on the corpus. The number of topics K will equal the 
+number of clusters (partitions). Hyperparameters can be set according to 
+user preferences; in this study, they were set to 1/K. 
+9 
+2.
+Determine cluster membership by most discriminant features. For each 
+document, obtain the lift values of the topic distribution, i.e. divide the 
+document’s topic ratios by the corpus topic ratios. The topic with the highest 
+lift value is the document’s cluster membership. 
+Once the cluster labels have been assigned, the Scatter portion of the algorithm is 
+applied. This requires creating subclusters. Thus for each cluster, train an LDA 
+model on the respective subset of documents. The resulting topics are the 
+subclusters within a Scatter-­‐Only framework. Figure 4.1 illustrates this approach. 
+Figure 4.1: Scatter-­‐Only LDA illustration (example K = 3x2) 
+10 
+Note that the number of subclusters can differ from the number of clusters, and that 
+the subclusters can vary from partition to partition. For the tests presented in 
+section 4, all clusters have the same number of subclusters. The number of clusters 
+and the number of subclusters are denoted as 
+𝐾
+!
+x 
+𝐾
+!
+; e.g., 7x3 indicates a test case 
+with 7 clusters and 3 subclusters each. In this report, the top-­‐level clusters are 
+called “themes”, and the subclusters are called “topics”. 
+Also note that in this algorithm, a single iteration of Scattering is applied. In the 
+original Scatter/Gather clustering, the process can continue recursively until the 
+user is satisfied with the results. 
+4.2 Complexity 
+There are several methods of inference in LDA. Two common methods include Gibbs 
+Sampling and Variational Bayes. The algorithmic complexity for each of these 
+methods is discussed in this section. 
+In Gibbs sampling, topics must be sampled for every word. Let N = number of words 
+in the corpus and let K = number of topics. The number of operations per Gibbs 
+iteration for LDA would be on the order of [9]: 
+O 𝑁 ∙ 𝐾
+11 
+In Scatter-­‐Only LDA, the document space is broken into partitions. Let 
+𝐾 = 𝐾
+!
+𝐾
+!
+, the 
+number of themes (partitions) times the number of topics per theme. The cost for a 
+comparable run of Scatter-­‐Only LDA is the following: 
+O 𝑁 ∙ 𝐾
+!
++
+𝑁
+!
+!
+∙ 𝐾
+!
+!
+!
+!
+!
+!!
+= O 𝑁 ∙ 𝐾
+!
++ 𝐾
+!
+∙
+𝑁
+!
+!
+!
+!
+!
+!
+!!
+= O 𝑁 ∙ 𝐾
+!
++ 𝐾
+!
+∙ 𝑁
+= O 𝑁 ∙ [𝐾
+!
++ 𝐾
+!
+]
+where 
+𝑁
+!
+!
+is the number of words in partition 
+𝑘
+!
+. 
+Therefore, Scatter-­‐Only clustering potentially improves total processing time as 
+!
+!
+!!
+!
+!
+. For small K (e.g. K = 6) this difference is negligible, but for large K it can be 
+considerable. For example, take K = 1,000 topics. The optimal choice of 
+𝐾
+!
+and 
+𝐾
+!
+for 
+speed would be 
+𝐾
+!
+= 𝐾
+!
+= 𝐾
+, which would improve processing time as 
+! !
+!
+=
+0.063
+; i.e. the difference in order is 
+O 𝑛
+for LDA versus 
+O
+𝑛
+for Scatter LDA. 
+The inference method used in the experiments in this report is Online LDA [13], 
+which is implemented in the Python Gensim library [16, 17]. This is similar 
+computationally to Variational Bayes LDA, except that it allows new documents to 
+update the model without running through the entire corpus. It was designed to aid 
+in processing unusually large datasets, or applications where processing occurs in 
+real time. However, for the purposes of this report, Gensim LDA was run in batch 
+mode. 
+12 
+A Variational Bayes algorithm must also evaluate word-­‐topic pairings [13], and thus 
+should see comparable improvement. In practice, the improvement in processing 
+speed is more modest, and only manifests in larger values of K. This is because there 
+is overhead involved in each LDA run, as well as overhead in assigning partition 
+labels in Scatter/Gather. Tables 4.1 and 4.2 show the computation times for the 
+Scatter-­‐Only experiments with small K. 
+Table 4.1: Scatter LDA computation times for 20 topics [seconds] 
+20 Newsgroups 
+Enron 
+LDA (K = 20) 
+15.92 
+83.88 
+Scatter-­‐Only (K = 2x10) 
+53.61 
+274.47 
+Scatter-­‐Only (K = 4x5) 
+55.78 
+311.09 
+Scatter-­‐Only (K = 5x4) 
+56.14 
+314.33 
+Scatter-­‐Only (K = 10x2) 
+55.10 
+335.18 
+Table 4.2: Scatter LDA computation times for 40 topics [seconds] 
+Twitter 
+LDA (K = 40) 
+1117.61 
+Scatter-­‐Only (K = 4x10) 
+2011.96 
+Scatter-­‐Only (K = 5x8) 
+2106.82 
+Scatter-­‐Only (K = 8x5) 
+2087.49 
+Scatter-­‐Only (K = 10x4) 
+2252.47 
+13 
+All experiments were run on the same 3.4 GHz Intel processor. It is apparent that 
+Scatter-­‐Only LDA did not improve computation time for small K. For the next test, a 
+setting of K = 1,024 was applied, which is where the Scatter-­‐Only algorithm should 
+see the greatest improvement. These results are shown in Table 4.3. 
+Table 4.3: Scatter LDA computation times for 1,024 topics [seconds] 
+20 Newsgroups 
+Enron 
+Twitter 
+LDA (K = 1024) 
+158.91 
+931.19 
+17844.42 
+Scatter-­‐Only (K = 32x32) 
+72.67 
+395.79 
+3951.15 
+For large K, Scatter LDA demonstrated a marked improvement in complexity. 
+Additionally, Scatter LDA is easily parallelizable among the partitions. Although 
+parallel processing was not utilized in this study, it is clear that running each 
+partition independently would allow an even greater time savings. 
+It should be noted that there are instances when a high number of topics is 
+desirable. Although datasets such as 20 Newsgroups only have 20 “ground truth” 
+topics, evaluating them with a large K (such as K = 1,024) reveals more nuanced 
+topics that could be of use to a human analyst. For example, two topics uncovered in 
+the K = 1,024 LDA run of 20 Newsgroups were the following (Table 4.4): 
+14 
+Table 4.4: Sample topics for K = 1,024 
+Topic # 
+Top Words 
+1 
+andrew cmu pittsburgh mellon carnegie pa fall engineering after last 
+2 
+jpl nasa jet propulsion ron loss spacecraft laboratory pasadena lab 
+These are clearly topics belonging in the computing and science themes. 
+Comparable topics were also present in Scatter LDA K = 32x32. For a human analyst 
+browsing a large set of documents, these nuanced topics can be of use, and small 
+time savings can add up in the long run. 
+4.3 Perplexity 
+4.3.1 Definition 
+In this section, model perplexity is explored. Perplexity is defined as: 
+𝑃 𝐱
+= 2
+!
+!
+!
+!"#
+!
+!(!
+!
+)
+!
+!!!
+where q is the model and 
+𝐱 = {𝑥
+!
+, 𝑥
+!
+, … , 𝑥
+!
+}
+are samples from the true distribution. 
+Thus 
+𝑞(𝑥
+!
+)
+is the probability of document 
+𝑥
+!
+in the model q. The exponent can be 
+regarded as the cross-­‐entropy between the sample distribution and the model. 
+Define the bound as the cross-­‐entropy: 
+𝐵(𝒙) = −
+1
+𝑁
+log
+!
+𝑞(𝑥
+!
+)
+!
+!!!
+This bound can be estimated easily for LDA within Gensim. In order to compute 
+perplexity for Scatter-­‐Only LDA, train the model and assign partition labels to a test 
+15 
+set. Let the total number of topics 
+𝐾 = 𝐾
+!
+𝐾
+!
+, where 
+𝐾
+!
+is the number of themes 
+(partitions) and 
+𝐾
+!
+is the number of topics per theme, let x be the test set, and let 
+𝑇(𝑘
+!
+)
+be the set of test documents in partition 
+𝑘
+!
+. The Scatter-­‐Only prior bound is 
+derived as: 
+𝐵 𝐱
+= −
+1
+𝑁
+log
+!
+𝑞 𝑥
+!
+!
+!
+∈! !
+!
+!
+!
+!
+!
+!!
+= −
+1
+𝑁
+log
+!
+𝑞 𝑥
+!
+!
+!
+∈! !
+!
+!
+!
+!
+!
+!!
+= −
+1
+𝑁
+!
+!
+Pr [𝑥
+!
+∈ 𝑇 𝑘
+!
+]log
+!
+𝑞(𝑥
+!
+)
+!
+!
+∈!(!
+!
+)
+!
+!
+!
+!
+!!
+where 
+𝑁
+!
+!
+is the number of documents in 
+𝑇(𝑘
+!
+)
+. Given the partition labels 
+𝐥 = {𝑙
+!
+, 𝑙
+!
+, … , 𝑙
+!
+}
+, the bound becomes: 
+𝐵(𝐱|𝐥) = −
+1
+𝑁
+!
+!
+Pr 𝑥
+!
+∈ 𝑇 𝑘
+!
+𝑙
+!
+log
+!
+𝑞 𝑥
+!
+𝑙
+!
+!
+!
+∈! !
+!
+!
+!
+!
+!
+!!
+= −
+1
+𝑁
+!
+!
+log
+!
+𝑞 𝑥
+!
+𝑙
+!
+!
+!
+∈! !
+!
+!
+!
+!
+!
+!!
+=
+𝐵
+!
+!
+!
+!
+!
+!
+!!
+since 
+Pr 𝑥
+!
+∈ 𝑇 𝑘
+!
+𝑙
+!
+= 1
+for all 
+𝑥
+!
+by construction. Let 
+𝐵
+!
+!
+be the LDA bound for 
+partition 
+𝑘
+!
+. The bound can also be thought of as the number of bits required to 
+represent the test corpus; in this case, it is a summation of the numbers of bits 
+required to represent the partitions. We are interested in per-­‐word perplexity for 
+these experiments. Therefore the final perplexity is: 
+𝑃(𝐱) = 2
+!(𝐱|𝐥)
+!
+for W = number of words in the corpus. 
+16 
+4.3.2 Experimental Results 
+The Scatter-­‐Only perplexities were computed for all datasets with a variety of 
+numbers of themes and topics. These are compared with LDA-­‐only perplexity on the 
+same data for the same total number of topics. The number of topics selected for 20 
+Newsgroups and Enron was 20, with the numbers of themes being factors of 20. 
+Results are shown in Table 4.5. 
+Table 4.5: Scatter LDA perplexity results for 20 topics 
+20 Newsgroups 
+Enron 
+LDA, K = 20 
+197.03 
+235.31 
+Scatter-­‐Only, K = 2x10 
+200.82 
+231.85 
+Scatter-­‐Only, K = 4x5 
+200.06 
+230.19 
+Scatter-­‐Only, K = 5x4 
+205.30 
+228.76 
+Scatter-­‐Only, K = 10x2 
+194.38 
+231.18 
+A total of 40 topics was selected for the Twitter corpus, as it is larger than the other 
+datasets. Perplexity results for Twitter are shown in Table 4.6. 
+17 
+Table 4.6: Scatter LDA perplexity results for 40 topics 
+Twitter 
+LDA, K = 40 
+250.63 
+Scatter-­‐Only, K = 4x10 
+256.15 
+Scatter-­‐Only, K = 5x8 
+257.52 
+Scatter-­‐Only, K = 8x5 
+259.39 
+Scatter-­‐Only, K = 10x4 
+266.52 
+It is clear that perplexity for the Scatter-­‐Only LDA method generally matches that of 
+plain LDA, and in some cases improves it. This bodes well for qualitative analysis, 
+which will be discussed in the following sections. 
+4.4 Themes and Constraints 
+Where Scatter-­‐Gather shines is as a form of data exploration. Scatter LDA identifies 
+themes in the corpus and groups similar topics together. This is useful for a human 
+analyst, but it provides some limitations on the results. In particular, the topics are 
+not shared across themes, as the corpus is effectively split into many smaller 
+corpora. 
+This can be interpreted as imposing constraints on the topics. In topic modeling, it is 
+common to impose must-­‐link and cannot-­‐link constraints, such as between words 
+within topics [5]. These constraints are often set as a prior, with a user manually 
+18 
+setting the constraints with domain knowledge. But in Scatter-­‐Only LDA, the topics 
+themselves are linked. Topics within themes must be correlated, and topics across 
+themes must not be. These links in Scatter-­‐Only LDA arise by the organization of the 
+algorithm, rather than by user selection. 
+This approach to data organization encourages separability, and is similar in spirit 
+to the approach used in Otsu’s method for generating a black and white image from 
+a greyscale image. In Otsu’s method, pixels are grouped into classes, with the aim to 
+minimize the intra-­‐class variance and maximize the inter-­‐class variance [14]. In 
+Scatter LDA the themes correspond to the classes, and the topics are the pixels. 
+The presence of themes can be evaluated in both qualitative and quantitative terms. 
+Qualitatively, it is straightforward to look at the resulting subtopics and see that 
+they have words in common. In this example from the Enron dataset, an initial list of 
+20 topics is obtained from a plain LDA run of the Enron corpus (Table 4.7). Many of 
+the topics deal with scheduling, energy, and the legal crisis. Topic 17 stands out in 
+that it is about football, which is unrelated to business. When running the 
+Scatter-­‐Only LDA 10x2 process, pairs of related topics are returned (Table 4.8). 
+19 
+Table 4.7: Enron topics, LDA, K = 20 
+Topic # 
+Top Words 
+1 
+out up last time good back going 
+2 
+enron employees please retirement donate company made 
+3 
+california consumers energy state bills market utility 
+4 
+enron business management group risk trading new 
+5 
+please attached doc questions thanks copy let 
+6 
+image click free here mail subscription email 
+7 
+know thanks let please need am jeff 
+8 
+outlook offense items mailbox de folder size 
+9 
+gas southwest palo northwest mid west columbia 
+10 
+mail email information message may please intended 
+11 
+pm please pst feedback am information eb 
+12 
+please access email information data web new 
+13 
+report hourahead xls reports required manual stock 
+14 
+enron deal dealings netted bankruptcy credit company 
+15 
+company energy million stock yards year last 
+16 
+number dec please oct new enron keiser 
+17 
+game against wr week defense qb updated 
+18 
+meeting th conference monday please october wednesday 
+19 
+texas north corp america houston smith enron 
+20 
+term epmi total short day long deals 
+20 
+Table 4.8: Enron topics, Scatter LDA, K = 10x2 
+Topic # 
+Top Words 
+1-­‐1 
+texas up ut out state mail know 
+1-­‐2 
+game ut yards team season year play 
+2-­‐1 
+enron employees please company new houston made 
+2-­‐2 
+image enron energy company consumers new out 
+3-­‐1 
+please gas may power know deal need 
+3-­‐2 
+market power gas energy area california mw 
+4-­‐1 
+enron business new group trading risk management 
+4-­‐2 
+please enron position time information trade business 
+5-­‐1 
+enron agreement please contract deal gas sale 
+5-­‐2 
+please corp north america texas legal smith 
+6-­‐1 
+gas herein intercontinentalexchange email am data information 
+6-­‐2 
+gas day deal term deals total please 
+7-­‐1 
+know thanks let am up need out 
+7-­‐2 
+please meeting call jeff communications thanks know 
+8-­‐1 
+image click please new email free mail 
+8-­‐2 
+please enron email outlook access web address 
+9-­‐1 
+please feedback process information enron may questions 
+9-­‐2 
+please report attached questions thanks call know 
+10-­‐1 
+please enron mail information may copy questions 
+10-­‐2 
+enron please email mail message may doc 
+21 
+With K = 10x2, there are two football topics (1-­‐1 and 1-­‐2). It can be seen that each 
+pair of topics are related, e.g. topics 5-­‐1 and 5-­‐2 are about legal work and topics 6-­‐1 
+and 6-­‐2 are about gas prices. The number of topics per theme varies consistently 
+with the Scatter-­‐Only settings. When running the Scatter-­‐Only 7x3 process, three 
+football topics are uncovered (Table 4.9): 
+Table 4.9: Enron sample topics, Scatter LDA, K = 7x3 
+Topic # 
+Top Words 
+1-­‐1 
+texas state true commitment mail subscription longhorns 
+1-­‐2 
+game ut yards season team year texas 
+1-­‐3 
+texas ut longhorn longhorns austin going houston 
+The remaining topics are business themed as before. This demonstrates how the 
+Scatter method can be used to explore topics within the Enron corpus that do not 
+appear with pure LDA. In particular, the football topics within the 7x3 case show 
+that the sports discussions are more nuanced. Some appear to be focused on 
+recruiting (with words like “true” and “commitment”) while some are more focused 
+on gameplay (with words like “game”, “yards”, and “season”). 
+Scatter-­‐Only themes and constraints can be explored quantitatively by computing a 
+similarity measure between topics. A simple option is to use Kullback-­‐Leibler (KL) 
+22 
+divergence [15]. Table 4.10 shows the average inter-­‐theme and intra-­‐theme KL 
+divergences among all topic pairs. 
+Table 4.10: Average KL divergence between topic pairs 
+Test Case 
+Intra-­‐theme Mean 
+KL Divergence 
+Inter-­‐theme Mean 
+KL Divergence 
+Enron 7x3 Scatter-­‐Only 
+1.222 
+1.747 
+Enron 10x2 Scatter-­‐Only 
+0.857 
+1.393 
+20Newsgroups 7x3 Scatter-­‐Only 
+0.112 
+0.767 
+20Newsgroups 10x2 Scatter-­‐Only 
+0.056 
+0.724 
+Note that the average intra-­‐theme KL divergence is always lower than the average 
+inter-­‐theme KL divergence, suggesting that the topics within themes are correlated 
+as expected. 
+4.5 Topic Browsing 
+In this section, topics within the Twitter corpus are explored qualitatively. For this 
+analysis the number of topics K was set to 40x5. Two of the more interesting themes 
+are as follows (Table 4.11): 
+23 
+Table 4.11: Twitter sample themes, Scatter LDA, K = 40x5 
+Theme # 
+Top Words 
+1 
+chicago toronto antonio il centre ontario canada illinois ottawa tim 
+clark london cta victoria lawrence king hortons niagara station north 
+2 
+ne seattle sw portland island se ave way fargo nw mph vancouver 
+greenville oregon aurora tacoma sioux estate wells ankeny 
+As can be seen, they both tend to focus on places and streets. The first focuses on 
+Illinois and Canada, while the second focuses on the Pacific Northwest and several 
+small towns in the Midwest. When scattering the first theme, a few of the topics are 
+as follows (Table 4.12): 
+Table 4.12: Twitter sample topics, Scatter LDA, K = 40x5 
+Topic # 
+Top Words 
+1-­‐1 
+chicago ave others st san antonio rd airport park center international 
+blvd mayor north dr il house bar cta btwn 
+1-­‐2 
+st others waterloo rd victoria chicago street kitchener ave home 
+mayor house west realty here williams north keller great center 
+1-­‐3 
+toronto st ave others rd centre street mayor ottawa yonge ousted 
+west ontario king road mississauga station home tim hortons 
+24 
+It can be seen that Chicago and Canada are unique discussions that were combined 
+in the first theme. This is most apparent in topic 1-­‐3, which focuses almost entirely 
+on references to Canada, such as city names, street names, and the popular Tim 
+Hortons business. It also contains the words “mayor” and “ousted”, which could 
+refer to political controversies that occurred in Toronto around the same time as the 
+tweets. The other topics contain references to Chicago and a few smaller Canadian 
+cities. 
+Scattered topics from the second theme are shown in Table 4.13. They suggest that 
+the second theme is more nuanced than the words in Table 4.11—for example, 
+references to New York City appear which were not present before. Notably there is 
+an entire topic dedicated to weather terms, which also references Midwest locations 
+like “Sioux”, “Moorhead”, “Vermillion”, and “Fargo”. This suggests that the Midwest 
+discussions are on the upcoming winter and are separate from the Pacific Northwest 
+discussions, although they all fall under the theme of northern states. 
+25 
+Table 4.13: Twitter sample topics, Scatter LDA, K = 40x5 
+Topic # 
+Top Words 
+2-­‐1 
+ave others st portland sw rd ne airport blvd international se nw 
+mayor house center tacoma home seattle dr ousted 
+2-­‐2 
+seattle ave st others ne island way staten center street bellevue new 
+redmond mayor blvd university york sw avenue se 
+2-­‐3 
+wind today humidity rain mph pressure rising sioux ave falling falls 
+temperature fargo moorhead st south slowly mayor sw vermillion 
+26 
+5 Scatter/Gather LDA Evaluation 
+In this section, the Gather step is implemented with Scatter LDA. The combined 
+Scatter/Gather LDA model is investigated in terms of perplexity and topic browsing 
+capabilities. 
+5.1 Algorithm 
+The design of Scatter-­‐Gather LDA is mostly the same as Scatter-­‐only LDA, except 
+that the themes are combined in various arrangements. For instance, given initial 
+partitions A, B, and C, the Gather phase would create new partitions A and (B U C), 
+or (A U B) and C, or (A U C) and B. Scatter/Gather LDA therefore requires user-­‐
+defined topic constraints, in the original spirit of Scatter/Gather browsing. For 
+example, one application could be to fix a theme that had been incorrectly split in 
+the first iteration of LDA. Once the new partitions are created, the Scatter phase of 
+the algorithm proceeds as before. 
+5.2 Perplexity 
+Since the Gather step simply combines initial partitions into new partitions, the 
+mathematical interpretation of Scatter-­‐Gather LDA is the same as Scatter-­‐Only LDA. 
+The perplexity is defined in section 4.3. This section will focus on experimental 
+results. 
+27 
+The following tests focus on the 20 Newsgroups and Enron corpora. For each test, a 
+set of initial themes was identified by LDA, and the partitions were selected 
+manually. Each new partition was chosen as a union of themes that appeared to be 
+similar; in the case of 20 Newsgroups, the partitions were selected to fit the broad 
+categories of science, politics, computing, religion, etc. The number of themes/topics 
+selected is denoted as 
+𝐾
+!
+𝐾
+!
+!
+x 𝐾
+!
+, where 
+𝐾
+!
+indicates the number of initial themes, 
+𝐾
+!
+!
+indicates the number of gathered partitions, and 
+𝐾
+!
+indicates the number of 
+scattered topics per partition. Results for 20 total topics are shown in Table 5.1. 
+Results for 50 total topics are shown in Table 5.2. 
+Table 5.1: Scatter/Gather LDA perplexity results for 20 topics 
+20 Newsgroups 
+Enron 
+LDA, K = 20 
+197.03 
+235.31 
+Scatter/Gather, K = (20)5x4 
+286.08 
+312.40 
+Table 5.2: Scatter/Gather LDA perplexity results for 50 topics 
+20 Newsgroups 
+Enron 
+LDA, K = 50 
+228.78 
+222.91 
+Scatter/Gather, K = (20)5x10 
+366.87 
+336.83 
+It is clear that Scatter/Gather LDA does not perform as well as LDA or Scatter LDA in 
+terms of perplexity. As an additional test, a smaller number of partitions was 
+selected for the 20 Newgroups corpus, assigning each document to either a “science” 
+28 
+group or a “politics” group. For this test, where K = (20)2x10, the perplexity was 
+244.04, which improved on the five-­‐partition case but still did not match the LDA 
+case. It seems that the introduction of user-­‐defined partitions confuses the model, 
+and that the mathematics are best left to their own devices. However, the original 
+value of Scatter/Gather clustering was in its browsing capabilities, as opposed to its 
+predictive power. The browsing capabilities of Scatter/Gather LDA are investigated 
+in the following section. 
+5.3 Topic Browsing 
+This section focuses on Scatter/Gather browsing, starting with the 20 Newsgroups 
+case where K = (20)5x4. The following initial themes were gathered into a 
+“computing” partition (Table 5.3): 
+Table 5.3: 20 Newsgroups sample partition, Scatter/Gather LDA, K = (20)5x4 
+Theme # 
+Top Words 
+(1)1 
+drive scsi university mb problem posting nntp host know up 
+(2)1 
+file window program files information ftp pub data available output 
+(3)1 
+mail send information available new computer university system sas internet 
+(4)1 
+windows os dos card ms video hp thanks pc university 
+29 
+Most of the top words deal with hardware and communications protocols, such as 
+“SCSI”, “SAS”, “NNTP”, “FTP”, etc. A few operating system words appear, such as 
+“Windows”, “OS”, and “DOS”. The partition was then scattered into four final topics 
+(Table 5.4): 
+Table 5.4: 20 Newsgroups sample topics, Scatter/Gather LDA, K = (20)5x4 
+Topic # 
+Top Words 
+1-­‐1 
+up university card windows file new know system os only 
+1-­‐2 
+information system mail university ftp computer pub available window new 
+1-­‐3 
+file output window mail program pub graphics image information please 
+1-­‐4 
+scsi drive windows mb university host nntp posting dos up 
+As would be expected, the scattered topics have much in common with the initial 
+topics. A few new words appeared, such as “graphics” and “image”—these are 
+notable because “comp.graphics” was one of the original ground truth topics in the 
+20 Newsgroups corpus, and it was not adequately represented with just the initial 
+LDA topics. This suggests that one possible use of the Scatter/Gather method is to 
+supplement LDA, providing a slightly different slice of the data, and exploring the 
+topic space more fully. 
+30 
+In the next example, the Enron corpus is discussed. When running the Enron 
+Scatter/Gather K = (20)5x10 test, the following initial themes were gathered into an 
+“energy” partition (Table 5.5): 
+Table 5.5: Enron sample partition, Scatter/Gather LDA, K = (20)5x10 
+Theme # 
+Top Words 
+(1)1 
+energy company gas power columbia natural inc oil xls trading 
+(2)1 
+report data avg reports information available gas daily west east 
+(3)1 
+contract price deal shall date volume ces index firm only 
+(4)1 
+request date trading position dynegy day days trade start required 
+(5)1 
+enron north texas corp risk ena america trading hpl ees 
+(6)1 
+term epmi total gas market short deal day deals mid 
+Note that these are slightly different than the topics listed in section 4.4, because a 
+holdout set was used in this test case for estimating perplexity. After the scatter 
+step, the following topics appeared (Table 5.6): 
+31 
+Table 5.6: Enron sample topics, Scatter/Gather LDA, K = (20)5x10 
+Topic # 
+Top Words 
+1-­‐1 
+enron dynegy merger now contract agreement report transaction 
+available published 
+1-­‐2 
+contact please enron click pay energy information oil link may 
+1-­‐3 
+market power energy area enron new electricity gas restrictions prices 
+1-­‐4 
+gas california capacity meter pipeline energy transmission el into service 
+1-­‐5 
+please thanks know let am need north call america corp 
+1-­‐6 
+enron energy power inc agreement services financial company master mc 
+1-­‐7 
+hourahead required schedule manual start failed day option position price 
+1-­‐8 
+term epmi total short day long sp palo mid price 
+1-­‐9 
+report please request xls attached hpl bpa ercot group download 
+1-­‐10 
+deal deals thanks ena know desk need trading book enron 
+Observe how topic 1-­‐1 suggests a merger between Enron and Dynegy, a significant 
+fact not revealed in the original six themes. Indeed, this merger had been 
+considered, and was ultimately halted during the Enron investigation [19]. 
+32 
+6 Conclusion 
+The use of Scatter/Gather clustering with LDA allows for topic modeling where 
+topics are grouped automatically into themes. This is useful for user interpretation 
+and improves computation time for large numbers of topics. It also enables 
+browsing, where a human analyst can interactively combine themes and see the 
+resulting topics. Although model perplexity increases when human-­‐selected 
+constraints are applied to the topics, the added browsing capabilities may be an 
+adequate tradeoff for certain applications. 
+A potential extension for future work could be to create a more sophisticated model 
+that allows topic sharing. This would remove topic constraints by allowing soft 
+clusters in lieu of partitions. It would be similar to TTMM, except that it would 
+utilize Scatter/Gather clustering for the topic hierarchy, allowing user-­‐defined 
+theme-­‐topic links. Other avenues of work could be to integrate Scatter/Gather 
+clustering with other types of latent variable models, such as with social networks 
+or images, allowing the full potential of this browsing approach to be realized. 
+33 
+References 
+[1] 
+Cutting, Douglass R., et al. "Scatter/gather: A cluster-­‐based approach to 
+browsing large document collections." Proceedings of the 15th Annual 
+International ACM SIGIR Conference on Research and Development in 
+Information Retrieval. ACM, 1992. 
+[2] 
+Blei, David M., Andrew Y. Ng, and Michael I. Jordan. "Latent dirichlet 
+allocation." The Journal of Machine Learning Research 3 (2003): 993-­‐1022. 
+[3] 
+Blei, David M., et al. "Hierarchical topic models and the nested Chinese 
+restaurant process." Advances in Neural Information Processing Systems 16 
+(2004): 17. 
+[4] 
+Pirolli, Peter, et al. "Scatter/gather browsing communicates the topic 
+structure of a very large text collection." Proceedings of the SIGCHI conference 
+on Human factors in computing systems. ACM, 1996. 
+[5] 
+Andrzejewski, David, Xiaojin Zhu, and Mark Craven. "Incorporating domain 
+knowledge into topic modeling via Dirichlet forest priors." Proceedings of the 
+26th Annual International Conference on Machine Learning. ACM, 2009. 
+[6] 
+Jagarlamudi, Jagadeesh, Hal Daumé III, and Raghavendra Udupa. 
+"Incorporating lexical priors into topic models." Proceedings of the 13th 
+Conference of the European Chapter of the Association for Computational 
+Linguistics. Association for Computational Linguistics, 2012. 
+[7] 
+Airoldi, Edoardo M., et al. "Mixed membership stochastic blockmodels." 
+Advances in Neural Information Processing Systems. 2009. 
+[8] 
+Wang, Xiaogang, and Eric Grimson. "Spatial latent dirichlet allocation." 
+Advances in Neural Information Processing Systems. 2008. 
+[9] 
+Porteous, Ian, et al. "Fast collapsed gibbs sampling for latent dirichlet 
+allocation." Proceedings of the 14th ACM SIGKDD International Conference on 
+Knowledge Discovery and Data Mining. ACM, 2008. 
+[10] 
+Lang, Ken. "Newsweeder: Learning to filter netnews." Proceedings of the 12th 
+International Conference on Machine Learning. 1995. 
+34 
+[11] 
+Shetty, Jitesh, and Jafar Adibi. "The Enron email dataset database schema and 
+brief statistical report." Information Sciences Institute Technical Report, 
+University of Southern California 4 (2004). 
+[12] 
+Roller, Stephen, et al. "Supervised text-­‐based geolocation using language 
+models on an adaptive grid." Proceedings of the 2012 Joint Conference on 
+Empirical Methods in Natural Language Processing and Computational 
+Natural Language Learning. Association for Computational Linguistics, 2012. 
+[13] 
+Hoffman, Matthew, Francis R. Bach, and David M. Blei. "Online learning for 
+latent dirichlet allocation." Advances in Neural Information Processing 
+Systems. 2010. 
+[14] 
+Otsu, Nobuyuki. "A threshold selection method from gray-­‐level histograms." 
+Automatica 11.285-­‐296 (1975): 23-­‐27. 
+[15] 
+Chuang, Jason, et al. "Topic model diagnostics: Assessing domain relevance 
+via topical alignment." Proceedings of the 30th International Conference on 
+Machine Learning (ICML-­‐13). 2013. 
+[16] 
+Řehůřek, Radim, and Petr Sojka. "Software framework for topic modelling 
+with large corpora." (2010). 
+[17] 
+Řehůřek, Radim. Gensim. 12 Apr. 2015. Web. 28 Apr. 2015. 
+<https://radimrehurek.com/gensim/> 
+[18] 
+Keller, Mikaela, and Samy Bengio. "Theme topic mixture model: A graphical 
+model for document representation." PASCAL workshop on text mining and 
+understanding. No. LIDIAP-­‐CONF-­‐2004-­‐001. 2004. 
+[19] 
+“Dynegy scraps Enron deal.” CNN/Money. CNN, 28 Nov. 2001. Web. 2 May 
+2015. <http://money.cnn.com/2001/11/28/companies/enron/> 

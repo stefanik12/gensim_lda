@@ -1,0 +1,2657 @@
+﻿Distributed Representation of Subgraphs
+Bijaya Adhikari, Yao Zhang, Naren Ramakrishnan and B. Aditya Prakash
+Department of Computer Science, Virginia Tech
+Email:[bijaya,yaozhang,naren,badityap]@cs.vt.edu
+ABSTRACT
+Network embeddings have become very popular in learning ef-
+fective feature representations of networks.
+Motivated by the re-
+cent successes of embeddings in natural language processing, re-
+searchers have tried to find network embeddings in order to exploit
+machine learning algorithms for mining tasks like node classifi-
+cation and edge prediction.
+However,
+most of the work focuses
+on finding distributed representations of nodes, which are inher-
+ently ill-suited to tasks such as community detection which are
+intuitively dependent on subgraphs.
+Here, we propose
+Sub2Vec
+, an unsupervised scalable algorithm
+to learn feature representations of arbitrary subgraphs.
+We provide
+means to characterize similarties between subgraphs and provide
+theoretical analysis of
+Sub2Vec
+and demonstrate that it preserves
+the so-called local proximity.
+We also highlight the usability of
+Sub2Vec
+by leveraging it for network mining tasks, like community
+detection.
+We show that
+Sub2Vec
+gets significant gains over state-
+of-the-art methods and node-embedding methods.
+In particular,
+Sub2Vec
+offers an approach to generate a richer vocabulary of
+features of subgraphs to support representation and reasoning.
+ACM Reference format:
+Bijaya Adhikari, Yao Zhang, Naren Ramakrishnan and B. Aditya Prakash.
+2016.
+Distributed Representation of Subgraphs.
+In Proceedings of ACM
+Conference, Washington, DC, USA, July 2017 (Conference’17), 9 pages.
+DOI: 10.1145/nnnnnnn.nnnnnnn
+1
+INTRODUCTION
+Graphs are a natural abstraction for representing relational data
+from multiple domains such as social networks,
+protein-protein
+interactions networks, the World Wide Web, and so on.
+Analysis
+of such networks include classification [
+5
+],
+link prediction [
+20
+],
+detecting communities [
+6
+,
+10
+], and so on.
+Many of these tasks can
+be solved using machine learning algorithms.
+Unfortunately, since
+most machine learning algorithms require data to be represented as
+features, applying them to graphs is challenging due to their high
+dimensionality and structure.
+In this context, learning meaning-
+ful feature representation of graphs can help to leverage existing
+machine learning algorithms more widely on graph data.
+Apart from classical dimensionality reduction techniques (see
+related work),
+recent works [
+11
+,
+25
+,
+29
+,
+31
+] have explored vari-
+ous ways of learning feature representation of nodes in networks
+Permission to make digital or hard copies of all or part of this work for personal or
+classroom use is granted without fee provided that copies are not made or distributed
+for profit or commercial advantage and that copies bear this notice and the full citation
+on the first page.
+Copyrights for components of this work owned by others than ACM
+must be honored. Abstracting with credit is permitted. To copy otherwise, or republish,
+to post on servers or to redistribute to lists, requires prior specific permission and/or a
+fee.
+Request permissions from permissions@acm.org.
+Conference’17, Washington, DC, USA
+© 2016 ACM.
+978-x-xxxx-xxxx-x/YY/MM. . . $15.00
+DOI: 10.1145/nnnnnnn.nnnnnnn
+exploiting relationships to vector representations in NLP (like
+word2vec [
+22
+]).
+However, application of such methods are limited
+to binary and muti-class node classification and edge-prediction.
+It
+is not clear how one can exploit these methods for other tasks like
+community detection which are inherently based on subgraphs and
+node embeddings result in loss of information of the subgraph struc-
+ture.
+Embedding of subgraphs or neighborhoods themselves seem
+to be better suited for these tasks.
+Surprisingly, learning feature
+representation of networks themselves (subgraphs and graphs) has
+not gained much attention thus far.
+In this paper, we address this
+gap by studying the problem of learning distributed representation
+of subgraphs.
+Our contributions are:
+(1)
+We propose
+Sub2Vec
+, a scalable subgraph embedding method
+to learn features for arbitrary subgraphs that maintains
+the so-called local proximity.
+(2)
+We also provide theoretical justification of network em-
+bedding using
+Sub2Vec
+, based on language modeling tools.
+We also propose meaningful ways to measure how similar
+two subgraphs are to each other.
+(3)
+We conduct multiple experiments over large diverse real
+datasets to show correctness, scalability, and utility of fea-
+tures learnt by
+Sub2Vec
+in several tasks.
+In particular we
+get upto 4x better results in tasks such as community de-
+tection compared to just node-embeddings.
+The rest of the paper is organized as follows: we first formulate
+and motivate our problem, then present
+Sub2Vec
+, discuss experi-
+ments, and finally present related work, discussion and conclusions.
+2
+PROBLEM FORMULATION
+In this paper,
+we are interested in embedding subgraphs into a
+low dimensional
+continuous vector space.
+As shown later,
+the
+vector representation of subgraphs enables us to apply off-the-shelf
+machine learning algorithms directly to solve subgraph mining
+tasks.
+For example,
+to group subgraphs together,
+we can apply
+clustering algorithms like KMeans directly.
+Figure 1 (a-c) gives an
+illustration.
+Given a set of subgraphs (Figure 1 (b)) of a graph
+G
+(Figure 1 (a)), we learn a low-dimensional feature representation of
+each subgraph (Figure 1(d)).
+Now we are ready to formulate our Subgraph Embedding prob-
+lem. We are given a graph
+G(V , E)
+where
+V
+is the vertex set, and
+E
+is
+the associated edge-set (we assume undirected graphs here, but our
+framework can be easily extended to directed graphs as well).
+We
+define
+д
+i
+(v
+i
+, e
+i
+)
+as a subgraph of
+G
+, where
+v
+i
+⊆ V
+and
+e
+i
+⊆ E
+.
+For
+simplicity, we write
+д
+i
+(v
+i
+, e
+i
+)
+as
+д
+i
+. As input we require a set of sub-
+graphs
+S = {д
+1
+, д
+2
+, . . . , д
+n
+}
+.
+Our goal is to embed subgraphs in
+S
+into
+d
+-dimensional feature space
+R
+d
+, where
+d << |V |
+.
+In addition,
+we want to ensure the subgraph proximity is well-preserved in such
+a
+d
+-dimensional space.
+In this paper, we consider to preserve the
+arXiv:1702.06921v1 [cs.SI] 22 Feb 2017
+Conference’17, July 2017, Washington, DC, USA
+B. Adhikari et al.
+(a) A network G
+(b) A set, S, of subgraphs of G
+(c) embedding learned for each subgraph
+(d) Intermediate neighborhoods
+on each subgraph
+Figure 1:
+An overview of our Sub2Vec.
+Our input is a set of subgraphs S drawn from a network G.
+We obtain d dimensional
+embedding of subgraphs such that we maximize the likelihood of observing intermediate neighborhoods.
+“local neighborhood” of each subgraph
+д
+i
+. The idea is that if two sub-
+graphs share common structure, then their vector representations
+in R
+d
+are close.
+We call such a measure Local Proximity.
+Informal Definition 1.
+(Local Proximity).
+Given two sub-
+graphs
+д
+i
+(v
+i
+, e
+1
+)
+and
+д
+j
+(v
+j
+, e
+j
+)
+, the local proximity between
+д
+i
+and
+д
+j
+is larger if the commonly induced subgraph is larger.
+Intuitively, local proximity measures how many nodes, edges,
+and paths are shared by two subgraphs.
+For illustration of the local
+proximity, let us consider an example.
+In Figure 2, suppose
+д
+1
+,
+д
+2
+,
+and
+д
+3
+are subgraphs induced by nodes
+{a, b, c, e }
+and
+{b, c, d, e }
+,
+and
+{d, e, f , j }
+. Since, the subgraph commonly induced by
+д
+1
+and
+д
+2
+is larger than the subgraph commonly induced by
+д
+1
+and
+д
+3
+, we say
+д
+1
+and
+д
+2
+to be more “locally proximal” to each other than
+д
+1
+and
+д
+3
+.
+Note that the local proximity is not just the Jaccard similarity of
+nodes in the two subgraphs, as it also takes the connections among
+the common nodes into account.
+Figure 2: A toy network
+Having defined the local proximity of two subgraphs, we focus
+on learning vector representations of subgraphs such that the lo-
+cal proximity is preserved.
+Formally,
+our Subgraph Embedding
+problem is,
+Problem 1.
+Given a graph
+G(V , E)
+,
+d
+and set of
+S
+subgraphs (of
+G
+)
+S = {д
+1
+, д
+2
+, . . . , д
+n
+}
+, learn an embedding function
+f
+:
+д
+i
+→ y
+i
+∈ R
+d
+such that Local Proximity among subgraphs is preserved.
+According to Problem 1, if
+д
+i
+and
+д
+j
+are closer to each other in
+terms of the local proximity that
+д
+k
+and
+д
+k
+then the
+sim f (д
+i
+), f (д
+j
+)
+
+has to be greater than
+sim
+(
+f (д
+i
+), f (д
+k
+)
+)
+, where
+sim(x, y)
+is a sim-
+ilarity metric between two real vectors
+x
+and
+y
+in
+R
+d
+.
+Hence,
+if
+we embed the subgraphs in Figure 2 from the previous example,
+then a correct algorithm to solve Problem 1 has to ensure that
+sim
+(
+f (д
+1
+), f (д
+2
+)
+)
+> sim f (д
+i
+), f (д
+j
+)
+
+.
+We propose an efficient
+algorithm for Problem 1 based on two different optimization objec-
+tives in the next section.
+A natural question to ask is that if there are other metrics of
+subgraph similarity.
+Indeed,
+one can think of other measures of
+proximity,
+which may result in different embeddings.
+We will
+discuss this point further in Section 6.
+3
+LEARNING FEATURE REPRESENTATIONS
+In this section, we propose two optimization objectives for Prob-
+lem 1 and propose an unsupervised deep learning technique to
+optimize the objectives.
+Mikolov et al.
+proposed the continuous bag of words and skip-
+gram models in [
+22
+], which have been extensively used in learning
+continuous feature representation of words.
+Building on these
+two models,
+Le et al. [
+15
+] proposed two models:
+the Distributed
+Memory of Paragraph Vector (PV-DM), and the Distributed Bag of
+Words version of Paragraph Vector (PV-DBOW), which can learn
+continuous feature representations of paragraphs and documents.
+Our main idea is to pose our feature learning problem as a maxi-
+mum likelihood problem by extending PV-DM and PV-DBOW to
+networks.
+The direct analog is to treat each node as a word, and
+each subgraph as a paragraph.
+The edges within a subgraph can
+be thought as the adjacency relation of two words in a paragraph.
+PV-DBOW and PV-DM assume that if two paragraphs share similar
+sequence of words, they are close in the embedded feature space.
+The local proximity of subgraphs naturally follows the above as-
+sumption.
+Hence, we can leverage deep learning techniques in [
+15
+]
+for our subgraph embedding problem. PV-DBOW and PV-DM learn
+a latent representation by maximizing a distribution of word co-
+occurrences (using either n-gram or skip-gram model). Similarly, in
+this paper, we maximize a distribution of “node neighborhood”. The
+so-called “node neighborhood” is generated by subgraph-truncated
+random walks (see details in Section 3.3).
+We call our models Dis-
+tributed Bag of Nodes version of Subgraph Vector (
+Sub2Vec
+-DBON)
+and Distributed Memory version of Subgraph Vector (
+Sub2Vec
+-DM)
+respectively.
+Next, we will introduce
+Sub2Vec
+-DM,
+Sub2Vec
+-DBON first, then
+study how to generate “node neighborhood” and give a justifica-
+tion from matrix multiplication view.
+Finally, we summarize our
+algorithm Sub2Vec.
+Distributed Representation of Subgraphs
+Conference’17, July 2017, Washington, DC, USA
+3.1
+Sub2Vec-DM
+In the
+Sub2Vec
+-DM model, we seek to predict a node
+u
+given other
+nodes in
+u
+’s neighborhoods and the subgraph
+u
+belongs to. Consider
+the subgraph
+д
+1
+(a subgraph induced by nodes
+{a, b, c, e }
+) in Figure
+2.
+Suppose the sequence of nodes returned by random walks in
+д
+1
+is
+[a, b, c]
+, and we consider neighborhood of distance 2, then the
+model asks to predict node
+c
+given subgraph
+д
+1
+, and its predecessors
+(a and b), i.e., Pr(c |д
+1
+, {a, b }).
+More precisely, given a
+G
+0
+(V
+0
+, E
+0
+)
+as the union graph of all the
+subgraphs in
+S = {д
+1
+, д
+2
+, . . . , д
+n
+}
+,
+where
+V
+0
+=
+Ð
+i
+v
+i
+and
+E
+0
+=
+Ð
+i
+e
+i
+,
+consider a function
+m
+:
+V
+0
+→ R
+d
+(
+m(n)
+= x
+).
+We define
+M
+as a
+d × |V
+0
+|
+node vector matrix,
+where each column is
+m(n)
+(the vector representation of nodes
+n ∈ V
+0
+).
+Similarly, we define
+function
+f (д
+i
+)
+as the embedding function for subgraph
+д
+i
+, where
+f (д
+i
+)
+is a
+d
+-dimensional vector. We denote
+S
+as the subgraph matrix,
+where each column is
+f (д
+i
+)
+for all subgraphs in
+S
+.
+The matrices
+M
+and
+S
+are indexed by node and subgraph ids.
+In
+Sub2Vec
+-DM,
+we use the node and subgraph vectors to predict the next node in
+the neighborhood
+N
+n
+.
+We assume
+N
+n
+is given, and will discuss
+N
+n
+later in Section 3.3.
+Now, given a node
+n
+and its neighborhood
+N
+n
+and the subgraph
+д
+i
+from which the
+N
+n
+is drawn, the objective of
+Sub2Vec
+-DM is to
+maximize the following:
+max
+f
+Õ
+д
+i
+∈S
+Õ
+n ∈д
+i
+log(Pr(n|m(N
+n
+), f (д
+i
+)),
+(1)
+where
+Pr(n|m(N
+n
+), f (д
+i
+))
+is the probability of predicting node
+n
+in
+д
+i
+given the vector representations of its neighborhood
+m(N
+n
+)
+and
+the subgraph from which the node and its neighborhood is drawn,
+f (д
+i
+)
+.
+Note that for ease of description, we extend the function
+m
+from a node to a node set (neighborhood
+N
+n
+).
+Pr(n|m(N
+n
+), f (д
+i
+))
+is defined using the softmax function:
+Pr(n|m(N
+n
+), f (д
+i
+)) =
+e
+U
+n
+·h(m(N
+n
+), f (д
+i
+))
+Í
+v ∈V
+e
+U
+v
+·h(m(N
+n
+), f (д
+i
+))
+(2)
+where matrix
+U
+is a softmax parameter and
+h(x, y)
+is average or
+concatanation of vectors
+x
+and
+y
+[
+15
+].
+In practice,
+to compute
+Equation 2, hierarchical softmax is used [22].
+3.2
+Sub2Vec-DBON
+In the
+Sub2Vec
+-DBON model, we want to predict the nodes in the
+subgraph given only the subgraph vector
+f (д
+i
+)
+.
+For example, con-
+sider the same example in Section 3.1: the subgraph
+д
+1
+in Figure 2,
+and the node sequence
+[a, b, c]
+generated by random walks. Now, in
+the
+Sub2Vec
+-DBON model the goal is to predict the neighborhood
+{a, b, c }
+given the subgraph
+д
+1
+. This model is parallel to the popular
+skip-gram model.
+Formally, given a subgraph
+д
+i
+, and neighborhood
+N
+drawn from
+д
+i
+, the objective of Sub2Vec-DBON is the following:
+max
+f
+Õ
+д
+i
+∈S
+Õ
+N ∈д
+i
+log(Pr(N | f (д
+i
+)),
+(3)
+where Pr(N | f (д
+i
+) is also a softmax function, i.e.,
+Pr(N | f (д
+i
+) =
+e
+m(N ).f (д
+i
+)
+Í
+N ∈G
+e
+m(N ).f (д
+i
+)
+,
+(4)
+Since computing Equation 4 involves summation over all possi-
+ble neighborhoods, we use negative sampling to optimize it.
+The
+negative sampling objective is as follows:
+L =
+Õ
+д
+i
+∈S
+Õ
+c ∈д
+i
+#(д
+i
+, c ) log(σ (д(c ) · f (д
+i
+))+k E
+c
+N
+P
+[log(σ (−д(c
+N
+) · f (д
+i
+))]
+(5)
+where
+k
+is a parameter for negative sampling,
+c
+is a context gener-
+ated by random walks, and σ (x) =
+1
+1+e
+−x
+.
+3.3
+Subgraph Truncated Random Walks
+Our problem seeks to preserve the local proximity between sub-
+graph in
+S
+.
+As mentioned in Section 2, intuitively the local proxim-
+ity measures how many nodes, edges, and paths are shared by two
+subgraphs. However, quantify local proximity is challenging. A pos-
+sible way to measure the local proximity between two subgraphs
+д
+i
+and
+д
+j
+, would be to look at their neighborhoods, and compare every
+neighborhood in
+д
+i
+with every neighborhood in
+д
+j
+.
+However, it is
+not feasible as we have a large number of neighborhoods.
+Another
+approach to measure local proximity is that we can enumerate all
+possible paths in each subgraphs.
+However, there are exponential
+number of paths in each subgraphs.
+To bypass these challenges, we
+resort to random walks to implement the local proximity.
+Given a set of subgraphs
+S = {д
+1
+, д
+2
+, . . . , д
+n
+}
+, we generate neigh-
+borhood in each
+д
+i
+∈ S
+by fixed length subgraph-truncated random
+walks.
+Specifically, for a subgraph
+д
+i
+, we choose a node
+v
+1
+from
+nodes in
+д
+i
+uniformly at random.
+Next we generate a sequence
+of nodes
+v
+1
+, v
+2
+, v
+3
+. . . v
+k
+to get a random walk of length
+k
+, where
+v
+j
+is a node chosen from the neighbors of node
+v
+j−1
+uniformly at
+random.
+We repeat the process for each subgraph in
+S
+.
+Overlaps in
+the random walks of
+д
+i
+and
+д
+j
+serve as a metric for local proximity.
+The intuition is that if the subgraph commonly induced by
+д
+i
+and
+д
+j
+is large, then we have more overlaps in their random walks.
+Apart from being tractable in capturing the notion of local prox-
+imity between subgraphs,
+random walks have other advantages.
+First, the notion of neighborhood in other data types, such as texts,
+is naturally defined due to the sequential nature of text data.
+How-
+ever,
+graphs are not sequential,
+hence it is more challenging to
+define the neighborhoods of subgraphs. Random walks help sequen-
+tialize subgraphs.
+Moreover, random walks generate meaningful
+sequences,
+for example,
+the frequency of nodes in random walk
+follows power law distribution [25].
+3.4
+Matrix Multiplication based Justification of
+our Model
+Here we demonstrate that optimizing the objective function of SV-
+DBON with negative sampling preserves the local proximity of
+subgraphs.
+Leveraging the idea in [
+19
+], we can write Equation 5 as
+a factorization of matrix
+M
+, where each element
+M
+i j
+corresponds
+to subgraph i and context j:
+M
+i j
+= log(
+#(context j in subgraph i)
+#(context j in D)
+) + log(
+|D |
+· w
+k · l
+),
+(6)
+k
+is a negative sampling parameter,
+w
+is a window size of context,
+and
+l
+is a length of a random walk in each subgraph.
+Note that if
+subgraph
+i
+in
+D
+has contexts
+j
+that is never observed, then in
+M
+,
+Conference’17, July 2017, Washington, DC, USA
+B. Adhikari et al.
+M
+i j
+= log(
+0
+) = −∞
+.
+A common practice in NLP is to replace
+M
+with M
+0
+where, M
+0
+= 0 if #(context j in subgraph i) = 0.
+Suppose
+M
+0
+a
+is the a-th row in matrix
+M
+0
+,
+and
+M
+a
+· M
+b
+is a
+dot-product.
+Now, we have the following lemma.
+Lemma 3.1.
+Assuming random walks in subgraphs
+д
+a
+and
+д
+b
+visit
+every path of size w at least once, then
+M
+0
+a
+· M
+0
+b
+≥ x log
+2
+(
+|D |w
+|S |kl
+),
+(7)
+where
+S
+is set of input subgraphs in the data,
+D
+is the set of all the
+subgraph-context pairs observed ,and
+x
+is the number of overlapping
+paths of length w in subgraphs д
+a
+and д
+b
+.
+Proof.
+Now, by the definition of dot product, we have the fol-
+lowing:
+M
+0
+a
+· M
+0
+b
+=
+C
+Õ
+j=1
+
+log
+
+#(j, a) · |D |
+· w
+#(j, D) · k · l
+  
+log
+
+#( j, b) · |D |
+· w
+#(j, D) · k · l
+ 
+,
+(8)
+where #
+(j, a)
+is the number of times context
+j
+appears in subgraph
+д
+a
+.
+Now, we know that maximum value of #(j, D) is N · (l − w + 1)
+when random walk produces only context
+j
+.
+And the minimum
+value of #
+(j, a)
+is 1,
+as the random walk visits each path in the
+subgraph if it exists.
+Now, summing only over non-zero entries.
+M
+0
+a
+· M
+0
+b
+≥
+Õ
+j ∈#((j, a)),0, #((j,b )),0
+
+log
+2
+
+|D |
+· w
+N · k · l (l − w + 1)
+ 
+(9)
+Now using the fact that
+l
+≥ (l − w +
+1
+)
+for any
+w < l
+and that
+there are exactly x non-zero entries in the summation, we get
+M
+0
+a
+· M
+0
+b
+≥ x log
+2
+
+|D |
+· w
+N · k · l
+2
+
+(10)
+
+Lemma 3.1 shows that as the number of overlapping paths in-
+creases,
+the lower bound of any
+M
+0
+a
+· M
+0
+b
+(corresponding to sub-
+graphs
+д
+a
+and
+д
+b
+) increases as well.
+Since optimizing
+Sub2Vec
+’s
+objective is closely related to the factorization of matrix
+M
+0
+,
+we
+can expect the embedding of subgraphs with higher overlaps to be
+closer to each other in the feature space.
+Hence,
+Sub2Vec
+preserves
+the local proximity.
+3.5
+Algorithm
+Algorithm 1 Sub2Vec
+Require:
+Graph
+G
+,
+subgraph set
+S = {д
+1
+, д
+2
+, . . . , д
+n
+}
+,
+length of
+the context window w, dimension d
+1:
+walkSet = {}
+2:
+for each д
+i
+in s do
+3:
+walk = RandomWalk (д
+i
+)
+4:
+walkSet[д
+i
+] = walk
+5:
+end for
+6:
+f = StochasticGradientDescent(walkSet, d, w)
+7:
+return f
+Algorithm 2 Sub2Vec: StochasticGradientDescent(walkSet, d, w)
+1:
+randomly intialize features f
+2:
+for each walk i in walkset do
+3:
+for each
+randomly sampled Neighborhood
+N
+in walk
+i do
+4:
+Compute L(f ) based in SV-DM or SV-DBON objective
+5:
+f
+= f
+− η × ∇L(f
+6:
+end for
+7:
+end for
+In our algorithm,
+we first generate the neighborhood in each
+subgraph by running random walk.
+We then learn the vector rep-
+resentation of the subgraphs based on the random walks generated
+on each subgraph.
+Then stochastic gradient descent is used to op-
+timize SV-DBON/ SV-DM objectives.
+The complete pseudocode is
+presented in Algorithms 1 and 2.
+4
+EXPERIMENTS
+We briefly describe our set-up next.
+All experiments are conducted
+using a 4 Xeon E7-4850 CPU with 512GB 1066Mhz RAM. We set
+the length of the random walk as 1000 and following literature
+[
+11
+], we set dimension of the embedding as 128 unless mentioned
+otherwise. The code was implemented in Python and we will release
+it for research purposes.
+We answer the following questions in our
+experiments:
+Q1.
+Are the embeddings learnt by
+Sub2Vec
+useful for community
+detection?
+Q2.
+Are the embeddings learnt by
+Sub2Vec
+effective for link pre-
+diction?
+Q3.
+How scalable is Sub2Vec for large networks?
+Q4.
+Do parameter variations in Sub2Vec lead to overfitting?
+Q5.
+Are the representations learnt by Sub2Vec meaningful?
+Datasets.
+We run
+Sub2Vec
+on multiple real world datasets from
+multiple domains like social-interactions, co-authorship, social net-
+works and so on of varying sizes.
+See Table 1.
+(1)
+WorkPlace
+is a publicly available social contact network be-
+tween employees of a company with five departments
+1
+.
+Edges
+indicate that two people were in proximity of each other.
+(2)
+HighSchool
+is a social contact network
+1
+. Nodes are high school
+students belonging to one of five different sections and edges indi-
+cate that two students were in vicinity of each other.
+(3)
+Texas
+,
+Cornell
+,
+Washington
+,
+Wisconsin
+are networks from
+the WebKB dataset
+2
+.
+These are networks of webpages and hyper-
+links.
+(4)
+PolBlogs
+is a directed network of hyperlinks between weblogs
+on US politics, recorded in 2005.
+(5)
+Astro-PH
+and
+DBLP
+are coauthorship networks from Arxiv
+High-energy Physics and DBLP bibliographies respectively, where
+two authors have an edge if they have co-authored a paper.
+(6)
+Facebook
+[
+18
+] is an anonymized social network where nodes
+are Facebook users and edges indicate that two users are friends.
+(7)
+Youtube
+is a social network, where edges indicate friendship
+between two users.
+1
+http://www.sociopatterns.org/
+2
+http://linqs.cs.umd.edu/projects/projects/lbc/
+Distributed Representation of Subgraphs
+Conference’17, July 2017, Washington, DC, USA
+Table 1: Datasets Information.
+Dataset
+|V |
+|E |
+Domain
+WorkPlace [9]
+92
+757
+contact
+Cornell [28]
+195
+304
+web
+HighSchool [8]
+182
+2221
+contact
+Texas [28]
+187
+328
+web
+Washington [28]
+230
+446
+web
+Wisconsin [28]
+265
+530
+web
+PolBlogs [1]
+1490
+16783
+web
+Facebook [18]
+4039
+88234
+social-network
+Astro-PH [17]
+18722
+199110
+co-author
+DBLP [33]
+317k
+1.04 M
+co-author
+Youtube [33]
+1.13M
+2.97M
+social
+4.1
+Community Detection
+Setup.
+Here we show how to leverage
+Sub2Vec
+for the well-known
+community detection problem. A community of nodes in a network
+is a coherent group of nodes which are roughly densely connected
+among themselves and sparsely connected with the rest of the
+network.
+As nodes in a community are densely connected to each
+other, we expect neighboring nodes in the same community to have
+a similar surrounding.
+We know that
+Sub2Vec
+embeds subgraphs
+while preserving local proximity.
+Therefore, intuitively we can use
+features generated by Sub2Vec to detect communities.
+Specifically, we propose to solve the community detection prob-
+lem using
+Sub2Vec
+by embedding the surrounding neighborhood
+of each node.
+First, we extract the neighborhood
+C
+v
+of each node
+v ∈ V
+from the input graph
+G(V , E)
+.
+Then we run
+Sub2Vec
+on
+S = {C
+v
+|v ∈ V }
+to learn feature representation of
+f (C
+v
+)
+for all
+C
+v
+∈ S
+.
+We then use a simple clustering algorithm (K-Means) to
+cluster the feature vectors
+f (C
+v
+)
+of all ego-nets.
+Cluster member-
+ship of ego-nets determines the community membership of the ego.
+The complete pseudocode is in Algorithm 3.
+Algorithm 3 Community Detection using Sub2Vec
+Require:
+A network
+G(V , E)
+,
+Sub2Vec
+parameters,
+k
+number of
+communities
+1:
+neighborhoodSet = {}
+2:
+for each v in V do
+3:
+neighborhoodSet = neighborhoodSet
+∪
+neighbordhood of
+v
+in G.
+4:
+end for
+5:
+vecs = Sub2Vec (neighborhoodSet, w, d)
+6:
+clusters = K-Means(vecs, k)
+7:
+return clusters
+In Algorithm 3, we define neighborhood of each node to be its
+ego-network for dense networks (
+HighSchool
+and
+WorkPlace
+) and
+2-hop ego-networks for sparse networks.
+The ego-network of a
+node is the subgraph induced by the node and its neighbors.
+Simi-
+larly, the 2-hop ego-network of a node is defined as the subgraph
+induced by the node, its neighbors, and neighbors’ neighbors.
+We compare
+Sub2Vec
+with various traditional community detec-
+tion algorithms and network embedding based methods.
+Newman
+[
+10
+] is a community detection algorithm based on betweenness. It is
+a greedy agglomerative hierarchical clustering algorithm.
+Louvian
+[
+6
+] is a greedy optimization method.
+Node2Vec
+is a network em-
+bedding method which learns feature representation of nodes in
+the network which we then cluster to obtain communities.
+We run
+Sub2Vec
+and baselines on the following networks with
+ground truth communities and compute Precision, Recall, and F-1
+score to evaluate all the methods.
+(1)
+WorkPlace: Each department as a ground truth community.
+(2)
+HighSchool: Each section as a ground truth community.
+(3)
+Texas
+,
+Cornell
+,
+Washington
+: Each webpage belongs to one of
+five classes: course, faculty, student, project, and staff, which serve
+as ground-truth.
+(4)
+PolBlogs
+: Conservative and liberal blogs as ground-truth com-
+munities.
+Results.
+See Table 2.
+Both versions of
+Sub2Vec
+significantly and
+consistently outperform all the baselines (upto a factor of
+4
+times
+against closest competitor,
+Node2Vec
+).
+We do better than
+Node2Vec
+because intuitively, we learn the feature vector of the neighborhood
+of each node for the community detection task; while
+Node2Vec
+just
+does random probes of the neighborhood.
+Precision for
+Louvian
+is high in dense networks as it outputs small communities and
+recall is consistently poor across all datasets for the same reason,
+while for
+Newman
+the performance is not consistent.
+Performance
+of
+Node2Vec
+is satisfactory in the sparse networks like
+PolBlogs
+and
+Texas
+,
+but it is significantly worse for dense networks like
+WorkPlace
+and
+HighSchool
+.
+On the other hand, performance of
+Sub2Vec is even more impressive in these networks.
+In Figure 3, we plot the community structure of the
+HighSchool
+dataset.
+In the
+HighSchool
+dataset, we consider five sections as the
+ground truth community.
+In the figure, the color of nodes indicate
+the community membership.
+The figure highlights the superiority
+of
+Sub2Vec
+compared to
+Node2Vec
+.
+The communities discovered
+by
+Sub2Vec
+matches the ground truth very closely,
+while those
+discovered by Node2Vec appear to be near random.
+4.2
+Link Prediction
+Setup.
+In this section, we focus on the Link Prediction problem.
+Given a network
+G(V , E)
+, the link prediction problem asks to predict
+the likelihood of formation of an edge between two nodes
+v
+1
+∈ V
+and
+v
+2
+∈ V
+, such that
+(v
+1
+, v
+2
+) < E
+.
+It is well known that nodes with
+common neighbors tend to form future links [
+20
+].
+For example,
+in a social network two individuals who have multiple friends in
+common have higher chances of eventually forming a friendship.
+It
+is evident from the example that likelihood of future edges depends
+on the similarity of neighborhood around each end-point.
+Hence
+we propose exploiting the embeddings of ego-nets of each node
+obtained from
+Sub2Vec
+to predict whether two nodes will form an
+edge.
+Specifically,
+we first hide a
+P
+percentage of edges randomly
+sampled from the network, while ensuring that the remaining net-
+work remains connected.
+We consider these “hidden” edges as
+the ground truth.
+Then we extract the ego-network,
+C
+v
+, for each
+node
+v ∈ V
+.
+We then run
+Sub2Vec
+on
+S = {C
+v
+|v ∈ V }
+and use
+the resulting embedding to predict link.
+Following methodology
+in literature [
+31
+], to evaluate our method, we calculate the Mean
+Conference’17, July 2017, Washington, DC, USA
+B. Adhikari et al.
+Table 2:
+Sub2Vec easily out-performs all baselines in all datasets.
+Precision P, Recall R, and F-1 score, of various algorithms
+for community detection. Winners in F-1 score have been bolded for each dataset.
+WorkPlace
+HighSchool
+PolBlogs
+Texas
+Cornell
+Washington
+Wisconsin
+Method
+P
+R
+F-1
+P
+R
+F-1
+P
+R
+F-1
+P
+R
+F-1
+P
+R
+F-1
+P
+R
+F-1
+P
+R
+F-1
+Newman
+0.26
+0.27
+0.27
+0.23
+0.32
+0.27
+0.67
+0.64
+0.66
+0.43
+0.15
+0.22
+0.38
+0.25
+0.30
+0.32
+0.87
+0.47
+0.35
+0.13
+0.19
+Louvian
+0.57
+0.04
+0.07
+0.49
+0.04
+0.08
+0.91
+0.83
+0.87
+0.54
+0.14
+0.23
+0.36
+0.15
+0.22
+0.45
+0.1
+0.16
+0.40
+0.12
+0.19
+Node2Vec
+0.26
+0.21
+0.23
+0.21
+0.22
+0.22
+0.92
+0.92
+0.92
+0.41
+0.63
+0.50
+0.30
+0.36
+0.33
+0.37
+0.45
+0.40
+0.34
+0.24
+0.29
+Sub2Vec DM
+0.87
+0.69
+0.77
+0.95
+0.95
+0.95
+0.92
+0.93
+0.93
+0.49
+0.57
+0.53
+0.34
+0.47
+0.39
+0.45
+0.64
+0.53
+0.40
+0.42
+0.41
+Sub2Vec DBON
+0.86
+0.67
+0.77
+0.94
+0.94
+0.94
+0.92
+0.92
+0.92
+0.44
+0.59
+0.51
+0.31
+0.55
+0.40
+0.43
+0.66
+0.52
+0.35
+0.41
+0.38
+(a) Ground Truth
+(b) Result of node2vec
+(c) Result of Sub2Vec
+Figure 3:
+Visualization of community detection in dense HighSchool network.
+Communities obtained by clustering ego-nets
+vectors returned by Sub2Vec matches the ground truth, while the result from Node2Vec appears to be random.
+Average Precision (MAP). To calculate MAP first we compute Preci-
+sion@K, as
+Precision@k(v) =
+Í
+i <k
+1(v,v
+i
+)
+k
+.
+Here
+v
+i
+is the
+i
+t h
+node
+predicted to have edge with node
+v
+and
+1(v, v
+i
+) =
+1 if
+(v, v
+1
+)
+is
+in the ground truth, 0 otherwise.
+Then we compute the Average
+Precision as
+AP(v) =
+Í
+i
+Precision@i(v )·1(v,v
+i
+)
+Í
+i
+1(v,v
+i
+)
+. Finally, MAP is given
+as:
+MAP =
+Í
+v ∈Q
+AP(v)
+|Q |
+We compare our result with
+Node2Vec
+only as it was previously
+shown to be better than other baselines [11].
+Results.
+See Table 3.
+Firstly,
+note that
+Sub2Vec
+outperforms
+Node2Vec
+as
+P
+varies from 10 to 30 in all the datasets. We also notice
+that
+Sub2Vec
+DM performs surprisingly worse than
+Node2Vec
+and
+Sub2Vec
+DBON on
+Facebook
+.
+The reason for its poor performance
+in
+Facebook
+is that the network is dense with average clustering
+co-efficient of 0.6 and effective radius of 4 for 90% of the nodes.
+Recall that the
+Sub2Vec
+DM optimization relies on finding the em-
+bedding of the nodes as well, which will not be discriminative for
+dense networks.
+In contrast,
+Sub2Vec
+DBON learns the features of
+subgraps directly, without relying on node embeddings, and hence
+it performs very well on large dense networks including
+Facebook
+.
+Finally we see that
+Node2Vec
+consistently improves as
+P
+increases,
+while both versions of
+Sub2Vec
+either deteriorate or stagnate.
+We
+discuss this more in Section 6.
+(a) Walk length
+(b) Dimension of Vectors
+Figure 4:
+F-1 score on PolBlogs for various values of walk
+length and dimension of embeddings.
+4.3
+Parameter Sensitivity
+Here we discuss the parameter sensitivity of
+Sub2Vec
+.
+We show
+how the F-1 score for community detection task on
+PolBlogs
+dataset changes when we change the two parameters of
+Sub2Vec
+:
+(i) length of the random walk and (ii) dimension of the embedding.
+As shown in Figure 4 (a),
+the F-1 score is 0.85 even when we do
+random walks of length 500.
+For the higher length, the F-1 score
+remains constant.
+Similarly, to see how the results of the community detection task
+changes with the size of the embedding,
+we run the community
+detection task on
+PolBlogs
+with varying embedding dimension.
+See Figure 4 (b).
+The F-1 score saturates when the dimension of
+vector is greater than 100.
+Distributed Representation of Subgraphs
+Conference’17, July 2017, Washington, DC, USA
+Table 3:
+Mean Average Precision for the link prediction task.
+P is the percentage of edge removed from the network and S
+stands for Sub2Vec.
+Winners have been bolded for each dataset.
+Either Sub2Vec DM or Sub2Vec DBON outperform Node2Vec
+across all the datasets.
+WorkPlace
+HighSchool
+Facebook
+Astro-PH
+P
+Node2Vec
+S DBON
+S DM
+Node2Vec
+S DBON
+S DM
+Node2Vec
+S DBON
+S DM
+Node2Vec
+S DBON
+S DM
+10
+0.25
+0.37
+0.33
+0.39
+0.42
+0.52
+0.50
+0.77
+0.29
+0.12
+0.24
+0.31
+20
+0.36
+0.28
+0.42
+0.41
+0.52
+0.26
+0.68
+0.84
+0.34
+0.21
+0.31
+0.28
+30
+0.39
+0.28
+0.40
+0.50
+0.45
+0.57
+0.72
+0.83
+0.35
+0.26
+0.37
+0.44
+(a) No of Subgraphs
+(b) Size of Subgraphs
+Figure 5:
+Scalability w.r.t.
+number of subgraphs on Youtube
+and w.r.t size of subgraphs on Astro-PH datasets.
+4.4
+Scalability
+Here we show the scalability of Sub2Vec with respect to the num-
+ber and the size of subgraphs.
+We extract connected subgraphs of
+Youtube
+dataset of induced by varying percentage of nodes.
+We
+then run
+Sub2Vec
+on the set of ego-nets in each resulting network.
+As shown in Figure 5 (a),
+Sub2Vec
+is linear w.r.t number of sub-
+graphs.
+In Figure 5 (b), we run
+Sub2Vec
+on 1 to 3 hops ego-nets of
+Astro-PH
+dataset.
+We see a significant jump in the running time
+when the hop increases from 2 to 3.
+This is due to the fact that
+as the hop of ego-net increases, the size of the subgraph increases
+exponentially due to the low diameter of real world networks.
+4.5
+Case Studies
+We perform case-studies on
+MemeTracker
+3
+and
+DBLP
+to investigate
+if our embeddings are interpretable.
+MemeTracker
+consists of a
+series of cascades caused by memes spreading on the network
+of linked web pages.
+Each meme-cascade induces a subgraph in
+the underlying network.
+We first embed these subgraphs in a
+continuous vector space by leveraging
+Sub2Vec
+.
+We then cluster
+these vectors to explore what kind of meme cascade-graphs are
+grouped together, what characteristics of memes determine their
+similarity and distance to each other and so on.
+For this case-study,
+we pick the top 1000 memes by volume in the data.
+And we cluster
+them into 10 clusters using K-Means.
+We find coherent clusters which are meaningful groupings of
+memes based on topics.
+For example we find cluster of memes
+related to different topics such as entertainment, politics, religion,
+technology and so on.
+Visualization of these clusters is presented
+in Figure 6.
+In the entertainment cluster,
+we find memes which
+are names of popular songs and movies such as “sweet home al-
+abama”,“somewhere over the rainbow”, “Madagascar 2” and so on.
+Similarly, we also find a cluster of religious memes.
+These memes
+3
+snap.stanford.edu
+are quotes from the Bible.
+We also find memes related to politics
+and religion in the same cluster such as “separation of church and
+state”’.
+In politics cluster,
+we find popular quotes from the 2008
+presidential election season e.g.
+Barack Obama’s popular slogan
+“yes we can” along with his controversial quotes like “you can put
+lipstick on a pig” in the cluster.
+We also find Sarah Palin’s quote
+like “the chant is drill baby drill”.
+Similarly, we also find a cluster
+of technology/video games related memes.
+Interestingly,
+we find that all the memes in Spanish language
+were clustered together.
+This indicates that memes in different
+language travel though separate websites,
+which matches with
+the reality as most webpages use one primary language. We also
+noticed that some of the clusters did not belong to any particular
+topic.
+Upon closer examination we found out that these clusters
+contained memes which were covered by general news website
+such as msnbc.com, yahoo.com, news.google.com and local news
+websites such as philly.com from Philadelphia and breakingnews.ie
+from Ireland.
+For
+DBLP
+, we follow the methodology in [
+14
+], and extract sub-
+graphs of the coauthorship network based on the keywords con-
+tained in the title of the papers.
+We include keywords such as ‘classification’, ‘clustering’, ‘xml’,
+and so on.
+Once we extract the subgraphs, we run
+Sub2Vec
+to learn
+embedding of these subgraphs.
+We then project the embeddings
+down to 2-dimensions using t-SNE [21].
+See Figure 7.
+We see some meaningful groupings in the plot.
+We
+see that the keyword related to each other such as ‘graphs’, ‘pager-
+ank’, ‘crawling’, and ‘clustering’ appear together.
+The classification
+related keywords such as ‘boosting’, ‘svm’, and ‘classification’ are
+grouped together.
+We also see that ‘streams’ and ‘wavelets’ are
+close to each other. These meaningful groups of keywords highlight
+the fact that Sub2Vec results in meaningful embeddings.
+5
+RELATED WORK
+Network Embedding.
+The network embedding problem has been
+well
+studied.
+Most of work seeks to generate low dimensional
+feature representation of nodes.
+Early work includes Laplacian
+Eigenmap [
+4
+],
+IsoMap [
+30
+],
+locally linear embedding [
+27
+],
+and
+spectral techniques [
+3
+,
+7
+].
+Recently,
+several deep learning based
+network embeddings algorithms were proposed to learn feature
+representations of nodes [
+11
+,
+25
+,
+29
+,
+31
+].
+Perozzi et.
+al [
+25
+] pro-
+posed DeepWalk, which extends skip-Gram model [
+22
+] to networks
+and learns feature representation based on contexts generated by
+random walks.
+Grover et.
+al.
+proposed a more general method,
+Node2Vec [
+11
+], which generalizes random walks to generate vari-
+ous contexts. SDNE [
+31
+] and LINE [
+29
+] learn feature representation
+Conference’17, July 2017, Washington, DC, USA
+B. Adhikari et al.
+(a) Politics Cluster
+(b) Religion Cluster
+(c) Spanish Cluster
+(d) Entertainment Cluster
+(e) Technology Cluster
+Figure 6: Different Clusters of Memes for the MemeTracker dataset.
+Figure 7: 2D projection of feature vectors learnt by Sub2Vec
+of subgraphs of DBLP induced by different keywords.
+of nodes while preserving first and second order proximity.
+How-
+ever,
+all of them learn low dimensional feature vector of nodes,
+while our goal is to embed subgraphs.
+The most similar network embedding literature includes [
+23
+,
+26
+,
+32
+].
+Risen and Bunke propose to learn vector representations of
+graphs based on edit distance to a set of pre-defined prototype
+graphs [
+26
+].
+Yanardag et.
+al.
+[
+32
+] and Narayanan et al.
+[
+23
+] learn
+vector representation of the subgraphs using the Word2Vec [
+22
+] by
+generating ”corpus” of subgraphs where each subgraph is treated
+as a word.
+The above work focuses on some specific subgraphs like
+graphlets and rooted subgraphs.
+None of them embed subgraphs
+with arbitrary structure.
+In addition,
+we interpret subgraphs as
+paragraphs, and leverage the PV-DBOW and PV-DM model [15].
+Other Subgraph Problems.
+There has been a lot of work on
+subgraph related problems.
+For example, the subgraph discovery
+problems have been studies extensively.
+Finding the largest clique
+is a well-known NP-complete problem [
+13
+], which is also hard to
+approximate [
+12
+].
+Lee et al.
+surveyed dense subgraph discovery
+algorithms for several subgraphs including clique, K-core, K-club,
+etc [
+16
+].
+Akoglu et al.
+extended the subgraph discovery problem
+to attributed graphs [
+2
+].
+Perozzi et al.
+studied the attributed graph
+anomaly detection by exploring the neighborhood subgraph of a
+nodes [
+24
+].
+Different from the above works, we seek to find feature
+representations of subgraphs.
+6
+DISCUSSION
+We have shown that
+Sub2Vec
+gives meaningful interpretable em-
+beddings of arbitrary subgraphs.
+We have also shown via our ex-
+periments that
+Sub2Vec
+outperforms traditional algorithms as well
+as node-level embedding algorithms for extracting communities
+from networks, especially in challenging dense graphs.
+Similarly
+for link prediction, we also showed that embedding neighborhoods
+is better for finding correct links.
+So for which tasks will
+Sub2Vec
+not be ideal? For link prediction,
+as previously mentioned in Section 4, the performance of
+Sub2Vec
+deteriorates when higher percentages of edges are removed from
+the network.
+The results for higher percentages,
+P
+= 40 to 60,
+is
+presented in Table 4.
+The result shows that
+Node2Vec
+outperforms
+Sub2Vec
+in such cases, despite performing poorly for lower values
+of
+P
+.
+This happens because, as
+P
+increases, the density of the net-
+work decreases and results in lesser overlaps in the neighborhoods
+of nearby nodes.
+Hence
+Sub2Vec
+which preserves the local prox-
+imity of subgraphs, does not embed such subgraphs very close to
+each other, resulting in poorer prediction performance.
+We believe, in such situations, perhaps using other proximity
+measures between subgraphs is more meaningful to preserve during
+the embedding process than only local proximity.
+One such way can be using ‘positional promixity’, where two
+subgraphs are proximal based on their position in the network.
+For
+example,
+in Figure 2,
+subgraphs induced by nodes
+{c, d, e }
+and
+{д, h, j }
+are similar to each other as the member nodes in these two
+subgraphs have similar roles. Nodes
+e
+and
+h
+both connect to central
+node
+f
+and nodes
+d
+and
+д
+both have degree two.
+Using just local
+proximity, these subgraphs are not similar.
+Positional Proximity:
+If we are given two subgraphs
+д
+i
+(v
+i
+, e
+1
+)
+and
+д
+j
+(v
+j
+, e
+j
+)
+, then the
+positional proximity
+between
+д
+i
+and
+д
+j
+is determined by similarity of position of nodes in д
+i
+and д
+j
+.
+Similarly, another way can be using similarity based on structure
+of subgraphs. For example, in Figure 2, subgraphs induced by nodes
+Distributed Representation of Subgraphs
+Conference’17, July 2017, Washington, DC, USA
+Table 4: Mean Average Precision for the link prediction task. P is the percentage of edge removed and S stands for Sub2Vec.
+WorkPlace
+HighSchool
+Facebook
+Astro-PH
+P
+Node2Vec
+S DBON
+S DM
+Node2Vec
+S DBON
+S DM
+Node2Vec
+S DBON
+S DM
+Node2Vec
+S DBON
+S DM
+40
+0.45
+0.32
+0.35
+0.60
+0.47
+0.56
+0.75
+0.78
+0.22
+0.30
+0.39
+0.33
+50
+0.48
+0.31
+0.33
+0.57
+0.42
+0.49
+0.78
+0.75
+0.12
+0.33
+0.26
+0.34
+60
+0.50
+0.33
+0.32
+0.60
+0.40
+0.43
+0.79
+0.53
+0.1
+0.34
+0.29
+0.29
+{a, b, c, e }
+and
+{h, i, j, k }
+are similar to each other as both of them
+are cliques of size four.
+Structural Proximity:
+If we are given two subgraphs
+д
+i
+(v
+i
+, e
+1
+)
+and
+д
+j
+(v
+j
+, e
+j
+)
+, then the
+structural proximity
+between
+д
+i
+and
+д
+j
+is determined by the structural properties of д
+i
+and д
+j
+.
+For link prediction in very sparse networks, Positional Proximity
+might give more useful embeddings than Local Proximity.
+We leave
+the task of embedding subgraphs based on Structural and Positional
+proximities (or using a combination with Local
+proximity) and
+leveraging them for graph mining as future work.
+7
+CONCLUSION
+We have presented
+Sub2Vec
+, a scalable feature learning framework
+for a set of subgraphs such that the local proximity between them
+are preserved.
+In contrast most prior work focused on finding node-
+level embeddings.
+We give a theoretical justification and showed
+that the embeddings generated by
+Sub2Vec
+can be leveraged in
+downstream applications such as community detection and link
+prediction.
+We also performed case-studies on two real networks
+to validate the usefulness of the subgraph features generated by
+Sub2Vec.
+REFERENCES
+[1]
+Lada A Adamic and Natalie Glance. 2005.
+The political blogosphere and the 2004
+US election: divided they blog. In Proceedings of the 3rd international workshop
+on Link discovery. ACM, 36–43.
+[2]
+Leman Akoglu, Hanghang Tong, Brendan Meeder, and Christos Faloutsos. 2012.
+PICS: Parameter-free identification of cohesive subgroups in large attributed
+graphs. In Proceedings of the 2012 SIAM international conference on data mining.
+SIAM, 439–450.
+[3]
+Francis R Bach and Michael I Jordan. 2003.
+Learning spectral clustering. In NIPS,
+Vol. 16.
+[4]
+Mikhail Belkin and Partha Niyogi.
+2001.
+Laplacian eigenmaps and spectral
+techniques for embedding and clustering. In NIPS, Vol. 14. 585–591.
+[5]
+Smriti Bhagat, Graham Cormode, and S Muthukrishnan. 2011. Node classification
+in social networks.
+In Social network data analytics. Springer, 115–148.
+[6]
+Vincent D Blondel, Jean-Loup Guillaume, Renaud Lambiotte, and Etienne Lefeb-
+vre. 2008.
+Fast unfolding of communities in large networks.
+Journal of statistical
+mechanics:
+theory and experiment 2008, 10 (2008), P10008.
+[7]
+Fan RK Chung. 1997.
+Spectral graph theory. Vol. 92.
+American Mathematical
+Soc.
+[8]
+Julie Fournet and Alain Barrat.
+2014.
+Contact Patterns among High School
+Students.
+PLoS ONE 9, 9 (09 2014), e107878.
+[9]
+Mathieu Genois, Christian Vestergaard, Julie Fournet, Andre Panisson, Isabelle
+Bonmarin,
+and Alain Barrat.
+2015.
+Data on face-to-face contacts in an office
+building suggest a low-cost vaccination strategy based on community linkers.
+Network Science 3 (9 2015), 326–347.
+Issue 03.
+[10]
+Michelle Girvan and Mark EJ Newman. 2002.
+Community structure in social
+and biological networks.
+Proceedings of the national academy of sciences 99, 12
+(2002), 7821–7826.
+[11]
+Aditya Grover and Jure Leskovec. 2016.
+node2vec: Scalable feature learning for
+networks. In Proceedings of the 22nd ACM SIGKDD International Conference on
+Knowledge Discovery and Data Mining. ACM, 855–864.
+[12]
+Johan Hstad. 1996.
+Clique is hard to approximate within n1. In Proc. 37th Symp.
+on Found. Comput. Sci. 627–636.
+[13]
+Richard M Karp. 1972. Reducibility among combinatorial problems. In Complexity
+of computer computations. Springer, 85–103.
+[14]
+Theodoros Lappas, Evimaria Terzi, Dimitrios Gunopulos, and Heikki Mannila.
+2010.
+Finding effectors in social
+networks.
+In Proceedings of the 16th ACM
+SIGKDD international conference on Knowledge discovery and data mining. ACM,
+1059–1068.
+[15]
+Quoc V Le and Tomas Mikolov. 2014.
+Distributed Representations of Sentences
+and Documents.. In ICML, Vol. 14. 1188–1196.
+[16]
+Victor E Lee, Ning Ruan, Ruoming Jin, and Charu Aggarwal. 2010.
+A survey of
+algorithms for dense subgraph discovery.
+In Managing and Mining Graph Data.
+Springer, 303–336.
+[17]
+Jure Leskovec, Jon Kleinberg, and Christos Faloutsos. 2007.
+Graph evolution:
+Densification and shrinking diameters. ACM Transactions on Knowledge Discovery
+from Data (TKDD) 1, 1 (2007), 2.
+[18]
+Jure Leskovec and Julian J Mcauley. 2012.
+Learning to discover social circles in
+ego networks. In Advances in neural information processing systems. 539–547.
+[19]
+Omer Levy and Yoav Goldberg. 2014.
+Neural word embedding as implicit matrix
+factorization. In Advances in neural information processing systems. 2177–2185.
+[20]
+David Liben-Nowell and Jon Kleinberg. 2007.
+The link-prediction problem for
+social networks.
+journal of the Association for Information Science and Technology
+58, 7 (2007), 1019–1031.
+[21]
+Laurens van der Maaten and Geoffrey Hinton. 2008. Visualizing data using t-SNE.
+Journal of Machine Learning Research 9, Nov (2008), 2579–2605.
+[22]
+Tomas Mikolov, Ilya Sutskever, Kai Chen, Greg S Corrado, and Jeff Dean. 2013.
+Distributed representations of words and phrases and their compositionality. In
+NIPS. 3111–3119.
+[23]
+Annamalai Narayanan, Mahinthan Chandramohan, Lihui Chen, Yang Liu, and
+Santhoshkumar Saminathan. 2016.
+subgraph2vec: Learning distributed represen-
+tations of rooted sub-graphs from large graphs.
+arXiv preprint arXiv:1606.08928
+(2016).
+[24]
+Bryan Perozzi and Leman Akoglu. 2016.
+Scalable anomaly ranking of attributed
+neighborhoods. In Proceedings of the 2016 SIAM International Conference on Data
+Mining. SIAM, 207–215.
+[25]
+Bryan Perozzi, Rami Al-Rfou, and Steven Skiena. 2014.
+Deepwalk: Online learn-
+ing of social representations. In Proceedings of the 20th ACM SIGKDD international
+conference on Knowledge discovery and data mining. ACM, 701–710.
+[26]
+Kaspar Riesen and Horst Bunke. 2010.
+Graph classification and clustering based
+on vector space embedding.
+World Scientific Publishing Co., Inc.
+[27]
+Sam T Roweis and Lawrence K Saul. 2000.
+Nonlinear dimensionality reduction
+by locally linear embedding.
+science 290, 5500 (2000), 2323–2326.
+[28]
+Prithviraj Sen,
+Galileo Mark Namata,
+Mustafa Bilgic,
+Lise Getoor,
+Brian Gal-
+lagher, and Tina Eliassi-Rad. 2008.
+Collective Classification in Network Data.
+AI
+Magazine 29, 3 (2008), 93–106.
+[29]
+Jian Tang, Meng Qu, Mingzhe Wang, Ming Zhang, Jun Yan, and Qiaozhu Mei.
+2015.
+Line: Large-scale information network embedding. In Proceedings of the
+24th International Conference on World Wide Web. ACM, 1067–1077.
+[30]
+Joshua B Tenenbaum, Vin De Silva, and John C Langford. 2000.
+A global geomet-
+ric framework for nonlinear dimensionality reduction.
+science 290, 5500 (2000),
+2319–2323.
+[31]
+Daixin Wang, Peng Cui, and Wenwu Zhu. 2016.
+Structural deep network em-
+bedding. In Proceedings of the 22nd ACM SIGKDD International Conference on
+Knowledge Discovery and Data Mining. ACM, 1225–1234.
+[32]
+Pinar Yanardag and SVN Vishwanathan. 2015. Deep graph kernels. In Proceedings
+of the 21th ACM SIGKDD International Conference on Knowledge Discovery and
+Data Mining. ACM, 1365–1374.
+[33]
+Jaewon Yang and Jure Leskovec. 2015.
+Defining and evaluating network commu-
+nities based on ground-truth.
+Knowledge and Information Systems 42, 1 (2015),
+181–213.

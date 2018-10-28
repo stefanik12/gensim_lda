@@ -1,0 +1,2759 @@
+﻿Equation Embeddings
+Kriste Krstovski
+1
+David M. Blei
+1
+Abstract
+We present
+an unsupervised approach for dis-
+covering semantic representations of mathemat-
+ical equations.
+Equations are challenging to an-
+alyze because each is unique,
+or nearly unique.
+Our method, which we call equation embeddings,
+finds good representations of equations by using
+the representations of their surrounding words.
+We used equation embeddings to analyze four
+collections of scientific articles from the arXiv,
+covering four computer science domains (NLP,
+IR, AI, and ML) and
+∼
+98.5k equations.
+Quanti-
+tatively, we found that equation embeddings pro-
+vide better models when compared to existing
+word embedding approaches.
+Qualitatively, we
+found that equation embeddings provide coher-
+ent semantic representations of equations and can
+capture semantic similarity to other equations and
+to words.
+1. Introduction
+Equations are an important part of scientific articles,
+but
+many existing machine learning methods do not easily han-
+dle them. They are challenging to work with because each
+is unique or nearly unique; most equations occur only once.
+An automatic understanding of equations, however, would
+significantly benefit methods for analyzing scientific liter-
+ature.
+Useful representations of equations can help draw
+connections between articles, improve retrieval of scientific
+texts,
+and help create tools for exploring and navigating
+scientific literature.
+In this paper we propose equation embeddings (EqEmb),
+an unsupervised approach for learning distributed represen-
+tations of equations.
+The idea is to treat the equation as
+a ”singleton word,” one that appears once but that appears
+in the context of other words.
+The surrounding text of the
+equation—and in particular, the distributed representations
+of that text—provides the data we need to develop a useful
+1
+Columbia University, New York, NY 10027. Correspondence
+to: Kriste Krstovski
+<
+kriste.krstovski@columbia.edu
+>
+, David M.
+Blei
+<
+david.blei@columbia.edu
+>
+.
+Copyright 2018 by the author(s).
+representation of the equation.
+Figure 1 illustrates our approach.
+On the left is an article
+snippet (Li et al., 2015). Highlighted in orange is an equa-
+tion; in this example it represents a neural network layer.
+We note that this particular equation (in this form and with
+this notation) only occurs once in the collection of articles
+(from arXiv). The representations of the surrounding text,
+however,
+provide a meaningful
+context for the equation.
+Those words allow us to learn its embedding, specifically
+as a ”word” which appears in the context of its surround-
+ings. The resulting representation, when compared to other
+equations’ representations and word representations, helps
+find both related equations and related words.
+These are
+illustrated on the right.
+EqEmbs build on exponential family embeddings (Rudolph
+et al., 2016) to include equations as singleton observations
+and to model equation elements such as variables, symbols
+and operators. Exponential family embeddings, like all em-
+bedding methods,
+define a context of each word.
+In our
+initial EqEmb, the context for the words is a small window,
+such as four or eight words, but the context of an equation
+is a larger window,
+such as sixteen words.
+Using these
+two types of contexts together finds meaningful represen-
+tations of words and equations. In the next EqEmb, which
+builds on the first, we consider equations to be sentences
+consisting of equation units, i.e., variables, symbols, and
+operators. Equation units help model equations across two
+types of context—over the surrounding units and over the
+surrounding words.
+We studied EqEmbs on four collections of scientific articles
+from the arXiv, covering four computer science domains:
+natural language processing (NLP), information retrieval
+(IR), artificial intelligence (AI) and machine learning (ML).
+We found that EqEmbs provide more efficient modeling
+than existing word embedding methods. We further carried
+out an exploratory analysis of a large set of
+∼
+87k equations.
+We found that EqEmbs provide better models when com-
+pared to existing word embedding approaches.
+EqEmbs
+also provide coherent semantic representations of equations
+and can capture semantic similarity to other equations and
+to words.
+arXiv:1803.09123v1 [stat.ML] 24 Mar 2018
+Equation Embeddings
+i
+t
+= (W
+ix
+x
+t
++ W
+ir
+r
+t
+1
++ W
+ic
+c
+t
+1
++ b
+i
+)
+e
+⌘
+= f (e
+T
+· W · e + V · e)
+c
+t
+= f
+t
+· c
+t
+1
++ i
+t
++ l
+t
+h
+s
+t
+= o
+t
+· c
+t
+c
+1
+= encode
+f ixed
+(n, m, start)
+1.
+2.
+3.
+4.
+5.
+1.
+recurrent 
+2.
+input 
+3.
+layer 
+4.
+embedding 
+5.
+network
+Top Equations
+Top Words
+h
+t
+= f (e
+T
+· W · e + V · e)
+current word embedding recurrent version output embedding given 
+similar method extended
+h
+t
+= f (e
+T
+· W · e + V · e)
+word-equation context window
+recursive model denote concatenation vectors 
+word context window
+observed word
+Figure 1.
+Top left: arXiv article snippet (Li et al., 2015) that contains an equation of a neural network layer along with its surrounding
+context. Highlighted in green are words whose word-equation context window contains the equation. Top right: Extracted equation (top)
+and its 5 nearest equations (blue rectangle) and words (green rectangle) discovered using our approach. Discovered equations relate to
+neural network layers while nearest words bear semantic relatedness with the equation definition. Bottom: Word-equation context window
+example. Highlighted in green is an example word whose word-equation context window contain the original context words (red) from
+the effective vocabulary that appear in a context window of size 4 along with the equation.
+2. Related Work
+Word embeddings were first introduced in Rumelhart et al.
+(1986); Bengio et al. (2003) and there have been many vari-
+ants (Mikolov et al., 2013a;b; Pennington et al., 2014; Levy
+& Goldberg, 2014). Common for all of them is the idea that
+words can be represented by latent feature vectors.
+These
+feature vectors are optimized to maximize the conditional
+probability of the dataset.
+Recently Rudolph et al. (2016)
+extended the idea of word embeddings to other types of data.
+EqEmb expand the idea of word embeddings to a new type
+of data points – equations.
+There have been different proposed approaches for repre-
+senting mathematical equations. Zanibbi et al. (2016) intro-
+duced the symbol layout tree, a representation that encodes
+the spatial relationship of variables and operators for the
+purpose of indexing and retrieving mathematical equations.
+Our work also falls into the framework of mathematical
+language processing (MLP) (Lan et al., 2015) whose first
+step is converting mathematical solutions into a series of
+numerical features.
+3. Equation Embeddings Models
+EqEmb are based on word embeddings (Mikolov et
+al.,
+2013b)
+or
+specifically Bernoulli
+embeddings
+(b-embs)
+(Rudolph et al., 2016). Word embeddings models the prob-
+ability of a word
+w
+i
+given its context
+w
+c
+i
+as a conditional
+distribution
+p(w
+i
+|w
+c
+i
+)
+where the context is defined as the
+set of words
+w
+j
+in a window of size
+c
+i
+that surrounds it.
+In word embeddings each word is assigned to two types of
+latent feature vectors, the embedding (
+ρ
+) and context (
+α
+)
+vectors, both of which are
+k
+dimensional.
+B-emb is an exponential family embedding model where
+the conditional distribution is a Bernoulli:
+p(w
+i
+|w
+c
+i
+) = Bernoulli(b
+w
+),
+(1)
+The parameter
+b
+w
+is defined using the word embedding
+ρ
+w
+i
+and the word context
+α
+w
+j
+vectors:
+b
+w
+= σ(ρ
+T
+w
+i
+|c
+i
+|
+X
+j=1
+α
+w
+j
+)
+(2)
+where
+σ
+is the logistic function.
+3.1. Equation Embeddings
+Given a dataset
+of words and equations the goal
+of the
+EqEmb models is to derive a semantic representation of
+each equation.
+EqEmb model equations in the context of
+words.
+EqEmb is based on the idea that a good semantic
+Equation Embeddings
+representation of equations could be discovered by expand-
+ing the original word context to include any equations that
+appear in a possibly larger window around it.
+We assign embeddings to words (
+ρ
+w
+,
+α
+w
+) and equations (
+ρ
+e
+,
+α
+e
+). The objective function contains conditionals over the
+observed words and equations:
+L(ρ
+w
+, α
+w
+, ρ
+e
+, α
+e
+) =
+W
+X
+i=1
+log(p(w
+i
+|w
+c
+i
+)) +
+E
+X
+m=1
+log(p(e
+m
+|e
+c
+m
+)).
+(3)
+This is a sum of two sets of conditional distributions, the
+first over observed words (
+w
+i
+) and the second over observed
+equations (
+e
+m
+).
+In word embedding models,
+ρ
+and
+α
+are
+referred to as embedding and context vectors. Here we use a
+different terminology: the interaction
+ρ
+e
+and feature vector
+α
+e
+.
+In word embeddings, the context of the word
+w
+c
+i
+is defined
+to index the surrounding words in a small window around it.
+Here the context of the word
+w
+i
+will be the original context
+(
+α
+w
+) and any equations (
+α
+e
+) that are in a possibly larger
+window around it. This is referred to as the word-equation
+context window.
+Both conditionals are Bernoulli distributions. The first con-
+ditional is defined over the words in the collection.
+It has
+the following parameter:
+b
+w
+= σ(ρ
+T
+w
+i
+g(α
+w
+, α
+e
+, c
+i
+)).
+(4)
+The word context function is:
+g(α
+w
+, α
+e
+, c
+i
+) =
+|c
+i
+|
+X
+j=1
+α
+w
+j
++
+|c
+0
+i
+|
+X
+k=1
+α
+e
+k
+.
+(5)
+This function encompasses the words in the original word
+context (
+α
+w
+j
+) and any equations (
+α
+e
+k
+) that appear in a pos-
+sibly larger window (
+|c
+0
+i
+|
+) around it.
+The second term in the objective corresponds to the sum
+of the log conditional probabilities of each equation.
+Its
+parameter is:
+b
+e
+= σ(ρ
+T
+e
+m
+h(α
+w
+, c
+m
+)).
+(6)
+Similar to word embeddings, equation context
+e
+c
+m
+contains
+words that are in a context window around the equation:
+h(α
+w
+, c
+m
+) =
+|c
+m
+|
+X
+l=1
+α
+w
+l
+.
+(7)
+{V!L,=,n}
+L = D
+C
+f ⇠ R
+⇣
+N
+X
+i=1
+x
+i
+(t) = 1
+{=,V!D,n}
+{V!D,-,n}
+{-,V!C,n}
+⇠
+{V!f, ,n}
+{ ,V!R,n}
+⇠
+{V!R,-,a}
+⇣
+{-,V! ,n}
+P
+{ ,V!i,u}
+{ ,V!N,o}
+P
+{V!i,=,n}
+P
+{ ,V!x,n}
+{V!x,V!i,b}
+{V!x,M!()1x1,n}
+{M!()1x1,V!t,w}
+{M!()1x1,=,n}
+{=,N!1,n}
+Figure 2.
+Examples of Syntax Layout Tree (SLT) representation
+of equations using a symbol
+window of size one.
+Each tuple
+represents the special relationship between two symbols (n-to the
+right; a-above; u-under; o-over; w-within).
+The equation context can have a larger window than the
+word context.
+Equation feature vectors (
+α
+e
+) are only as-
+sociated with the first term of the objective function. This
+function contains the words where the equation appears in
+their larger context
+c
+0
+i
+.
+The left side of Figure 1 shows an example equation in a
+scientific article. With a word context of size
+|c
+i
+|
+we model
+the words in the article while ignoring equations.
+For ex-
+ample when modeling the word ”embedding” (highlighted
+in green) with context window size of 4 (i.e.
+|c
+i
+| = 4
+), the
+context contains the words that appear two words before
+(”current” and ”word”) and after (”recurrent” and ”version”)
+this word.
+With a word-equation context window of size
+|c
+0
+i
+|
+=16, the term for the word ”embedding” would have the
+feature vector of the equation as one of its components.
+3.2. Equation Unit Embeddings
+Building on our previous method, we define a new model
+which we call
+equation unit
+embeddings
+(EqEmb-U).
+EqEmb-U model equations by treating them as sentences
+where the words are the equation variables, symbols and
+operators which we refer to as units. The first step in repre-
+senting equations using equation units is to tokenize them.
+We use the approach outlined in Zanibbi et al. (2016) which
+represents equations into a syntax layout tree (SLT), a se-
+quence of SLT tuples each of which contains the spatial rela-
+tionship information between two equation symbols found
+within a particular window of equation symbols. Figure 2
+shows example SLT representations of three equations.
+Equation Embeddings
+Each equation
+e
+is a sequence of equation units
+u
+j
+,
+j =
+1, 2, ...|e
+slt
+|
+similar to a sentence where the words are the
+equation units. For each equation unit
+u
+we assign interac-
+tion
+ρ
+u
+and feature
+α
+u
+vectors.
+We assume that
+the context
+of the word
+w
+i
+will
+be the
+original context (
+α
+w
+) and the equation units (
+α
+u
+) of any
+equations that are in the word-equation context window. In
+addition for each equation unit we define its unit context
+c
+j
+to be the set of surrounding equation units in a small
+window
+cs
+u
+around it:
+u
+c
+u
+j
+= u
+j−cs
+u
+/2
+, ..., u
+j+cs
+u
+/2
+.
+(8)
+The objective is over two conditionals, one for each context
+type:
+L(ρ
+w
+, α
+w
+, ρ
+u
+, α
+u
+) =
+W
+X
+i=1
+log(p(w
+i
+|w
+c
+i
+)) +
+I
+X
+i=1
+log(p(u
+i
+|u
+c
+i
+)).
+(9)
+The two parameters are:
+b
+w
+= σ(ρ
+T
+w
+i
+(
+|c
+i
+|
+X
+j=1
+α
+w
+j
++
+|c
+0
+i
+|
+X
+k=1
+|e
+k
+slt
+|
+X
+l=1
+α
+u
+k
+l
+)),
+(10)
+b
+u
+= σ(ρ
+T
+u
+i
+|c
+u
+l
+|
+X
+l=1
+α
+u
+l
+).
+(11)
+We define equation-level representations by averaging the
+representations of their constituent units:
+α
+e
+=
+1
+|e
+slt
+|
+|e
+slt
+|
+X
+j=1
+α
+u
+j
+,
+ρ
+e
+=
+1
+|e
+slt
+|
+|e
+slt
+|
+X
+j=1
+ρ
+u
+j
+.
+(12)
+3.3. Computation
+We use stochastic gradient descent with Adagrad (Duchi
+et al., 2011) to fit the embedding and context vectors. Fol-
+lowing Rudolph et al. (2016), we reduce the computational
+complexity by splitting the gradient into two terms.
+The
+first term contains the non-zero entries (
+x
+i
+6
+= 0
+); the second
+term contains the zero entries (
+x
+i
+= 0
+).
+We compute the
+exact gradient for the non-zero points; We subsample for
+the zero data points.
+This is similar to negative sampling
+(Mikolov et al., 2013b), which also down-weights the con-
+tributions of the zero points. Unlike Rudolph et al. (2016)
+which uses
+l
+2
+regularization to protect against overfitting
+when fitting the embedding vectors we use early stopping
+based on validation accuracy, for the same effect.
+4. Empirical Study
+We studied the performance of EqEmb on articles from
+the arXiv.
+EqEmb models provide better fits than exist-
+ing embedding approaches, and infer meaningful semantic
+relationships between equations and words in the collection.
+We present a comparison of the proposed models to existing
+word embeddings approaches. These are: the Bernoulli em-
+beddings (b-emb) (Rudolph et al., 2016), continuous bag-of-
+words (CBOW) (Mikolov et al., 2013b), Distributed Mem-
+ory version of Paragraph Vector (PV-DM) (Le & Mikolov,
+2014) and the Global Vectors (GloVe) (Pennington et al.,
+2014) model.
+4.1. Datasets
+Our datasets are scientific articles that were published on
+arXiv.
+The sets contain articles (in LaTeX format) from
+four computer science domains: NLP, IR, AI, and ML. They
+were created by filtering arXiv articles based on their pri-
+mary and secondary categories.
+We used the following
+categories for the four collections: cs.cl for NLP; cs.ir for
+IR; cs.ai for AI and stat.ml, stat.co, stat.me or cs.lg for ML.
+Table
+1 shows the number of documents along with the
+number of unique words, equations and equation units for
+each collection.
+The equations are display equations that
+were enumerated in the LaTeX version of the articles. Un-
+like inline equations,
+which in many instances represent
+variables with general meaning (e.g.
+x
+,
+y
+,
+α
+,
+etc.)
+and
+even numerical values, display equations typically represent
+mathematical concepts with more specific semantics.
+For
+the empirical study we used a random subset of 2k single-
+tons from the total collection, along with all equations that
+occur more than once. For the qualitative analysis, we used
+all equations.
+We extracted words by tokenizing articles using the NLTK
+package (Bird et al., 2009) and restricted the vocabulary to
+noun phrases and adjectives. The vocabulary was selected
+by:
+•
+removing common stopwords
+•
+treating the top 25 most frequent words as stop words
+and removing them
+•
+including words whose term frequency is greater than
+or equal to 10 and whose character length is greater
+than or equal to 4
+•
+including the top 50 most frequent abbreviations whose
+character length is 3 (an exception to our previous rule)
+When tokenizing equations, we first create an effective vo-
+cabulary of equation units. We convert equations into SLT
+Equation Embeddings
+C
+OLL
+.
+# D
+OCS
+# W
+ORDS
+# E
+QS
+.
+# E
+Q
+.
+U
+NITS
+NLP
+285
+5,412
+3,067
+22,771
+IR
+421
+6,299
+4,157
+38,187
+AI
+1,054
+11,171
+18,659
+120,398
+ML
+5,884
+25,511
+61,025
+268,592
+Table 1.
+Collections statistics across arXiv articles that we use in
+our analysis.
+format and collect collection wide frequency statistics over
+the equation units.
+The vocabulary contains all equation
+units whose frequency count is greater than
+f c(u) ≥ 1
+.
+4.2. Experimental Setup
+We analyzed EqEmb models performance using a held out
+set of words that we generate for each equation in our col-
+lections. Held out sets are constructed using the following
+procedure: We traverse over the collections and for every
+discovered equation we randomly sample words from its
+context set.
+The held out set contains the sampled words
+and their context window which also includes the equation.
+For each held out word we also generate a set of negative
+samples for the given word context. We perform the same
+procedure to form a validation set.
+For each of the
+l
+equa-
+tions in a collection, two held out words
+w
+e
+h
+are sampled.
+For a context window of size 4 the sampled word context is
+defined as
+w
+e
+c
+= [w
+c
+1
+, w
+c
+2
+, w
+c
+3
+, e]
+.
+During training we compute the predictive log-likelihood on
+the validation set of words using the fitted model after each
+iteration over the collection. A fitted model is a collection of
+interaction and feature vectors for each equation and word.
+Given a fitted model, the log probability of a held out word
+is computed using the following formula:
+p(w
+e
+h
+|w
+e
+c
+) =
+exp(ρ(w
+e
+h
+)
+T
+P
+|w
+e
+c
+|
+j=1
+α(w
+e
+c
+j
+))
+P
+e
+|ns|
++1
+k=1
+exp(ρ(w
+k
+)
+T
+P
+|c|
+j=1
+α(w
+e
+c
+j
+))
+(13)
+which is the softmax function computed over a set of nega-
+tive samples
+|ns|
+and the held out word.
+In particular, we
+ran the model 20 times across the collection.
+After each
+collection iteration
+i
+we observe whether the predictive log-
+likelihood continues to improve compared to the previous
+(
+i − 1
+) iteration.
+We stop at the
+i
+-th iteration when that is
+no longer the case.
+When modeling equations using EqEmb we perform two
+passes over the collection. In the first pass we only model
+words while ignoring equations. In the second pass we only
+model equations while holding fixed the interaction and
+feature vectors of all words. In context of EqEmb we treat
+equations as singleton words and the broader question that
+we are trying to answer is whether we can learn something
+about the meaning of the singleton words given the fixed
+word interaction and feature vectors.
+4.2.1. E
+VALUATION
+M
+ODELS AND
+P
+ARAMETERS
+In our analysis we evaluated the performance of the EqEmb
+models across different sizes for the word context (W), word-
+equation context (E) and embedding vector size (K). Model
+performance was compared with 4 existing embedding mod-
+els:
+b-emb
+1
+,
+CBOW,
+GloVe
+2
+and PV-DM.
+We used the
+gensim (
+ˇ
+Reh
+˚
+u
+ˇ
+rek & Sojka,
+2010) implementation of the
+CBOW and PV-DM models.
+When modeling equations
+using the first 3 embedding models we treat equations as
+regular words in the collection. In case of the PV-DM model
+we parse the article so that equations and their surrounding
+context of length equivalent to the word-equation context
+window are labeled as a separate paragraph.
+We also as-
+sign paragraph labels to the article text occurring between
+equation paragraphs.
+4.3. Results
+Table 2 shows the performance comparison results across
+the different embeddings models.
+For each model, perfor-
+mance results are shown on 4 latent dimension values (K=25,
+50, 75 and 100).
+For each dimension we ran experiments
+by varying the context window size for words (Word Con-
+text=4, 8 and 16). In addition for the EqEmb, EqEmb-U and
+PV-DM models we also varied the word-equation window
+size (E=8 and 16).
+Comparisons across models are per-
+formed using the pseudo log-likelihood measure (Rudolph
+et al., 2017).
+For a given held-out word
+w
+e
+h
+and a set of
+negative samples
+w
+ns
+the pseudo log-likelihood is defined
+as:
+log(p(w
+e
+h
+|w
+e
+c
+)) +
+1
+|w
+e
+ns
+|
+|w
+e
+ns
+|
+X
+j=1
+log(1 − p(w
+ns
+j
+|w
+e
+c
+)).
+(14)
+We treat this a downstream task. For each model type and
+latent dimension configuration,
+we use the validation set
+to select the best model configuration (i.e. combination of
+context window sizes). We report values on both datasets.
+Across all collections EqEmb outperform previous embed-
+ding models and EqEmb-U further improves performance.
+4.4. Word Representation of Equations
+EqEmb help obtain word descriptions of the equations. Ta-
+ble 6 shows example equation and the 5 most similar words
+obtained using 4 different embedding approaches which
+include CBOW, PV-DM, GloVe and EqEmb. For the query
+equation we obtain most similar words by computing Cosine
+distance between the embedding vector (
+ρ
+e
+) representation
+1
+https://github.com/mariru/exponential_
+family_embeddings
+2
+https://nlp.stanford.edu/projects/glove
+Equation Embeddings
+NLP Collection
+M
+ODEL
+L
+ATENT
+D
+IMENSIONS
+K=25
+K=50
+K=75
+K=100
+V
+ALIDATION
+T
+EST
+V
+ALIDATION
+T
+EST
+V
+ALIDATION
+T
+EST
+V
+ALIDATION
+T
+EST
+CBOW
+-11.52
+-11.64
+-11.24
+-11.31
+-11.56
+-11.68
+-11.56
+-11.68
+PV-DM
+-1.92
+-1.93
+-1.97
+-1.97
+-2.51
+-2.51
+-1.97
+-1.95
+G
+LO
+V
+E
+-3.25
+-3.21
+-3.14
+-3.10
+-3.46
+-3.40
+-3.33
+-3.27
+B
+-
+EMB
+-2.12
+-2.12
+-1.93
+-1.96
+-2.56
+-2.51
+-3.67
+-3.75
+E
+Q
+E
+MB
+-1.51
+-1.51
+-1.51
+-1.52
+-1.64
+-1.68
+-1.97
+-1.93
+E
+Q
+E
+MB
+-U
+-1.47
+-1.48
+-1.44
+-1.45
+-1.52
+-1.43
+-1.56
+-1.61
+IR Collection
+M
+ODEL
+L
+ATENT
+D
+IMENSIONS
+K=25
+K=50
+K=75
+K=100
+V
+ALIDATION
+T
+EST
+V
+ALIDATION
+T
+EST
+V
+ALIDATION
+T
+EST
+V
+ALIDATION
+T
+EST
+CBOW
+-11.33
+-11.22
+-11.39
+-11.31
+-11.32
+-11.2
+-11.38
+-11.29
+PV-DM
+-2.29
+-2.27
+-2.29
+-2.26
+-2.31
+-2.27
+-2.34
+-2.31
+G
+LO
+V
+E
+-4.19
+-4.09
+-1.88
+-1.83
+-2.68
+-2.61
+-4.16
+-4.04
+B
+-
+EMB
+-1.60
+-1.61
+-1.82
+-1.80
+-2.20
+-2.22
+-2.19
+-2.28
+E
+Q
+E
+MB
+-1.60
+-1.58
+-1.51
+-1.52
+-1.41
+-1.44
+-1.41
+-1.43
+E
+Q
+E
+MB
+-U
+-1.21
+-1.20
+-1.58
+-1.57
+-1.14
+-1.11
+-1.47
+-1.51
+AI Collection
+M
+ODEL
+L
+ATENT
+D
+IMENSIONS
+K=25
+K=50
+K=75
+K=100
+V
+ALIDATION
+T
+EST
+V
+ALIDATION
+T
+EST
+V
+ALIDATION
+T
+EST
+V
+ALIDATION
+T
+EST
+CBOW
+-10.06
+-10.19
+-10.03
+-10.03
+-9.95
+-9.99
+-9.98
+-10.11
+PV-DM
+-3.48
+-3.59
+-3.63
+-3.69
+-3.56
+-3.68
+-3.69
+-3.80
+G
+LO
+V
+E
+-1.47
+-1.48
+1.60
+-1.58
+-2.39
+-2.43
+-2.97
+-3.01
+B
+-
+EMB
+-2.08
+-2.05
+-2.53
+-2.52
+-2.62
+-2.47
+-2.72
+-2.67
+E
+Q
+E
+MB
+-1.38
+-1.36
+-1.39
+-1.38
+-1.45
+-1.43
+-1.52
+-1.49
+E
+Q
+E
+MB
+-U
+-1.37
+-1.35
+-1.28
+-1.27
+-1.44
+-1.42
+-1.41
+-1.41
+ML Collection
+M
+ODEL
+L
+ATENT
+D
+IMENSIONS
+K=25
+K=50
+K=75
+K=100
+V
+ALIDATION
+T
+EST
+V
+ALIDATION
+T
+EST
+V
+ALIDATION
+T
+EST
+V
+ALIDATION
+T
+EST
+CBOW
+-11.26
+-11.25
+-11.22
+-11.15
+-11.33
+-11.23
+-11.27
+-11.2
+PV-DM
+-2.86
+-2.88
+-2.87
+-2.88
+-2.22
+-2.23
+-2.22
+-2.26
+G
+LO
+V
+E
+-4.03
+-4.11
+-4.00
+-4.07
+-3.95
+-4.02
+-3.41
+-3.46
+B
+-
+EMB
+-1.83
+-1.82
+-1.91
+-1.9
+-2.56
+-2.44
+-2.55
+-2.71
+E
+Q
+E
+MB
+-1.53
+-1.52
+-1.57
+-1.58
+-1.75
+-1.74
+-1.92
+-1.95
+E
+Q
+E
+MB
+-U
+-1.42
+-1.43
+-1.45
+-1.46
+-1.62
+-1.64
+-1.71
+-1.74
+Table 2.
+EqEmb outperform previous embedding models; EqEmb-U further improves performance. Performance comparisons between
+CBOW, GloVe, PV-DM, b-emb, EqEmb and EqEmb-U using log-likelihood computed on test and validation datasets. Comparisons were
+done over 4 different collections of scientific articles (NLP, IR, AI and ML) and across different latent dimensions (K=25, 50, 75 and 100).
+Equation Embeddings
+cos(
+x
+,
+y
+) =
+P
+n
+i=1
+x
+i
+·y
+i
+√
+P
+n
+i=1
+x
+2
+i
+·
+P
+n
+i=1
+y
+2
+i
+Rank.
+Top Equations
+1.
+cos(t, e) =
+te
+ktkkek
+=
+P
+n
+i=1
+t
+i
+e
+i
+√
+P
+n
+i=1
+(t
+i
+)
+2
+√
+P
+n
+i=1
+(e
+i
+)
+2
+2.
+ρ(x, y) =
+n
+X
+i=1
+(x
+i
+− x
+µ
+)(y
+i
+− y
+µ
+)
+v
+u
+u
+u
+u
+t
+n
+X
+i=1
+(x
+i
+− x
+µ
+)
+2
+n
+X
+i=1
+(y
+i
+− y
+µ
+)
+2
+,
+3.
+Sim
+γ
+(P, Q) =
+P
+`
+i=1
+p
+γ
+i
+q
+γ
+i
+√
+P
+`
+i=1
+p
+2γ
+i
+√
+P
+`
+i=1
+q
+2γ
+i
+4.
+similarity(v
+p
+, v) =
+P
+n
+i
+v
+p
+i
+v
+i
+√
+P
+n
+i
+v
+2
+p
+i
+q
+P
+n
+i
+v
+2
+i
+5.
+˙
+x
+i
+= ρx
+i
+
+P
+N
+j=1
+x
+j
+u(x
+j
+) − u(x
+i
+)
+
++
+µ
+L
+
+P
+N
+j=1
+w
+ij
+x
+j
+− x
+i
+P
+N
+j=1
+w
+ji
+
+.
+Table 3.
+Example query equation (top row) and its 5 nearest equations discovered using EqEmb-U.
+p(w|d) =
+P
+T
+t=1
+p(w|t)p(t|d) +
+P
+C
+c=1
+p(w|c)p(T + c|d)
+Top Equations
+Top Words
+1.
+p(x
+i
+= 0, z
+i
+= t|w
+i
+= w, w
+−i
+, x
+−i
+, z
+−i
+, γ, α, τ, β
+φ
+, β
+ψ
+)
+1.
+lda
+2.
+α
+new
+t
+= α
+old
+t
+=
+P
+d
+Ψ(C
+td
++α
+t
+)−Ψ(α
+t
+))
+P
+d
+(Ψ(
+P
+t
+0
+C
+t
+0
+d
++
+P
+t
+0
+α
+0
+t
+−Ψ(
+P
+t
+0
+α
+0
+t
+))
+2.
+topics
+3.
+p(v, y) = p(y|v)
+Q
+D
+v
+i=1
+p(v
+i
+|v
+<i
+)
+3.
+concept
+4.
+p(
+−
+→
+n ) = M ult(
+−
+→
+n |
+−
+→
+p , N) =
+N
+−
+→
+n
+
+Q
+V
+k=1
+p
+n
+k
+k
+4.
+concept-topic
+5.
+p(β
+1:K
+, θ
+1:D
+, z
+1:D
+|w
+1:D
+) =
+p(β
+1:K
+,θ
+1:D
+,z
+1:D
+,w
+1:D
+)
+p(w
+1:D
+)
+5.
+concepts
+Table 4.
+Example query equation (top row) and its 5 nearest equations (left) and words (right) discovered using EqEmb.
+All similar
+equations relate to the LDA model.
+F
+-
+measure =
+2P recisionRecall
+P recision+Recall
+Top Equations
+Top Words
+1.
+Recall =
+Number of matched frames(color and texture)
+Number of frames in user summary
+1.
+f-measure
+2.
+ROUGE − N − P =
+P
+I∈CT
+P
+gram
+N
+∈I
+C
+nt
+match
+(gram
+N
+)
+P
+I∈CT
+P
+gram
+N
+∈I
+C
+nt
+(gram
+N
+)
+2.
+test
+3.
+precision =
+n
+correct
+n
+total
+3.
+report
+4.
+P @k =
+number of actual friends at top k
+k
+4.
+performance
+5.
+FNR =
+FN
+FN+TP
+,
+FPR =
+F P
+F P +T P
+5.
+accuracy
+Table 5.
+Example query equation (top row) and its 5 nearest equations (left column) and words (right column) discovered using EqEmb.
+All similar equations relate to classification performance measures such as F-measure.
+Equation Embeddings
+cos(
+x
+,
+y
+) =
+P
+n
+i=1
+x
+i
+·y
+i
+√
+P
+n
+i=1
+x
+2
+i
+·
+P
+n
+i=1
+y
+2
+i
+Rank
+CBOW PV-DM
+GloVe
+EqEmb
+1.
+vectors
+vectors
+accepted
+cosine
+2.
+inner
+inner
+brothers
+distance
+3.
+space
+vector
+partition
+similarity
+4.
+center
+angle
+stimulus
+metric
+5.
+good
+dense
+miss
+cluster
+Table 6.
+Example query equation (top row) and its five most similar
+words obtained using CBOW, PV-DM, GloVe and EqEmb.
+Query: similarity, distance, cosine
+Rank.
+Top Equations
+1.
+cos(
+x
+,
+y
+) =
+P
+n
+i=1
+x
+i
+·y
+i
+√
+P
+n
+i=1
+x
+2
+i
+·
+P
+n
+i=1
+y
+2
+i
+2.
+Sim
+α
+(P, Q) =
+P
+`
+1
+p
+α
+i
+q
+α
+i
+P
+`
+1
+(p
+2α
+i
++q
+2α
+i
+−p
+α
+i
+q
+α
+i
+)
+3.
+Sim
+γ
+(P, Q) =
+P
+`
+i=1
+p
+γ
+i
+q
+γ
+i
+√
+P
+`
+i=1
+p
+2γ
+i
+√
+P
+`
+i=1
+q
+2γ
+i
+4.
+Dist
+k
+(D
+1
+, D
+2
+) ≡ 1 − Res
+k
+(D
+1
+, D
+2
+).
+5.
+dist(x, y) = ||x − y||
+2
+2
+= (
+P
+m
+i=1
+(x
+i
+− y
+i
+)
+2
+)
+(1/2)
+Table 7.
+Example query which consists of 3 words (”similarity”,
+”distance” and ”cosine”) and its 5 nearest equations discovered
+using EqEmb. For a given word query, EqEmb are able to retrieve
+query relevant equations.
+of the query equation and the context vector representation
+of the words (
+α
+w
+).
+With the embedding representation of words and equations
+we could also perform equation search using words as
+queries.
+For a set of query words we generate its embed-
+ding representation by taking the average of the embedding
+representation of each word and compute Cosine distance
+across all the equations embeddings. Table 7 shows an ex-
+ample query, which consists of three words, and its 5 nearest
+equations discovered using EqEmb. For a given word query,
+EqEmb are able to retrieve query relevant equations.
+4.5. Discovering Semantically Similar Equations
+In addition to words,
+EqEmb models can capture the se-
+mantic similarity between equations in the collection. We
+performed qualitative analysis of the model performance us-
+ing all discovered equations across the 4 collection. Table 3
+shows the query equation used in the previous analysis and
+its 5 most similar equations discovered using EqEmb-U. For
+qualitative comparisons across the other embedding mod-
+els, in Appendix A we provide results over the same query
+using CBOW, PV-DM, GloVe and EqEmb. In Appendix A
+reader should notice the difference in performance between
+EqEmb-U and EqEmb compared to existing embedding
+models which fail to discover semantically similar equa-
+tions. Tables 4 and 5 show two additional example equation
+and its 5 most similar equations and words discovered using
+the EqEmb model.
+Similar words were ranked by com-
+puting Cosine distance between the embedding vector (
+ρ
+e
+)
+representation of the query equation and the context vector
+representation of the words (
+α
+w
+).
+Similar equations were
+discovered using Euclidean distance computed between the
+context vector representations of the equations (
+α
+e
+).
+We
+give additional example results in Appendix B.
+5. Conclusion
+We presented unsupervised approaches for semantic repre-
+sentations of mathematical equations using their surround-
+ing words.
+Across 4 different collections we showed that
+out methods offer more effective modeling compared to
+existing embedding models. We also demonstrate that they
+can capture the semantic similarity between equations and
+the words in the collection. In the future we plan to explore
+how EqEmb could be expend to represent other objects such
+as images, captions and inline figures.
+References
+Bengio, Yoshua, Ducharme, R
+´
+ejean, Vincent, Pascal, and
+Jauvin, Christian.
+A neural probabilistic language model.
+Journal of machine learning research, 3(Feb):1137–1155,
+2003.
+Bird,
+Steven,
+Klein,
+Ewan,
+and Loper,
+Edward.
+Natural
+language processing with Python: analyzing text with the
+natural language toolkit.
+” O’Reilly Media, Inc.”, 2009.
+Duchi,
+John,
+Hazan,
+Elad,
+and Singer,
+Yoram.
+Adaptive
+subgradient methods for online learning and stochastic
+optimization.
+Journal of Machine Learning Research, 12
+(Jul):2121–2159, 2011.
+Lan, Andrew S., Vats, Divyanshu, Waters, Andrew E., and
+Baraniuk, Richard G.
+Mathematical language process-
+ing: Automatic grading and feedback for open response
+mathematical questions.
+In Second ACM Conference on
+Learning @ Scale (L@S ’15), pp. 167–176, 2015.
+Le, Quoc and Mikolov, Tomas.
+Distributed representations
+of sentences and documents.
+In ICML, pp. 1188–1196,
+2014.
+Equation Embeddings
+Levy, Omer and Goldberg, Yoav.
+Neural word embedding
+as implicit matrix factorization.
+In NIPS, pp. 2177–2185,
+2014.
+Li, Jiwei, Jurafsky, Dan, and Hovy, Edward.
+When are tree
+structures necessary for deep learning of representations?
+2015.
+Mikolov, Tomas, Chen, Kai, Corrado, Greg, and Dean, Jef-
+frey. Efficient estimation of word representations in vector
+space.
+In ICLR Workshop, 2013a.
+Mikolov,
+Tomas,
+Sutskever,
+Ilya,
+Chen,
+Kai,
+Corrado,
+Greg S, and Dean, Jeff.
+Distributed representations of
+words and phrases and their compositionality.
+In NIPS,
+pp. 3111–3119, 2013b.
+Pennington, Jeffrey, Socher, Richard, and Manning, Christo-
+pher D.
+Glove: Global vectors for word representation.
+In EMNLP, pp. 1532–1543, 2014.
+ˇ
+Reh
+˚
+u
+ˇ
+rek, Radim and Sojka, Petr.
+Software framework for
+topic modeling with large corpora.
+In LREC 2010 Work-
+shop on New Challenges for NLP Frameworks, pp. 45–50,
+2010.
+Rudolph,
+M.,
+Ruiz,
+F.
+J.
+R.,
+Mandt,
+S.,
+and Blei,
+D.
+M.
+Exponential family embeddings.
+In NIPS, pp. 478–486,
+2016.
+Rudolph,
+Maja,
+Ruiz,
+Francisco,
+Athey, Susan,
+and Blei,
+David.
+Structured embedding models for grouped data.
+In Advances in Neural Information Processing Systems,
+pp. 250–260, 2017.
+Rumelhart,
+David E,
+Hinton,
+Geoffrey E,
+and Williams,
+Ronald J.
+Learning representations by back-propagating
+errors.
+Nature, 323:533–536, 1986.
+Zanibbi,
+Richard,
+Davila,
+Kenny,
+Kane,
+Andrew,
+and
+Tompa,
+Frank Wm.
+Multi-stage math formula search:
+Using appearance-based similarity metrics at scale.
+In
+SIGIR, pp. 145–154, 2016.
+Equation Embeddings
+A. Equation Similarity Results Obtained Using CBOW, PV-DM, GloVe and EqEmb
+Shown in the following 4 tables are the top five equations obtain for the example query using CBOW, PV-DM, GloVe and
+EqEmb.
+Model: CBOW
+Query Equation:
+cos(
+x
+,
+y
+) =
+P
+n
+i=1
+x
+i
+·y
+i
+√
+P
+n
+i=1
+x
+2
+i
+·
+P
+n
+i=1
+y
+2
+i
+Rank.
+Top Equations
+1.
+Sw
+1
+= λ
+1
+w
+1
+.
+2.
+φ
+j
+=
+1
+f
+j
+u
+j
+3.
+P
+j
+f
+ij
+f
+i
+φ
+j
+4.
+x
+∗
+j
+=
+x
+j−bn/2c
++...+x
+j−1
++x
+j
++x
+j+1
++...+x
+j+bn/2c
+n
+,
+5.
+rank(s, t) = alignmentScore(s, t) ∗ languageM odelScore(t)
+Table 8.
+CBOW: Example query equation (top row) and its top 5 nearest equations discovered with this model.
+Model: PV-DM
+Query Equation:
+cos(
+x
+,
+y
+) =
+P
+n
+i=1
+x
+i
+·y
+i
+√
+P
+n
+i=1
+x
+2
+i
+·
+P
+n
+i=1
+y
+2
+i
+Rank.
+Top Equations
+1.
+<hA|M|Bi =
+p
+(1 − µ(A))(1 − µ(B)) cos β
+2.
+φ
+j
+=
+1
+f
+j
+u
+j
+3.
+J
+ij
+=
+|N
+i
+∩N
+j
+|
+|N
+i
+∪N
+j
+|
+,
+4.
+P
+j
+f
+ij
+f
+i
+φ
+j
+5.
+M
+21
+←
+P
+I
+3
+i=1
+X
+T
+::i
+AA
+T
+X
+::i
+Table 9.
+PV-DM: Example query equation (top row) and its top 5 nearest equations discovered model.
+Model: GloVe
+Query Equation:
+cos(
+x
+,
+y
+) =
+P
+n
+i=1
+x
+i
+·y
+i
+√
+P
+n
+i=1
+x
+2
+i
+·
+P
+n
+i=1
+y
+2
+i
+Rank.
+Top Equations
+1.
+d
+2
+H
+(u, v) =
+P
+V
+i=1
+(
+√
+u
+i
+−
+√
+v
+i
+)
+2
+.
+2.
+P [match(A, B)] = 1 − (1 − s
+K
+)
+M
+3.
+s
+n
+= arg min
+f∈V \S
+n−1
+(λχ
+2
+(f, V \S
+n−1
+) − (1 − λ) min
+s∈S
+n−1
+χ
+2
+(f, s))
+4.
+P (t
+name
+|s
+name
+) =
+P (s
+name
+|t
+name
+)∗P (t
+name
+)
+P (s
+name
+)
+5.
+Q
+0
+=
+1
+2m
+P
+i
+P
+j
+
+A
+ij
+−
+k
+i
+k
+j
+2m
+
+s
+i
+s
+j
+,
+Table 10.
+GloVe: Example query equation (top row) and its 5 nearest equations discovered with this model.
+Equation Embeddings
+Model: EqEmb
+Query Equation:
+cos(
+x
+,
+y
+) =
+P
+n
+i=1
+x
+i
+·y
+i
+√
+P
+n
+i=1
+x
+2
+i
+·
+P
+n
+i=1
+y
+2
+i
+Rank.
+Top Equations
+1.
+similarity(v
+p
+, v) =
+P
+n
+i
+v
+p
+i
+v
+i
+q
+P
+n
+i
+v
+2
+p
+i
+q
+P
+n
+i
+v
+2
+i
+2.
+0 ≤ f
+c
+= min(
+µ(A)+µ(B)
+2
+− µ(A and B), µ(A and B) − µ(A)µ(B))
+3.
+o =
+P
+i
+p
+i
+c
+i
+.
+4.
+`
+QQ
+(q, q
+0
+, q
+00
+) =
+
+γ − S
+QQ
+(q, q
+0
+) + S
+QQ
+(q, q
+00
+)
+
++
+.
+5.
+Sim
+γ
+(P, Q) =
+P
+`
+i=1
+p
+γ
+i
+q
+γ
+i
+q
+P
+`
+i=1
+p
+2γ
+i
+q
+P
+`
+i=1
+q
+2γ
+i
+Table 11.
+EqEmb: Example query equation (top row) and its 5 nearest equations discovered with this model.
+Equation Embeddings
+B. Additional Examples of Query Equations
+In this appendix we give an additional examples of query equations and their 5 nearest equations and words.
+h
+t
+s
+= o
+t
+· c
+t
+Top Equations
+Top Words
+1.
+c
+t
+= f
+t
+· c
+t−1
++ i
+t
+· l
+t
+1.
+lstm
+2.
+y = g(W
+o
+x
+ρ
++ b
+o
+)
+2.
+layer
+3.
+h
+t
+= f (e
+T
+· W · e + v · e)
+3.
+trained
+4.
+h
+t
+= o
+t
+c
+t
+,
+4.
+generates
+5.
+˜
+c
+t
+= tanh(W
+c
+E[y
+t−1
+] + U
+c
+h
+t−1
++ A
+c
+ϕ
+t
+(V ) + b
+c
+).
+5.
+rnn
+Table 12.
+Example query equation (top row) and its 5 nearest equations (left) and words (right) discovered using EqEmb.
+All similar
+equations relate to neural network layers such as the query equation.

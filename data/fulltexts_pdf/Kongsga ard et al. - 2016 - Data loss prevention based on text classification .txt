@@ -1,0 +1,1895 @@
+﻿Data Loss Prevention Based on Text
+Classification in Controlled Environments
+Kyrre Wahl Kongsg˚ard
+1,2,4(
+B
+)
+, Nils Agne Nordbotten
+1,2,4
+,
+Federico Mancini
+1
+, and Paal E. Engelstad
+1,3
+1
+Norwegian Defence Research Establishment (FFI),
+P.O. Box 25, 2027 Kjeller, Norway
+{kyrre-wahl.kongsgard,nils.nordbotten,
+federico.mancini,paal.engelstad}@ffi.no
+2
+Department of Informatics, University of Oslo, Blindern, 0316 Oslo, Norway
+3
+Oslo and Akershus University College of Applied Sciences (HiOA),
+0130 Oslo, Norway
+4
+University Graduate Center Kjeller, UNIK, Kjeller, Norway
+Abstract.
+Loss of sensitive data is a common problem with potentially
+severe consequences. By categorizing documents according to their sen-
+sitivity,
+security controls can be performed based on this classiﬁcation.
+However,
+errors in the classiﬁcation process may eﬀectively result in
+information leakage.
+While automated classiﬁcation techniques can be
+used to mitigate this risk,
+little work has been done to evaluate the
+eﬀectiveness of such techniques when sensitive content has been trans-
+formed (e.g.,
+a document can be summarized,
+rewritten,
+or have para-
+graphs copy-pasted into a new one).
+To better handle these more diﬃ-
+cult data leaks,
+this paper proposes the use of controlled environments
+to detect misclassiﬁcation. By monitoring the incoming information ﬂow,
+the documents imported into a controlled environment can be used to
+better determine the sensitivity of
+the document(s) created within the
+same environment. Our evaluation results show that this approach, using
+techniques from machine learning and information retrieval,
+provides
+improved detection of
+incorrectly classiﬁed documents that have been
+subject to more complex data transformations.
+1
+Introduction
+Organizations and companies are handling increasing amounts of digital sensitive
+information, such as personal (e.g., health) data, military classiﬁed documents,
+trade secrets, and so forth. It is critical that such sensitive data is not leaked to
+unauthorized parties.
+Many vendors oﬀer data loss prevention (DLP) solutions that automatically
+monitor the storage,
+network,
+and users to detect and prevent such leakages
+[19, 25]. Among the mechanisms employed by these solutions, data classiﬁcation,
+where data objects are labelled according to their sensitivity, is recognized as an
+important enabler to improve their eﬀectiveness [27]. Furthermore, given correct
+c
+ Springer International Publishing AG 2016
+I. Ray et al. (Eds.): ICISS 2016, LNCS 10063, pp. 131–150, 2016.
+DOI: 10.1007/978-3-319-49806-5 7
+132
+K.W. Kongsg˚ard et al.
+classiﬁcation, data can be protected using appropriate access control and other
+security controls.
+For instance, in a military or governmental context, a correct security label
+forms the basis for conducting information ﬂow control using a so called guard
+(e.g.,
+[12]),
+that ensures that only data allowed by policy (e.g.,
+non-sensitive
+data) is released to external parties. If a Conﬁdential
+domain and an Unclassi-
+ﬁed domain are connected, the guard will typically be conﬁgured to only allow
+data marked with a security label of Unclassiﬁed to pass from the Conﬁdential
+domain to the Unclassiﬁed domain. While there may be additional security clas-
+siﬁcations (e.g., Restricted and Secret), the main concern to prevent data loss in
+such a scenario is to be able to detect when a document is incorrectly claimed
+to be releasable (i.e., Unclassiﬁed in this case).
+Since security decisions are based on the classiﬁcation speciﬁed by a data
+object’s security label, it is crucial that data objects are classiﬁed correctly. How-
+ever, human users or applications may mislabel data by mistake. Furthermore, an
+insider, or malware, could intentionally mislabel data to bypass security controls.
+For this reason, it is important to be able to validate the classiﬁcation speciﬁed
+by users/applications, in order to detect mistakes and exﬁltration attempts.
+In this paper we explore the use of automated methods,
+based on machine
+learning (ML) and information retrieval
+(IR),
+to detect misclassiﬁcation that
+could result in data loss. Text classiﬁcation for DLP purposes has usually been
+based on techniques like ﬁngerprinting of
+documents,
+keyword matching,
+and
+regular expressions, but more recently methods like ML and IR have been recog-
+nized as important for automated classiﬁcation of unstructured documents [27].
+However, little research is to be found on the subject [2, 7, 13, 14, 18]. A common
+trait of
+these previous works is that the classiﬁer or index is based on a set
+of documents with well-known classiﬁcation,
+either intended to include all
+the
+sensitive documents to be protected or a subset of documents used as a training
+set.
+It may be noted that it is necessary to assume a set of correctly classiﬁed
+documents which can be used as the base to estimate the correctness of new clas-
+siﬁcations. However, the noise in such a large generic set of index documents may
+result in misclassiﬁcation, especially if new documents have been generated using
+content from sensitive sources, but where this content has been re-phrased, sum-
+marized or modiﬁed in other ways.
+Apart from recent work based on sequence
+alignment techniques [26],
+intended solely for detecting inadvertent data leaks,
+there is little previous research on detection of modiﬁed/transformed data leaks,
+the most relevant being the use of synonym substitution (spinning) [2].
+In order to improve the classiﬁcation accuracy also in these situations,
+we
+propose a controlled environment where all imported documents are dynamically
+monitored.
+The collected information constitutes the basis for classiﬁcation of
+new documents created within the environment itself.
+The intuition is that in
+order to generate a new document,
+various sources are usually accessed and
+consulted, and the resulting work will share some common traits with such ref-
+erences.
+Also,
+if
+one wants to leak out a sensitive document,
+it would have to
+be imported ﬁrst,
+and therefore be among the indexed ones.
+Compared to the
+Data Loss Prevention Based on Text Classiﬁcation
+133
+usual
+approach where one classiﬁer based on all
+sensitive documents available
+in a company (or a generic subset thereof) is used to classify any outgoing doc-
+ument,
+our results show that a classiﬁer built dynamically for each controlled
+environment provides improved accuracy especially for the more diﬃcult content
+transformations. While this is a surprising result given that more data generally
+provides higher accuracy, it illustrates that determining sensitive content is much
+more context dependent than for instance topic categorization. Also, we assume
+that any sensitive content can be traced back to the imported documents. Fur-
+thermore we study how diﬀerent algorithms from both ML and IR performs in
+diﬀerent controlled environments by varying the amount of imported documents,
+i.e., the noise in the training set/index, and by generating modiﬁed outputs that
+share a variable amount of information with the imported documents,
+both in
+quality and quantity.
+While we ﬁnd that the classiﬁcation accuracy of ML and
+IR algorithms is only moderately aﬀected by document spinning,
+we ﬁnd that
+there are other types of modiﬁcations (e.g.,
+summarisation and mixing of con-
+tent) that have a more severe eﬀect on classiﬁcation accuracy. To our knowledge
+the eﬀect of these more diﬃcult modiﬁcations has not been previously studied in
+the context of ML and IR for DLP. Our results show that the use of controlled
+environments improve detection of these less obvious data leaks.
+For our tests we use documents from the U.S.
+Digital
+National
+Security
+Archive (DNSA) [1] and reports from our own institution for validation. While
+previous work has performed experiments using
+tens
+or
+hundreds
+of leaked clas-
+siﬁed documents (WikiLeaks,
+DynCorp and TM
+1
+) and public documents from
+sources such as Wikipedia, the Enron email dataset and various online PC mag-
+azines [2, 14],
+and a smaller subset of the DNSA documents [7],
+we believe the
+work presented here constitutes the ﬁrst study of transformed data leak detection
+based on such a large number of actual classiﬁed documents (i.e.,
+thousands
+).
+The rest of this paper is organized as follows. Section 2 describes the proposed
+solution,
+including the controlled environment,
+classiﬁcation approaches,
+and
+deployment options.
+Section 3 describes the methodology used to evaluate the
+proposed solution, including: the corpora used as datasets and the methods used
+to simulate the generation of new documents. Section 4 presents the evaluation
+results; Sect. 5 provides a presentation of related work; and Sect. 6 provides some
+ﬁnal conclusions and summarises the main contributions of the paper.
+2
+Proposed Solution
+We introduce a
+controlled environment
+as an environment where we have control
+on all imported documents and their classiﬁcation. The set of imported known
+documents is deﬁned as
+input
+, and any new generated document(s) is deﬁned as
+output
+. We assume that the classiﬁcation (i.e., sensitivity) of the input documents
+are known, e.g., through existing cryptographically signed security labels.
+A controlled environment could for instance be a single computer, a virtual
+machine,
+a network/security domain,
+or an isolated process/application.
+Our
+1
+Transcendental meditation.
+134
+K.W. Kongsg˚ard et al.
+Fig. 1. (a) Usually, a classiﬁer used in DLP is trained on all available documents (b)
+With a controlled environment,
+only the documents of
+known classiﬁcation accessed
+from the environment are used to train the classiﬁer, which in turn is used to classify
+documents generated within the environment.
+Multiple controlled environments can
+exist simultaneously, each characterized by its own input and output.
+proposed solution inspects the information ﬂow to the controlled environment
+as shown in Fig. 1b, and estimates the classiﬁcation of output documents based
+on the information about the input documents. This is contrary to the traditional
+approach where a larger generic index/training set is used to classify any output
+document, as illustrated in Fig. 1.
+Our guiding hypothesis is that by limiting the set of input documents to those
+relevant to an output document, thereby reducing the noise in the classiﬁcation
+process, we can more accurately estimate the classiﬁcation of output documents.
+While there are diﬀerent ways to implement controlled environments,
+our
+hypotheses suggests that the more tightly enclosed environments such as a vir-
+tual
+machine or isolated process have potential
+for better accuracy than the
+more loosely enclosed environments such as a network domain. As will be seen
+in Sect. 3,
+this is supported by our evaluation results.
+To fully take advantage
+of
+this,
+a controlled environment may be
+instantiated
+for a speciﬁc task (e.g.,
+the writing of a single output document), thereby clearing all state (i.e.,
+input
+)
+Fig. 2. Illustration of how the proposed solution can be deployed on a separation kernel.
+The solid arrows represent the allowed communication channels while the dotted arrow
+indicates a control channel to restart the partition of the controlled environment (i.e.,
+removing all input).
+Data Loss Prevention Based on Text Classiﬁcation
+135
+between tasks/instantiations. We refer to this as an instantiated controlled envi-
+ronment.
+In the following two subsections we present ﬁrst how the classiﬁcation of
+output documents is performed and then discuss the diﬀerent deployment alter-
+natives.
+2.1
+Classification Methods
+To construct the classiﬁer we use two approaches: one based on machine learning
+algorithms and one relying on information retrieval techniques (see Sect. 3.3 for
+additional
+details).
+In the case of
+machine learning,
+the input documents are
+used as the training set for the classiﬁer,
+which is then used to determine the
+classiﬁcation of
+the output document(s) directly.
+In the information retrieval
+approach,
+we build an index of
+all
+the input documents and their associated
+classiﬁcation,
+so that we can query it to obtain a list of
+the input documents
+matching the output one(s), ranked by a similarity score. This list is then used
+to determine the more likely classiﬁcation of the output.
+2.2
+Deployment
+A controlled environment may in principle be any computing environment where
+the incoming information ﬂow can be monitored. A monitoring mechanism simi-
+lar to a guard, inspecting data at the application level, can be applied to control
+the information ﬂow to a network/security domain,
+a virtual
+machine,
+a com-
+puter, a process, or some isolated container such as a sandbox or Docker instance.
+Cloud computing, with its extensive use of virtual machines, may also facilitate
+controlled environments.
+Figure 2 shows a possible deployment of the proposed solution using a sepa-
+ration kernel.
+A separation kernel
+is a minimalistic type 1 hypervisor,
+running
+directly on the computer hardware,
+providing high assurance in the isolation
+between partitions (virtual
+machines) and controlled communication channels.
+As can be seen,
+monitoring of
+input and classiﬁcation of
+output is performed
+within a separate partition,
+while the controlled user/application environment
+resides within another partition. The separation kernel ensures that all commu-
+nication (e.g., documents from a ﬁle server) to/from the controlled environment
+has to pass through the monitoring and classiﬁcation solution.
+The separation
+kernel can also be conﬁgured to allow the monitoring and classiﬁcation partition
+to restart the controlled environment partition in order to clear its input state.
+2.3
+Applicable Scope
+Unlike the work in [7, 13],
+we do not aim to construct a classiﬁer that is able
+to universally distinguish between what the government or some other organi-
+zation considers to be classiﬁed and unclassiﬁed information;
+instead,
+we want
+to discover if sensitive information from a particular set of documents has been
+136
+K.W. Kongsg˚ard et al.
+included (possibly in modiﬁed form) into a new document. Thus, the proposed
+method is not intended to be able to detect misclassiﬁcation of
+output doc-
+uments where the user has included sensitive content accessed through other
+channels (e.g., a second computer system or a paper document). Although this
+could potentially be addressed by combining our approach with those discussed
+in [7, 13], this is not pursued here.
+Evasion and Poisoning.
+There are multiple ways to inﬂuence the machine
+learning classiﬁer.
+By carefully choosing what to import,
+the training set can
+potentially be shaped in such a way that the algorithm later misclassiﬁes a
+document containing sensitive content that the user wants to exﬁltrate. This is
+an example of what is referred to in the literature as a
+Causative
+attack [4]
+in
+which the training set is intentionally poisoned. The Reject On Negative Impact
+(RONI) defense technique addresses this by modifying the learning process to
+dynamically discount those data points in the training set that have a signiﬁcant
+negative impact on the performance [4].
+Usage of
+procedures from the ﬁeld of
+Robust Statistics has also shown to partially remedy the poisoning issue [4].
+Also,
+performing a causative attack to exﬁltrate larger amounts of data would
+likely result in detectable anomalies in the import patterns.
+The IR approaches are not as susceptible to the
+Causative
+class of attacks
+because: (1) there is no training phase involved and (2) the presence of a classiﬁed
+document with a similarity score greater than the threshold value (see Sect. 3.3)
+will
+result in assigning the strictest label,
+e.g.,
+“Classiﬁed”,
+to the document.
+Both the ML and IR methods remain vulnerable to the fact that if a highly skilled
+attacker has knowledge of
+the training set and hypothesis space,
+then he can
+shape the contents of the output document such as to stealthily avoid detection.
+This is known as an
+Exploratory Attack
+, in which the attacker does not inﬂuence
+the training phase [4].
+This is a generic challenge in data loss detection,
+where
+this work advance compared to most previous work only considering unmodiﬁed
+data leaks.
+The possibility of a skilled attacker evading the detection mechanism under-
+lines why detection of malicious insider data leakage is considered a challenging
+research problem (e.g., [26]), and why said detection methods need to be deployed
+in combination with other countermeasures. As a controlled environment main-
+tains control of the documents imported into the environment, we plan as further
+work to investigate how this information can be used to determine the risk an
+environment poses with regard to information leakage and to identify potential
+insiders. Also, it should be kept in mind that much of the data leakage by inter-
+nal
+actors is due to accident (i.e.,
+half
+of
+the serious incidents according to a
+recent study [15]).
+3
+Evaluation Methodology
+In order to evaluate the eﬀectiveness of
+the proposed solution,
+we needed to
+perform experiments using documents of
+known classiﬁcation.
+As information
+Data Loss Prevention Based on Text Classiﬁcation
+137
+from a sensitive document may leak by being included in a new document,
+we wanted to evaluate how modiﬁcations and introduction of external
+noise in
+output documents aﬀect performance. We therefore introduced several methods
+to create new output documents based on manipulation of input documents and
+inclusion of external noise. This is further described in Sect. 3.1.
+As the aforementioned approach does not accurately reﬂect how a document
+would be generated by a real
+user,
+we also use a second approach to validate
+our results.
+Using this approach we did not generate new output documents
+based on input documents (and noise), as in the ﬁrst approach. Instead we used
+another set of
+documents with known classiﬁcation as output documents,
+and
+used each of
+these document’s reference list as an approximation of
+the input
+documents accessed during its creation. This latter approach is further described
+in Sect. 3.2.
+Section 3.3 brieﬂy describes the machine learning and information retrieval
+algorithms used as classiﬁers in the evaluation.
+3.1
+Evaluation Approach 1
+Here we present the ﬁrst dataset and describe each of the document transforma-
+tions that are used to generate the output documents.
+DNSA Dataset.
+The U.S. Digital National Security Archive contains the most
+comprehensive collection of declassiﬁed U.S. government documents available to
+the public [1]. From this repository we extracted three subcollections:
+1.
+(Af )ghanistan: The Making of U.S. Policy, 1973–1990
+;
+2.
+(Ch)ina and the United States: From Hostility to Engagement 1960–1998
+and
+3.
+The (Ph)ilippines: U.S. Policy during the Marcos Years, 1965–1986.
+These were chosen because they contained a mix of both classiﬁed and unclas-
+siﬁed documents from unrelated domains and from partially overlapping time
+periods.
+Out
+of
+the 5853 retrieved documents,
+1612 were dismissed because they
+had gone through a declassiﬁcation process.
+The “PublicUse” (3 docs)
+and
+“Restricted” (1 doc) documents were removed due to their limited numbers. All
+documents marked either as “Unknown” (620) or “LimitedOﬃcial” (685) were
+removed.
+Documents that consisted of
+less than 30 words were also excluded.
+Post-ﬁltering, the ﬁnal data set consisted of 2884 documents. These documents
+were then partitoned into two categories depending on their original label. The
+1117 documents marked “Unclassiﬁed” or “Non-Classiﬁed” were assigned the
+label
+Unclassified
+.
+While the remaining 1767 documents marked either “Conﬁ-
+dential” or “Secret” were assigned the label
+Classified
+. In the ﬁnal dataset, 525
+out of the 883 documents belonging to the AF subset,
+661 out of the 959 CH
+documents, and 610 out of the 1042 PH documents were labeled as
+Classified
+.
+The ﬁnal data set was divided into the
+Input
+(used as input documents) and
+the
+Noise
+datasets. The
+Noise
+dataset was used to introduce external noise into
+output documents.
+138
+K.W. Kongsg˚ard et al.
+For each PDF ﬁle we utilized the 3rd party OCR service Abbyy
+2
+to extract
+the textual contents. Any non-English words, i.e., artifacts of the OCR process,
+were then ﬁltered out as part of a pre-processing phase as were any variations of
+tokens of the type
+Secret
+,
+Unclassified
+etc., as their inclusion would potentially
+result in the classiﬁers yielding artiﬁcially good results,
+that eﬀectively would
+only determine the security classiﬁcation based on the absence or presence of
+such words.
+Output Generation.
+We create new output documents the following ways:
+1.
+Existing Documents:
+In this case an existing document from the DNSA
+dataset is used unmodiﬁed.
+2.
+Mixed Documents:
+In this case we randomly sample sentences from two
+documents of diﬀerent classiﬁcation,
+with each document contributing 50 %
+of the output document. We take one document from the
+Input
+set and the
+other from the
+Noise
+set. The resulting document is then assigned the highest
+security classiﬁcation of the two documents used in the mixing, the rationale
+being that the introduction of a single classiﬁed sentence or keyword into a
+unclassiﬁed document would imply that the correct security classiﬁcation of
+the resulting document would be classiﬁed.
+3.
+Rewritten Documents:
+A document can be rewritten while still
+being
+semantically identical to the original, and should thus retain it’s security label.
+We implement this by ﬁtting a n-gram language model [17] for each document,
+and then use these probability distributions to generate new documents that
+contain semantically similar content. The correct security classiﬁcation of the
+output document is assumed to be the same as that of the original document.
+4.
+Abstract:
+For each document in the corpus there is an accompanying short
+abstract (not included as input) which we take as a condensed version of the
+document. The correct security label of the condensed document is assumed
+to be the same as that of the full document.
+5.
+Spinner:
+An article spinner is a tool
+used in search engine optimization to
+generate documents for content farms and to circumvent plagiarism detection
+algorithms in general.
+It works by rewriting an article by replacing words,
+phrases and paragraphs with synonyms. We used the online commercial tool
+“Spin Rewriter 6.0”
+3
+. As this is proprietary software the exact algorithm used
+to “spin” documents is not known.
+6.
+Translation:
+Using the online service Google Translate
+4
+we introduce noise
+into the document by performing a sequence of translation steps. In our exper-
+iments we utilize the translations steps:
+English
+→
+Simpliﬁed Chinese
+→
+English.
+The
+“Exisiting”,
+“Translation” and “Synonym” (“Spinner”)
+transformation
+methods have also been used in the CLEF 2014 plagarism dection challenge [24].
+2
+http://www.abbyy.com/.
+3
+https://www.spinrewriter.com/.
+4
+https://cloud.google.com/translate/docs.
+Data Loss Prevention Based on Text Classiﬁcation
+139
+It should be noted that “Abstract” is the most realistic transformation as it uses
+real abstracts created by human editors.
+3.2
+Evaluation Approach 2
+Here we present the second dataset used and then brieﬂy describe how input
+documents were obtained based on the reference list of each output document
+in the dataset. As mentioned earlier, the intent behind introducing this second
+set of data and accompanying experiments is to further ensure that the results
+of the ﬁrst approach is not attributed to the artiﬁcial
+way we generate output
+documents.
+Private Dataset.
+This dataset was based on an internal repository of technical
+reports at the Norwegian Defence Research Establishment (FFI). We collected a
+document set of 10 classiﬁed and 10 unclassiﬁed documents, to be used as output
+documents. The reference lists of these documents consisted of a mixture of both
+classiﬁed and unclassiﬁed reports, notes, and conference papers. The number of
+references per document ranged from 5 to 17, with a total set of 166 references
+(used as input documents).
+For each document and its references we extracted the textual contents and
+then pre-processed the resulting text using the same procedure as for the ﬁrst
+dataset,
+but with additional
+word ﬁlters customized to remove location and
+domain speciﬁc tokens that identiﬁes the security label.
+For each of the docu-
+ments we also removed the list of references from the text.
+Input Generation.
+As mentioned, this approach approximates the set of input
+documents by using the documents in the reference list of the output document
+instead. In this case the correct security classiﬁcation of the output document is
+assumed to be the one stated on the original (output) document. Likewise, the
+security classiﬁcation of an input document is also the one originally indicated
+on the document itself.
+3.3
+Algorithms
+In this section we introduce the information retrieval and machine learning algo-
+rithms utilized in the experiments.
+For each algorithm,
+we performed 5-fold
+cross-validation and a grid-search to ﬁnd the optimal
+conﬁguration of
+tunable
+parameters.
+Information Retrieval.
+In the ﬁeld of
+information retrieval,
+a collection of
+indexed documents can be searched by computing the similarity between the
+documents and a query string.
+In the context of
+controlled environments,
+the
+similarity for each output/input pair can be used to detect if parts of the output
+document originates from the input document.
+Each output document comes attached with the user’s assigned label, and it
+is only interesting to run the detection routine for instances where this label may
+140
+K.W. Kongsg˚ard et al.
+result in the document being released/leaked,
+i.e.,
+Unclassified
+in our dataset.
+The following three-step algorithm computes the predicted security label:
+1.
+Compute the similarity between the output document and each of the input
+documents.
+2.
+Take the label of the input documents whose score is the highest as a
+tentative
+label.
+3.
+If the tentative label is
+Unclassified
+; we test whether the best
+Classified
+match
+has a higher score than some threshold
+θ
+. If this is the case: the ﬁnal label is
+taken to be
+Classified
+. Otherwise we proceed with the
+tentative
+label.
+The implementations provided by open-source search engine ElasticSearch
+[11]
+and the Python package gensim [22]
+were used for the experiments.
+As
+there are a number of diﬀerent retrieval and scoring methods, we perform initial
+experiments with algorithms belonging to each of the four families:
+1.
+TF-IDF/VSM:
+In the tf-idf vector-space model (VSM), the cosine similarity
+between the term frequency inverse-document (tf-idf) vector representations
+of a document and the query term is computed (refer to Sect. 3.3). This model
+is typically used as a baseline ranking method [3].
+2.
+BM25:
+Okapi BM25 is a probabilistic algorithm built on top of the TF-IDF
+method and has been empirically shown to outperform the regular TF-IDF
+method in many experiments [23].
+3.
+LMJelinekMercerSimilarity:
+A method that uses a statistical
+language
+model, e.g., a multinomial distribution over a sequence of one or more words,
+to represent each document in the collection [21]. Ranking is then performed
+by computing the likelihood of a document generating a query. This particular
+implementation uses Bayesian smoothing with Dirichlet priors [28].
+4.
+IB:
+A family of information based retrieval
+models that builds on the core
+idea that a words’ statistical behaviour diﬀers on the document and collection
+level [9].
+Machine Learning.
+Machine learning aided text classiﬁcation builds on the
+ability of the underlying algorithm to correctly learn the essential features that
+characterize a certain category of documents from a set of given examples, i.e.,
+the training set, so that it can automatically classify new documents in the right
+category among those it learned.
+While the goal
+of
+the traditional
+machine learning classiﬁcation task is to
+train a classiﬁer that is able to handle out-of-sample data points,
+e.g.,
+tasks
+such as the real-time detection of pedestrians, malicious binaries or OCR, there
+is a strong overlap between the in-sample and out-of-sample data points in our
+setting, as we assume that information in the input documents (used for training)
+are used to generate the output documents. Under these conditions one can argue
+that a certain degree of overﬁtting is not only unharmful but in fact beneﬁcial.
+All ﬁtting was performed using the open-source Python machine-learning library
+scikit-learn [20].
+Data Loss Prevention Based on Text Classiﬁcation
+141
+Features.
+For features we compute the tf-idf weights, and represent each docu-
+ment by a high-dimensional sparse vector
+x
+, whose
+x
+i
+entry is the tf-idf weight of
+the word (token) associated with dimension
+i
+. For example, a document denoted
+by
+d
+containing the words ‘man’, ‘missile’ and ‘aide’ would be transformed into
+the vector:
+x
+d
+=
+
+man
+x
+d,1
+missile
+x
+d,2
+. . .
+aide
+x
+d,N
+
+(1)
+where
+N
+is the vocabulary size,
+with the word
+aide
+being mapped to the last
+dimension. The entries
+x
+d,t
+are the tf-idf weights deﬁned as
+5
+x
+d,t
+=
+
+f
+t,d
+  
+tf
+×
+1 + log
+|
+D
+|
+1 +
+|{
+d
+∈
+D
+:
+t
+∈
+d
+}|
+
+
+
+idf
+(2)
+where
+f
+d,t
+denotes the frequency of term
+t
+in document
+d
+and
+D
+the set of all
+documents.
+We performed experiments using the RandomForest [6], Adaboost [28], SVM
+[5] and logistic regression [5] packages implemented in sklearn [20]. However, we
+only discuss the linear SVM multiclass algorithm in further detail as it yielded the
+best performance. It works by searching for linear functions (one for each class)
+whose score for the correct class (e.g.,
+Secret
+) is at least 1 higher than the other
+classes (e.g.,.
+Unclassified
+,
+Top Secret
+,
+Classified
+).
+This idea is mathematically
+expressed by the non-convex minimization problem:
+min
+W
+L
+(
+W
+) =
+1
+M
+i
+j=y
+i
+k
+max(0
+,
+w
+T
+j
+x
+i
+−
+w
+T
+y
+i
+x
+i
++ 1)
+
+
+
+data loss
++
+λ
+2
+||
+W
+||
+2
+
+
+
+l
+2
+regularization loss
+(3)
+Because there is an inbalance between the classes in the dataset,
+which is a
+situation one must expect to handle in a real-life deployment, we experimented
+with the use of a pre-training reweighting mechanism where:
+y
+∗
+i
+=
+M
+|
+C
+| × |{
+y
+∈
+Y
+:
+y
+=
+y
+i
+}|
+(4)
+with
+|
+C
+|
+and
+M
+denoting the number of classes and samples respectively. This
+has the eﬀect of automatically adjusting the weights proportional to the inverse
+class frequencies.
+4
+Evaluation Results
+We here ﬁrst provide evaluation results from using the DNSA dataset (evaluation
+approach 1),
+and then additional
+validation results using the private dataset
+(evaluation approach 2).
+5
+It should be noted that there exists a great number of heuristic variations of the tf
+and idf formulas.
+142
+K.W. Kongsg˚ard et al.
+4.1
+Evaluation Approach 1
+The training and indexing is performed on the DNSA dataset,
+which is also
+used to generate the sets of
+output documents described in Sect. 3.1.
+In order
+to verify whether a controlled environment improves the detection of
+content
+from a classiﬁed input document being embedded in some transformed way in
+an output document,
+we set up the following experimental
+set-up with three
+types of classiﬁers:
+1.
+Global:
+First we create a global classiﬁer trained on all available documents
+from the DNSA dataset.
+This constitutes the baseline accuracy achieved by
+traditional ML and IR methods, where more information is supposed to give
+better results.
+2.
+Domain specific classifiers:
+Then we create three more context-sensitive
+classiﬁers,
+where only documents pertaining one of the three subcollections
+AF,
+CH and PH are used for training/indexing.
+This is done as a ﬁrst veri-
+ﬁcation that a classiﬁer/index set built on more context-speciﬁc documents
+can indeed give better accuracy than one built on possibly more, but less spe-
+ciﬁc data, even when creating the output documents from a relatively diverse
+and large input set. That is, better results are not only an eﬀect of creating
+output documents from a small and not very diverse set of input documents.
+3.
+Dynamic per-user:
+Finally we create controlled environments where we
+gradually increase
+the
+amount
+of
+imported documents
+used for
+train-
+ing/indexing.
+This to test our hypotheses that using additional
+documents
+for training besides those strictly relevant to the output documents does not
+necessarily increase accuracy, but rather constitutes noise.
+For all three types of classiﬁers we test how they perform on the diﬀerent trans-
+formations of documents from each separate subcollection as deﬁned in Sect. 3.1.
+We also test how they behave when used both as a binary classiﬁer (i.e. Unclas-
+siﬁed and Classiﬁed labels) and a ternary one (i.e.
+Unclassiﬁed,
+Conﬁdential
+and Secret labels). For IR algorithms we use a threshold value
+θ
+= 0
+.
+15 and we
+measure also how often they are able to identify the input document used to
+generate the output document, i.e., the number of exact matches.
+If our hypothesis is correct, then dynamic per-user classiﬁers should provide
+the best accuracy when used on smaller but relevant input sets, and their accu-
+racy converge toward domain speciﬁc and global
+classiﬁers as more and more
+noise is introduced in the input set. Domain speciﬁc classiﬁers should also provide
+some better accuracy than global ones. The results we obtained are summarized
+in Table 1 and partially illustrated in Fig. 3,
+and conﬁrm exactly this kind of
+behaviour.
+Global Classifiers.
+We train a classiﬁer using the complete set of documents
+as the training set,
+and then measure the predictive performance in terms of
+accuracy on each of
+three subcollections AF,
+CH and PH separately.
+For ML
+we only include results for SVM as it consistently outperformed the other ML
+methods included in our experiments (see Sect. 3.3) on all output classes.
+Data Loss Prevention Based on Text Classiﬁcation
+143
+Table 1. Mean accuracy for the SVM and IR methods when deployed using a global
+(Global),
+domain specific (DS) and dynamic per-user (User) classiﬁer.
+The per-
+formance is reported when operating with:
+two security classes (Binary - Unclassi-
+ﬁed/Classiﬁed),
+three classes (Tenary -
+Unclassiﬁed,
+Conﬁdential
+and Secret) and
+exact match, i.e., counting only instances where the best match is the input document
+used to generate the output for the IR approach (Exact).
+The reported controlled
+environment accuracy is when using a classiﬁer trained with 25 Unclassiﬁed and 25
+Classiﬁed input documents.
+Transformation
+Binary
+Tenary
+Exact
+Global
+DS
+User
+Global
+DS
+User
+Global
+DS
+User
+IR
+China
+Abstract
+.79
+.81
+.93
+.66
+.68
+.86
+.33
+.36
+.75
+Spinner
+.94
+.94
+.99
+.99
+.99
+.99
+.99
+.99
+.99
+Rewritten
+.99
+.99
+.99
+.99
+.99
+.99
+.99
+.98
+.99
+Translation
+.99
+.99
+.99
+.98
+.98
+.99
+.97
+.97
+.99
+Mixture
+.72
+.78
+.89
+-
+-
+-
+-
+-
+-
+Unmodified
+.99
+.99
+.99
+.99
+.99
+.99
+.99
+.99
+.99
+Afghanistan
+Abstract
+.58
+.57
+.85
+.46
+.47
+.77
+.22
+.27
+.60
+Spinner
+.96
+.96
+.99
+.93
+.95
+.99
+.92
+.93
+.99
+Rewritten
+.99
+.99
+.99
+.99
+.99
+.99
+.99
+.99
+.99
+Translation
+.99
+.99
+.99
+.99
+.99
+.99
+.99
+.98
+.99
+Mixture
+.81
+.85
+.92
+-
+-
+-
+-
+-
+-
+Unmodified
+.99
+.99
+.99
+.99
+.99
+.99
+.99
+.99
+.99
+Philippines
+Abstract
+.69
+.70
+.85
+.50
+.56
+.78
+.30
+.30
+.66
+Spinner
+.99
+.99
+.99
+.99
+.99
+.99
+.95
+.95
+.99
+Rewritten
+.99
+.99
+.99
+.99
+.99
+.99
+.99
+.99
+.99
+Translation
+.99
+.99
+.99
+.99
+.99
+.99
+.99
+.96
+.99
+Mixture
+.67
+.68
+.75
+-
+-
+-
+-
+-
+-
+Unmodified
+.99
+.99
+.99
+.99
+.99
+.99
+.99
+.99
+.99
+ML China
+Abstract
+.63
+.81
+.84
+.54
+.59
+.64
+-
+-
+-
+Spinner
+.98
+.98
+.99
+.95
+.95
+.99
+-
+-
+-
+Rewritten
+.99
+.98
+.99
+.96
+.97
+.98
+-
+-
+-
+Translation
+.96
+.98
+.99
+.90
+.97
+.97
+-
+-
+-
+Mixture
+.76
+.79
+.92
+-
+-
+-
+-
+-
+-
+Unmodified
+.99
+.99
+.99
+.99
+.99
+.99
+-
+-
+-
+Afghanistan
+Abstract
+.50
+.61
+.76
+.53
+.54
+.62
+-
+-
+-
+Spinner
+.96
+.96
+.99
+.94
+.93
+.99
+-
+-
+-
+Rewritten
+.99
+.99
+.99
+.97
+.96
+.99
+-
+-
+-
+Translation
+.95
+.97
+.99
+.89
+.95
+.97
+-
+-
+-
+Mixture
+.81
+.82
+.96
+-
+-
+-
+-
+-
+-
+Unmodified
+.99
+.99
+.99
+.99
+.99
+.99
+-
+-
+-
+Philippines
+Abstract
+.62
+.68
+.80
+.45
+.53
+.62
+-
+-
+-
+Spinner
+.97
+.99
+1.0
+.96
+.98
+.99
+-
+-
+-
+Rewritten
+.97
+.99
+1.0
+.98
+.97
+.99
+-
+-
+-
+Translation
+.96
+.97
+.99
+.89
+.96
+.99
+-
+-
+-
+Mixture
+.59
+.61
+.70
+-
+-
+-
+-
+-
+-
+Unmodified
+.99
+.99
+.99
+.99
+.99
+.99
+-
+-
+-
+144
+K.W. Kongsg˚ard et al.
+Domain Specific Classifiers.
+For the domain speciﬁc classiﬁers we train three
+classiﬁers using each of the subcollections AF, CH, and PH separately as training
+sets.
+We then evaluate the classiﬁers on the corresponding subcollections that
+were used in the training phase. Each classiﬁer provides slightly better accuracy
+than the global classiﬁer when detecting the classiﬁcation of output documents
+generated from the corresponding subcollection.
+Dynamic Per-User Classifier.
+We predict that a smaller input set will give
+better results because of less noise from potentially unrelated sources. In order
+to test this, we perform experiments in which we initially start with a sample of
+25 classiﬁed and 25 unclassiﬁed documents. We then iteratively increase the set
+of input documents (namely the noise) by sampling from the remaining dataset
+while testing the classiﬁer on outputs generated only from the initial
+50 docu-
+ments. This sequence of steps is then repeated 200 times and the mean accuracy
+is computed.
+Figure 3 (top) shows how the accuracy,
+for the “Abstract” out-
+put documents, decays as the size of the set of input documents increases. This
+shows how the classiﬁcation task becomes increasingly diﬃcult as more noise is
+introduced into the environment,
+approaching the performance of
+the domain
+speciﬁc classiﬁer as the size of the input set increases.
+For the “Mixture” class
+we have taken one classiﬁed document from the
+Input
+and one unclassiﬁed doc-
+ument from the
+Noise
+datasets and combined a sample section of (50%) from
+each. This is meant to illustrate the eﬀect of introducing noise from an external
+source,
+i.e.,
+content which is not present in the training set/index.
+When eval-
+uating the performance for the “Mixture” documents we measure the accuracy
+only for Classiﬁed output documents.
+4.2
+Discussion
+Table 1 displays the accuracy for the ML and IR approaches when evaluated
+using a Global, Domain Speciﬁc and Dynamic Per-User classiﬁer. It is clear that
+all approaches are robust with respect to the “Rewritten”, “Spinner” and “Trans-
+lation” transformations and further experiments show that only a minor beneﬁt
+is achieved when deploying a controlled environment for these classes. The high
+accuracy can be traced back to how these output documents are generated from
+the input documents and how the SVM and TF-IDF methods works.
+When
+using a bag-of-word representation in which the order of
+words are discarded,
+the relative frequencies of
+the input documents remain invariant with respect
+to the transformations,
+resulting in what (for the algorithms) are very similar
+documents. For the “Translation” transformation the intermediate steps distorts
+the semantics while retaining the TF-IDF weights of the orignal document.
+The “Abstract” and “Mixture” categories appear to be more challenging
+transformations. If we look at the accuracy plots displayed in Fig. 3, we see how
+the introduction of
+the more context aware Domain Speciﬁc classiﬁer oﬀers a
+moderate increase in performance compared to the Global classiﬁer. Proceeding
+one step further by deploying the Dynamic Per-User classiﬁer yields a signiﬁcant
+Data Loss Prevention Based on Text Classiﬁcation
+145
+Fig. 3.
+Accuracy as
+a function of
+the size of
+the controlled environment
+for
+the
+“Abstract” and “Mixture” output class.
+Left:
+Machine learning (l
+2
+-regularized SVM)
+based classiﬁer.
+Right:
+Information retrieval
+(TF-IDF VSM/Cosine) based classiﬁer.
+Legends: Global[XY]
+a global classiﬁer trained an the complete training set (AF, PH
+and CH) and evaluated on the XY dataset,
+where XY can be AF (Afghanistan),
+PH
+(Philippines) and CH (China). DS[XY] denotes a domain speciﬁc classiﬁer trained and
+evaluated on the XY dataset.
+User[XY]
+a dynamic per-user classiﬁer trained on the
+input for a controlled dataset from the XY dataset.
+increase in performance, and the plot illustrates how the performance decays as
+the size of the input increases until it ﬁnally converges to the performance oﬀered
+by the Domain Speciﬁc classiﬁer.
+From the graph it is clear that the introduction of a second source of noise
+further reduces the eﬀectiveness of the algorithms, but that the use of a controlled
+environment still signiﬁcantly improves accuracy compared to a global or domain
+speciﬁc classiﬁer. There is a notable drop in accuracy as we go from two to three
+security classes and when we go from three classes to only measuring exact
+matches. However the table shows that we still achieve a bump in performance
+by using a more tightly controlled environment.
+146
+K.W. Kongsg˚ard et al.
+From Table 1 and Fig. 3 we can conclude that the IR and ML methods yield
+comparable performance when deployed using a controlled environment.
+How-
+ever,
+the IR approach oﬀers a few advantages.
+Firstly,
+the threshold value
+θ
+(Sect. 3.3) limits the viability of
+Causatitive
+attacks. Secondly, since they work
+by comparing the output document with a set of input documents, it is straight-
+forward to explain a classiﬁcation outcome to the end user. Likewise, it is easy
+to perform an error analysis by studying the nature of
+the documents it gets
+wrong. For example, in our study we randomly sampled a set of classiﬁed doc-
+uments that were misclassiﬁed. We discovered that there were several instances
+in which the best
+match was
+an oﬃcial
+invitation to an event
+or
+meeting,
+while the classiﬁed document,
+the one used as a query,
+was an internal
+memo
+detailing what the attending oﬃcials political position, talking, and view points
+should be.
+4.3
+Evaluation Approach 2
+The primary motivation behind a second evaluation approach is to investigate
+whether or not the previous results can be attributed to the artiﬁcial
+way we
+generate output documents.
+E.g.,
+if the generated output documents are much
+less diverse than those created by users of
+a real-life system,
+it could be that
+a larger but less speciﬁc training set might outperform the more context-aware
+given more diverse output documents.
+For data we use the internal dataset described in Sect. 3.2, and we evaluate
+using the IR approach. We did not evaluate the ML classiﬁers on this dataset as
+many of the documents did not have enough references to perform the ﬁtting.
+For each document we index all
+of its references (and their classiﬁcation),
+and
+use the text of
+the document as the query string.
+From the set of
+results we
+take the security label of the document with the highest score to be the correct
+one. All three scoring algorithms have an accuracy of approximately 78%. This
+might seem like a lackluster result given that the small
+size of
+the input set
+should provide a more meaningful context for the classiﬁer. However, an analysis
+of
+the set of
+misclassiﬁcations reveals that most of
+the incorrectly classiﬁed
+documents are unclassiﬁed reports whose best match is the larger and more
+extensive classiﬁed version, which naturally has a large amount of overlap. If we
+remove these documents,
+accuracy improves to 89%.
+As shown in Fig. 4,
+there
+is signiﬁcant beneﬁt in using a controlled environment compared to a global
+classiﬁer for this second set of documents, providing further evidence in support
+of our hypothesis.
+5
+Related Work
+Despite the long history of applying machine learning and information retrieval
+to the text categorization task [16]; not much research has focused on using these
+methods to automate security classiﬁcation in the context of DLP. This despite
+being recognized as a relevant area by commercial vendors [27].
+Data Loss Prevention Based on Text Classiﬁcation
+147
+Fig. 4. Accuracy as a function of the size of the controlled environment for the internal
+dataset compared to when using a global classiﬁer.
+The ﬁrst work we are aware of is that of Brown et al.
+[7].
+This study used
+a smaller part of
+the DNSA corpus [1]
+to investigate whether a ML classiﬁer
+trained on documents regarding a particular topic or time-period would gener-
+alize to other topics/time-periods. Their goal was to develop a tool to aid man-
+ual classiﬁcation and declassiﬁcation of documents, rather than detect leakages.
+These results were later validated and expanded upon in [13]
+and the classi-
+ﬁers then ﬁne-tuned in [10].
+In all
+these cases only unmodiﬁed out-of-sample
+documents were used as a test-set.
+The concept
+of
+an automatic security classiﬁcation framework based on
+machine learning has also been proposed by Kassidy [8], but without any imple-
+mentation or validation.
+Lewellen et al.
+[18]
+proposed to use plagiarism tech-
+niques to detect data leaks. This is mostly a technical document on how to set
+up a system that uses standard indexing techniques to detect parts of
+sensi-
+tive text copied and pasted, for instance, in e-mails. Another related work uses
+N-grams statistical
+analysis to detect sensitive documents even after text spin-
+ning [2].
+While our work is similar in that we investigate how the classiﬁer
+precision changes when documents are manipulated or degraded,
+we use addi-
+tional manipulation techniques and also utilize a large and more realistic dataset.
+Besides, their classiﬁcation is based on topics rather than sensitivity, so it is not
+possible to directly relate our results. We argue that classifying documents per
+topic as they do, is easier as a topic can be well-characterized by speciﬁc words
+and expressions, while sensitivity can be based, for instance, also on political or
+strategic motivations.
+Hart et al.
+[14]
+ﬁrst evaluate various ML algorithms as we do,
+but then
+settle on a SVM-based classiﬁer and then develop a new supervised training
+algorithm that can automatically distinguish between secret,
+public,
+and non-
+enterprise documents.
+They use various supplement training and adjustment
+techniques in order to compensate for the imbalance and false positives due to
+the non-enterprise documents. While we operate with a data set whose security
+labels have been assigned by government personnel and has later gone through a
+148
+K.W. Kongsg˚ard et al.
+declassiﬁcation process, the data used in their study comes from several smaller
+private sources,
+and is a mixture of
+internal
+handbooks for religious organiza-
+tions (LDS
+6
+, TM
+7
+), corporate emails and private blogposts regarding software-
+engineering. Furthermore, they do not seem to account for possible manipulation
+of the documents to be classiﬁed either,
+but use only documents known to the
+classiﬁer without any modiﬁcation. Shu et al. [26] introduces a scalable sequence
+alignment algorithm for detecting data leaks in transformed documents.
+How-
+ever, their focus is restricted to a special class of transformations, e.g., replacing
+white space characters with the “+” character.
+6
+Conclusion
+This paper explored the idea of using controlled environments and dynamic clas-
+siﬁers to better determine the security classiﬁcation of transformed documents,
+by providing a more relevant context. By deploying a controlled environment that
+monitors and registers all imported documents, i.e., the documents accessed by
+a user during a session,
+we can subsequently check if
+any documents that are
+later exported contain information whose origin is a classiﬁed source. In our work
+we proposed two ways to automate this process using methods from the ﬁelds
+of machine learning and information retrieval. A controlled environment can be
+instantiated per single user,
+virtual
+machine,
+network,
+or process,
+potentially
+for each work session or for longer time periods, and can be re-initialized when
+required.
+In contrast to the traditional
+approach where a global
+classiﬁer is trained
+using all
+the available data of
+an enterprise or organization,
+a classiﬁer in a
+controlled environment has the advantage of a more targeted context, as it knows
+which data has been accessed during a session.
+Extensive evaluation presented
+in Sect. 4,
+using a dynamic per-user environment (trained on the documents
+accessed by the user), a domain speciﬁc (trained using documents from the same
+subcollection) as well
+as a global
+classiﬁer (trained using all
+available data),
+supports the hypothesis that the introduction of
+a controlled environment is
+beneﬁcial
+to DLP.
+Especially for diﬃcult detection tasks there is substantial
+beneﬁt in using a controlled environment as witnessed in Fig. 3,
+where we see
+how the accuracy decays as more irrelevant data is imported into the controlled
+environment. For the easier detection tasks (results presented in Table 1) there
+was no signiﬁcant gain to be achieved by deploying a controlled environment.
+In order to validate that our results also hold water in a operational setting,
+i.e., that the observed boost in performance can not be attributed to the artiﬁcial
+way we generate output documents, we conducted experiments (Sect. 4.3) using
+a separate data set consisting of a private repository of classiﬁed and unclassiﬁed
+reports from our research institution. For each of these reports we assumed that
+the references were the documents imported into the controlled environment
+while the report itself was the output at the end of a session.
+6
+The Church of Jesus Christ of Latter-day Saints.
+7
+Transcendental meditation.
+Data Loss Prevention Based on Text Classiﬁcation
+149
+As part of future work we intend to perform a more ﬁne-grained analysis in
+which we operate on the sentence or paragraph level, e.g., we want to investigate
+whether we can detect if
+a transformed chunk of
+text in an output document
+can be traced back to a classiﬁed document in the input set.
+We also plan to use the predicted label probabilites or scores of the classiﬁers
+to build an insider threat meta score, which would help facilitate the detection of
+anomalous behaviour on the user level, thus mitigating the threat of
+Causative
+attacks. Furthermore, an insider score would mitigate false positives by analyzing
+user labeling trends over a longer time horizon instead of
+operating on a per-
+document level.
+References
+1.
+Digitial
+National
+Security
+Archive.
+http://nsarchive.chadwyck.com/home.do.
+Accessed 26 Mar 2015
+2.
+Alneyadi, S., Sithirasenan, E., Muthukkumarasamy, V.: A semantics-aware classi-
+ﬁcation approach for data leakage prevention. In: Susilo, W., Mu, Y. (eds.) ACISP
+2014.
+LNCS,
+vol.
+8544,
+pp.
+413–421.
+Springer,
+Heidelberg (2014).
+doi:10.1007/
+978-3-319-08344-5
+27
+3.
+Baeza-Yates, R., Ribeiro-Neto, B., et al.: Modern Information Retrieval, vol. 463.
+ACM Press, New York (1999)
+4.
+Barreno, M., Nelson, B.A., Joseph, A.D., Tygar, D.: The security of machine learn-
+ing. Technical report UCB/EECS-2008-43, EECS Department, University of Cali-
+fornia, Berkeley, April 2008. http://www.eecs.berkeley.edu/Pubs/TechRpts/2008/
+EECS-2008-43.html
+5.
+Bishop,
+C.M.:
+Pattern Recognition and Machine Learning.
+Springer,
+New York
+(2006)
+6.
+Breiman, L.: Random forests. Mach. Learn. 45(1), 5–32 (2001)
+7.
+Brown,
+J.D.,
+Charlebois,
+D.:
+Security classiﬁcation using automated learning
+(scale): optimizing statistical natural language processing techniques to assign secu-
+rity labels to unstructured text. Technical report, DTIC Document (2010)
+8.
+Clark,
+K.P.:
+Automated security classiﬁcation.
+Master thesis Vrije Universiteit
+(2008)
+9.
+Clinchant, S., Gaussier, E.: Information-based models for ad hoc IR. In: Proceeding
+ACM SIGIR Conference on Research and Development in Information Retrieval,
+pp. 234–241 (2010)
+10.
+Engelstad, P.E., Hammer, H., Kongsg˚ard, K.W., Yazidi, A., Nordotten, N.A., Bai,
+A.: Automatic security classiﬁcation with lasso. In: Proceeding International Work-
+shop on Information Security Applications (2015)
+11.
+Gormley,
+C.,
+Tong,
+Z.:
+Elasticsearch:
+The Deﬁnitive Guide.
+O’Reilly Media Inc.,
+Sebastopol (2015)
+12.
+Haakseth,
+R.,
+Nordbotten,
+N.A.,
+Jonsson,
+Ø.,
+Kristiansen,
+B.:
+A high assurance
+guard for use in service-oriented architectures. In: Proc. International Conference
+on Military Communications and Information Systems (2015)
+13.
+Hammer, H., Kongsg˚ard, K.W., Bai, A., Yazidi, A., Nordbotten, N.A., Engelstad,
+P.E.: Automatic security classiﬁcation by machine learning for cross-domain infor-
+mation exchange. In: Proceeding IEEE Military Communications Conference, vol.
+31 (2015)
+150
+K.W. Kongsg˚ard et al.
+14.
+Hart, M., Manadhata, P., Johnson, R.: Text classiﬁcation for data loss prevention.
+In: Fischer-H¨
+ubner, S., Hopper, N. (eds.) PETS 2011. LNCS, vol. 6794, pp. 18–37.
+Springer, Heidelberg (2011). doi:10.1007/978-3-642-22263-4 2
+15.
+Security, I.: Grand theft data - data exﬁltration study: actors, tactics, and detection
+(2015). http://www.mcafee.com/us/resources/reports/rp-data-exﬁltration.pdf
+16.
+Joachims,
+T.:
+Text categorization with support vector machines:
+learning with
+many relevant features. In: N´edellec, C., Rouveirol, C. (eds.) ECML 1998. LNCS,
+vol. 1398, pp. 137–142. Springer, Heidelberg (1998). doi:10.1007/BFb0026683
+17.
+Jurafsky,
+D.,
+Martin,
+J.:
+Speech and Language Processing:
+An Introduction to
+Natural Language Processing, Computational Linguistics, and Speech Recognition.
+Prentice Hall series in Artiﬁcial Intelligence, Pearson Prentice Hall (2009). https://
+books.google.no/books?id=fZmj5UNK8AQC
+18.
+Lewellen, T., Silowash, G.J., Costa, D.L.: Insider threat control: Using plagiarism
+detection algorithms to prevent data exﬁltration in near real time. Technical report
+CMU/SEI-2013-TN-008, Carnegie Mellon University (2013)
+19.
+Ouellet,
+E.:
+Magic quadrant for content-aware data loss prevention.
+Gartner Inc.
+(2013)
+20.
+Pedregosa,
+F.,
+et al.:
+Scikit-learn:
+machine learning in Python.
+J.
+Mach.
+Learn.
+Res. 12, 2825–2830 (2011)
+21.
+Ponte, J.M., Croft, W.B.: A language modeling approach to information retrieval.
+In:
+Proc.
+ACM SIGIR Conference on Research and Development in Information
+Retrieval, pp. 275–281 (1998)
+22.
+ˇ
+Reh˚uˇrek, R., Sojka, P.: Software Framework for Topic Modelling with Large Cor-
+pora, pp. 45–50, May 2012. http://is.muni.cz/publication/884893/en
+23.
+Robertson,
+S.,
+Zaragoza,
+H.:
+The probabilistic relevance framework:
+BM25 and
+beyond. Foundations and trends in information retrieval (2009)
+24.
+Rosso, P., Stein, B.: Overview of the 6th international competition on plagiarism
+detection
+25.
+Shabtai,
+A.,
+Elovici,
+Y.,
+Rokach,
+L.:
+A Survey of
+Data Leakage Detection and
+Prevention Solutions. Springer, New York (2012)
+26.
+Shu, X., Zhang, J., Yao, D., Feng, W.C.: Fast detection of transformed data leaks.
+IEEE Transactions on Information Forensics and Security (2016)
+27.
+Symantec: Machine learning sets new standard for data loss prevention: describe,
+ﬁngerprint,
+learn (2010).
+http://eval.symantec.com/mktginfo/enterprise/white
+papers/b-dlp machine learning.WP en-us.pdf
+28.
+Zhai, C., Laﬀerty, J.: A study of smoothing methods for language models applied to
+ad hoc information retrieval. In: Proceeding ACM SIGIR Conference on Research
+and Development in Information Retrieval, pp. 334–342 (2001)

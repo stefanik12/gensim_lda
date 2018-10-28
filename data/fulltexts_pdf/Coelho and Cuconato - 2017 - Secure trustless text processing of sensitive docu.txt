@@ -1,0 +1,625 @@
+﻿Secure trustless text processing of sensitive
+documents
+Fl´
+avio Code¸co Coelho and Bruno Cuconato
+May 26, 2017
+Abstract
+Scaling up the analysis
+of
+sensitive or
+confidential
+documents
+fre-
+quently stumbles on the limited number of individuals with the necessary
+clearance to access the documents.
+The availability of cryptographic pro-
+tocols compatible with text processing methods can greatly improve this
+situation allowing for the automated processing of large corpora of confi-
+dential documents by “untrusted” third-parties.
+In this paper we propose
+a protocol which allows for secure outsourcing of text analytics tasks with-
+out compromising the confidentiality of
+documents.
+The method scales
+to large corpora,
+and presents linear time complexity on the size of
+the
+corpus.
+Introduction
+A fertile ground for the application of machine-learning based on natural
+lan-
+guage features is in triaging classified or otherwise sensitive documents for de-
+classification. [6]
+The classical
+scenario of examining sensitive documents for declassification
+purposes involves the manual reading and evaluation by a human of the required
+security clearance and of the specific knowledge to understand the document and
+its implications.
+The problem with this classic scenario is that such individuals
+are usually few and command high wages.
+The viable rate of manual analysis of
+documents is much slower than what is necessary to tackle the enormous volumes
+of
+documents scheduled for evaluation.
+This problem is a perfect target for
+machine learning classification algorithms which can work at very high speeds
+without exposing the documents to non-authorized humans.
+So why is this
+not yet the standard procedure for such applications?
+Mainly because these
+algorithms must be trained under the supervision of a human specialist before
+they can be used.
+In the most usual scenarios, document encryption renders documents useless
+for text processing tasks such as the classification of documents.
+In most text processing tasks,
+the ability to identify occurrences of
+words
+and their absolute and relative positions (co-occurrences) is essential.
+However,
+when whole documents are encrypted, the discrimination of its constituent parts
+(sentences, words, tables, figures, etc.) is completely impossible unless the doc-
+umet is decrypted first.
+A natural solution to this issue would be to hash each
+word separately and in sequence.
+1
+PeerJ Preprints | https://doi.org/10.7287/peerj.preprints.2994v1 | CC BY 4.0 Open Access | rec: 26 May 2017, publ: 26 May 2017
+In fact,
+this is already commonplace,
+in text processing software,
+which
+attribute numerical IDs to words, in order to save space, and speed up compu-
+tation.
+But instead of attributing simple sequential ID s to words, which can be
+cumbersome with growing dictionaries, in standard text processing tasks this is
+accomplished by the compilation of a corpus dictionary with the subsequent at-
+tribution of a unique integer ID to each separate word, in order to avoid having
+to look up a potentially very large table every time we need to find the ID of a
+word.
+It has become common practice to use non-cryptographic hash functions
+(such as CRC32,
+MD5,
+etc) to derive integer ID s for individual
+words with
+negligible probabilities of key collision,
+i.e.
+two different words with the same
+ID [8].
+This is not done for security reasons though,
+and non-cryptographic
+hash functions such as MD5 or CRC32 are vulnerable to collisions,
+or even
+brute-force attacks [2, 3].
+What we propose in this paper is akin to homomorphic encryption in its
+general purpose of allowing for analytical manipulations of encrypted data, but
+is much less restrictive [4].
+Our only requirement is that the statistical properties
+of the corpus as a list of words remain the same after hashing.
+In this paper,
+we propose a protocol
+in which a client in possession of
+a
+classified corpus of documents can hire an analyst to analyze the corpus without
+revealing the contents of the documents.
+We also offer an open source software
+tool to efficiently hash corpora of sensitive documents, before they can be sent
+out for analysis.
+Methodology
+The Methodology proposed takes advantage of the fact that most text process-
+ing models are language agnostic,
+relying only on statistical
+properties of
+the
+documents.
+By hashing individual
+words instead of
+whole documents we can
+hash the content without affecting the statistical
+properties of the documents
+as collections of words.
+Hash functions and cryptographic hash functions
+Hash functions are mathematical functions which map data coming from a set
+of
+values of
+arbitrary size to a set of
+values of
+fixed size.
+Hash functions are
+deterministic functions so the same data will always lead to the same hash value.
+They should also be easy to compute in order to be of
+practical
+use on large
+datasets.
+Cryptographic hash functions are special
+hash functions which beside be-
+ing deterministic and easy to compute,
+are also required to be virtually non-
+invertible, meaning that it should be infeasible to obtain the original data from
+its hash value.
+Hash values should also be uncorrelated to the original
+data,
+meaning that similar data do not lead to similar hashes.
+Finally,
+they must
+also be resistant to collisions, that is, it must be very hard to find different data
+leading to the same hash value.
+On Table 1,
+we can see the hash values of two similar words.
+Notice that
+their hash values are vastly different even though they differ by a single letter.
+2
+PeerJ Preprints | https://doi.org/10.7287/peerj.preprints.2994v1 | CC BY 4.0 Open Access | rec: 26 May 2017, publ: 26 May 2017
+Table 1:
+SHA-2 256 bit hash values for two different words.
+The hash values
+are displayed in hexadecimal format
+Word
+Hash value – sha256
+word
+98c1eb4ee93476743763878fcb96a25fbc9a175074d64004779ecb5242f645e6
+words
+dba36bffa5cab0f922d087a3aeb179f9d4e745df40b323e1b1471402848c8a3e
+The Hashing Workflow
+Our protocol starts from a previously tokenized set of documents.
+Tokenization
+(splitting the documents into words or tokens) is often a required first step
+before more detailed statistical analysis of texts can take place.
+Tokenization is
+also a step that can benefit from language as well as domain knowledge.
+Thus
+tokenization should be done by the client before the hashing step.
+Once the corpus documents have been converted into sequences of tokens,
+it can be passed on to the hashing protocol
+described below.
+We assume here
+that the corpus is a list of documents, each of which is a list of tokens (words).
+Documents may be thought of full
+documents or parts of it (paragraphs,
+sen-
+tences).
+1.
+Create an empty corpus structure (list of lists) to hold the hashed tokens;
+2.
+Create a decoding dictionary:
+a list of key, value pairs where the key is an
+encoded token (hash) and the values are the unhashed token and its salt.
+3.
+Create an encoding dictionary:
+a list of key, value pairs where the key is
+a plain token and the value is its cryptographic hash.
+4.
+Iterate over unhashed tokens
+(a) Check if the word is in the encoding dictionary;
+(b) If so, add its hash value to the hashed tokens list
+(c) If not, hash it with the addition of a random
+1
+salt, and add them to
+the encoding and decoding dictionaries.
+5.
+Return the hashed corpus and the dictionary
+After the hashing,
+the client retains the dictionaries and hands over the
+hashed corpus to the analyst.
+The analyst can then proceed to analyze the
+corpus as if it were any ordinary tokenized corpus.
+After the analysis is done
+the client can use the decoding dictionary to decode the results,
+reverting the
+hashed tokens to their original unhashed values, and interpret the analysis.
+Security Assessment
+Even though the mere use of the protocol presented here is an important step in
+terms of security in an analytic scenario, it is worth looking at the most evident
+attack vectors the protocol is vulnerable to.
+1
+The random salt may be the same for all words or unique to each.
+3
+PeerJ Preprints | https://doi.org/10.7287/peerj.preprints.2994v1 | CC BY 4.0 Open Access | rec: 26 May 2017, publ: 26 May 2017
+Figure 1:
+Diagram summarizing the hashing process for a document
+Attacks to the Hash Function
+Vulnerability to this kind of attack is related to weaknesses of the cryptographic
+hash function used.
+Therefore this risk can always be diminished by choosing a
+stronger hash function.
+Usually the security of a hash function is measured in terms of three prop-
+erties:
+Pre-image resistance,
+meaning that given a hash h,
+it should be very
+difficult to find any word w such that hash(w) = h;
+Second pre-image resis-
+tance,
+meaning that given a word w
+1
+,
+it should be difficult to find a word w
+2
+such that hash(w
+1
+) = hash(w
+2
+); and collision resistance which means it is dif-
+ficult to find two different words w
+1
+and w
+2
+such that hash(w
+1
+) = hash(w
+2
+).
+Using a SHA256 hashing function,
+which can generate N = 2
+256
+different
+hash values,
+the probability of
+not having a collision after hashing k words
+without is:
+N − 1
+N
+×
+N − 2
+N
+× . . . ×
+N − (k − 1)
+N
+which can be approximated by:
+e
+−
+k(k−1)
+2N
+(1)
+If
+we hash all
+unique words in the English language,
+roughly 400, 000 the
+probability of having a collision is:
+1 − e
+−
+k(k−1)
+2N
+≈ 6.9 × 10
+−67
+An actual experiment on the English language Wikipedia points to approx-
+imately a hundred thousand distinct tokens in 3.9 million documents,
+leading
+to an even smaller probability of collision than the one calculated above.
+A more common attack is the dictionary attack, where the attacker builds a
+dictionary of hashed words, and tries to match the hashed tokens in a document
+to this dictionarized vocabulary.
+In order for the attack to be possible the attacker must know which hash
+function has been used in the hashing, which is not a public information.
+Only
+the client knows which hash function has been used,
+because she can choose
+4
+PeerJ Preprints | https://doi.org/10.7287/peerj.preprints.2994v1 | CC BY 4.0 Open Access | rec: 26 May 2017, publ: 26 May 2017
+the one she wants.
+Besides,
+since our protocol
+adds a random salt string to
+each token before hashing, a standard dictionary attack is rendered completely
+harmless.
+Salting a password may not help to protect it, because any word+salt
+that hashes to the same value works.
+In our scenario,
+the attacker’s goal
+is to
+find the correct word behind a hash, so “simply” finding a collision is not enough,
+because due to the pidgeon hole principle (or Dirichlet box principle) [7], there
+maybe more than one word that hashes to the same value.
+What is needed is a
+pre-image attack which is considered much harder than collision attacks.
+Moreover, if an attacker searches actively for collisions, she is more likely to
+find wrong combinations of token+salt than the original correct token+salt,
+if
+salt length is sufficiently big.
+If we assume a hash function whose output is 32
+bytes (e.g., SHA256), salt byte length of same size, and a vocabulary of n words,
+we have n · 2
+256
+possible combinations of
+token+salt.
+If
+this hash function is
+approximately uniform (a property cryptographic hash functions should have),
+we expect n collisions per possible output value,
+because for every word there
+are 2
+256
+possible salts and the same number of hash values.
+Therefore, for the
+correct hash,
+there are on average n collisions,
+but only one of
+them is the
+correct one, the one formed by the original token.
+Code complexity and application examples
+In this section we have employed the reference implementation in Python which
+we are open sourcing under the lesser general public license (LGPL). The source
+code is freely available under https://github.com/NAMD/corpushash.
+For the
+natural language processing (NLP) applications shown we have used the gensim
+Python library [5].
+In these applications, our goal was to demonstrate that the
+results of
+the analysis run on the plain text corpus and the hashed one were
+identical after decoding.
+Complexity
+We ran benchmark tests to assess the library’s performance, which are all avail-
+able at the code repository.
+There are two main variables that determine the
+library’s performance:
+corpus size in tokens,
+and corpus nesting level
+(flat list
+versus nested list structure).
+The main results are that the library has linear
+complexity in the former (see fig.
+2),
+while incrementing corpus nesting level
+by 1 will make the hashing take 10% longer.
+For a real-world measure of
+the performance,
+we have hashed the entire
+corpus of
+the Portuguese language Wikipedia
+2
+(1.3 GB compressed,
+almost 1
+million articles) in 00:10:10 of CPU time, but 00:45:59s of Wall time, in a ma-
+chine with an Intel
+core i5-4590 (3.7GHz).
+Disk I/O was the bottleneck here,
+as the corpus documents are streamed from disk to be hashed and back to disk
+aftewards in order guarantee constant memory usage.
+Using a Solid-State Disk
+(SSD) or parallelizing the I/O can improve these times.
+2
+Available at https://dumps.wikimedia.org/ptwiki
+5
+PeerJ Preprints | https://doi.org/10.7287/peerj.preprints.2994v1 | CC BY 4.0 Open Access | rec: 26 May 2017, publ: 26 May 2017
+Figure 2:
+Time to hash a corpus of given size.
+Time is normalized by ∀t
+i
+.t
+i
+=
+t
+i
+t
+1
+Table 2:
+TF-IDF weights for a few hashed tokens.
+The hashes were further
+encoded in Base85 format to reduce to space required to store the hashed corpus.
+The TF-IDF scores for both corpora were identical as expected.
+token
+hashed token
+TFIDF weights
+emma
+f‘mQ@sY^3|&5lPGYwGpTTVKRktQ*p-pT#Qd_6Hqv
+0.5042503721243
+jane
+1Sb%Q^?q7fVE4P<eCkRbDr#Q5EFXRP9n$KrlTx+-
+0.1430875592365
+austen
+4l@t*ZLBNhsA8#dI)lp$FnOTQ%hwsZ>lKnh6UNyq
+0.0004753739509
+TF-IDF Model
+In this application we calculate TF-IDF weights of an English language corpus
+made available by the NLTK [1]
+library based on works offered by Project
+Gutenberg.
+3
+After hashing the full corpus using our library, we fed the results into gensim,
+obtaining TF-IDF weights for each hashed token (see Table 2).
+Our validating procedure consisted in calculating independently the TF-IDF
+weigths of the original (unhashed) corpus, and then comparing the results with
+those of the hashed corpus.
+Both tests were successful, showing that employing
+our library only adds a couple modular steps (hashing and decoding) to calcu-
+lating and applying a TF-IDF model,
+without changing its results or the way
+the task is carried out.
+The results of these tests are available along with the
+source code in the Github repository.
+3
+Available at https://www.gutenberg.org/.
+6
+PeerJ Preprints | https://doi.org/10.7287/peerj.preprints.2994v1 | CC BY 4.0 Open Access | rec: 26 May 2017, publ: 26 May 2017
+token
+hashed token
+coefficient
+”
++xy0wTTqhE|JZz*%3WH{1@1q9h<G<=uLOD^et9xA
+0.313
+Tories
+kGAJg>G9k#tX-bv0@t‘HG>lN^h{c3!)<j‘xP7D7)
+0.181
+preoccupied
+7y5%8<c1FGHe#<|dSu3vccWGzM9Q=*v4Z~lCTyRF
+0.171
+inequality
+%4N-jt=3f2@)u4VhSd^a*M@(S%#}e2p!OmWo6cGd
+0.171
+@Tommy Colc
+fcu&‘jIKDa#uPvE5u2(^)Z6n*AYzTwzbe#gP5;R1
+0.171
+wrote
+MK{t^7~%aBL2s88ymX=}S3R5ZohAfC370_$lde}H
+0.171
+Miliband
+UC&2ub*;{Z+u~QBI_5Nvm##j=vQ4Kb{jrqZ0cyQ9
+0.167
+claiming
+!~2FQb#UvY9{_*vVk6$2r=BlJ7&KiuJ=m&?+39}‘
+0.167
+w
+Wze>-N3e(e%@~h_T9GmAjsj^FE15#}DV6I7z^#l0
+0.166
+man
+(=w$026I9$E;O3NWu‘+r+EKS@8tfx7Y|rQ?#Qexa
+0.164
+Table 3:
+LSI results for the top topic (top ten words).
+Again the word compo-
+sition and coefficients for every word were identical for both corpora.
+LSI Model
+Another common text analytics methodology is the topic modeling using the
+latent semantic indexing algorithm (LSI).
+In this application we employed the
+Twitter Samples corpus made available by the NLTK [1]
+and Twitter.
+We
+followed the standard steps and our validation procedure was similar to the
+one done for the TF-IDF analysis.
+We calculate the topics for the plain and
+the hashed corpus and among the 100 selected as a parameter,
+we compare
+the top topics,
+their component words and their coefficients.
+We were able to
+demonstrate in this this way that the two result sets where the same.
+Table 3
+contain the ten top words in the first topic and their coefficients for both the
+plain and hashed models.
+Discussion
+The security of the protocol proposed here relies on two basic attack vectors:
+(1)
+Breaking the hash function, and (2) Attempting to reconstruct the documents
+based the frequency of co-occurrences of words.
+It is not our goal in this paper
+to provide guarantees about the level of security of the proposed protocol, but
+rather to propose a reasonably secure and computationally cheap protocol
+to
+help alleviating the present bottlenecks in the analysis of sensitive documents.
+We have shown that our protocol
+scales up linearly with the number of words
+in the corpus, imposing a negligible additional computational cost to the whole
+intended textual analysis.
+The current protocol can also serve other purposes.
+For example, the hashed
+corpora can be fed to an information retrieval system providing full text indexing
+and search.
+Thus the owner of collection of sensitive documents could publish a
+search interface to the collection in which users could perform searches normally.
+Once the search terms would be hashed (using the encoding dictionary),
+and
+used to query the index.
+The resulting documents could then be queued for
+manual assessment to determine if they can be released.
+This procedure could
+lead to the opening of
+huge collections for public search,
+without requiring
+first that all
+documents are individually examined and released.
+The effort of
+7
+PeerJ Preprints | https://doi.org/10.7287/peerj.preprints.2994v1 | CC BY 4.0 Open Access | rec: 26 May 2017, publ: 26 May 2017
+manual
+analysis could in effect be prioritized based on the subjects of greater
+public interest.
+Our methodology has some limitations,
+however.
+Since the words are no
+longer identifiable to the contractor,
+all
+the pre-processing of the corpus such
+as tokenization, lemmatization or stemming, removal of stopwords, etc.
+has to
+be done by a trained technician with security clearance.
+Analyses which require
+part-of-speech (POS) tagging, i.e.
+based on syntactic features, can only be done
+if
+the POS tags are calculated beforehand and hashed as well,
+following the
+same protocol.
+The provision of
+POS information,
+even if
+in hashed form,
+is
+likely to facilitate frequency based attacks.
+References
+[1]
+Steven Bird, Ewan Klein, and Edward Loper.
+Natural
+Language Processing
+with Python.
+O’Reilly Media, 2009.
+[2]
+Deguang Le,
+Jinyi
+Chang,
+Xiangnan LIU,
+and Dong-Hui
+Guo.
+Implemen-
+tation of md5 fast decryption algorithm based on graphic processing unit.
+Computer Engineering, 36(11):154–155, 2010.
+[3]
+Simon Marechal.
+Advances in password cracking.
+Journal
+in computer vi-
+rology, 4(1):73–81, 2008.
+[4]
+Michael
+Naehrig,
+Kristin Lauter,
+and Vinod Vaikuntanathan.
+Can homo-
+morphic encryption be practical?, page 113–124.
+ACM, 2011.
+[5]
+Radim
+ˇ
+Reh˚uˇrek and Petr Sojka.
+Software Framework for Topic Modelling
+with Large Corpora.
+In Proceedings of
+the LREC 2010 Workshop on New
+Challenges for NLP Frameworks,
+pages 45–50,
+Valletta,
+Malta,
+May 2010.
+ELRA.
+Available at http://is.muni.cz/publication/884893/en.
+[6]
+Renato Rocha Souza,
+Flavio Codeco Coelho,
+Rohan Shah,
+and Matthew
+Connelly. Using artificial intelligence to identify state secrets. arXiv preprint
+arXiv:1611.00356, 2016.
+[7]
+V.G.
+Sprindzhuk.
+Dirichlet
+box principle.
+Springer
+& The
+European
+Mathematical
+Society.
+Available at
+http://www.encyclopediaofmath.
+org/index.php?title=Dirichlet_box_principle&oldid=16845.
+[8]
+Kilian Weinberger,
+Anirban Dasgupta,
+John Langford,
+Alex Smola,
+and
+Josh Attenberg.
+Feature hashing for large scale multitask learning,
+page
+1113–1120.
+ACM, 2009.
+8
+PeerJ Preprints | https://doi.org/10.7287/peerj.preprints.2994v1 | CC BY 4.0 Open Access | rec: 26 May 2017, publ: 26 May 2017

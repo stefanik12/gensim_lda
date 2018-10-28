@@ -1,0 +1,2705 @@
+﻿Distributed and Scalable PCA in the Cloud
+Arun Kumar
+Department of Computer Sciences
+University of Wisconsin-Madison
+Nikos Karampatziakis, Paul Mineiro,
+Markus Weimer, Vijay K Narayanan
+Microsoft Cloud and Information Services Lab
+Abstract
+Principal
+Component
+Analysis (PCA) is a popular technique with many appli-
+cations.
+Recent
+randomized PCA algorithms scale to large datasets but
+face a
+bottleneck when the number of features is also large.
+We propose to mitigate
+this issue using a composition of structured and unstructured randomness within a
+randomized PCA algorithm.
+Initial experiments using a large graph dataset from
+Twitter show promising results.
+We demonstrate the scalability of our algorithm
+by implementing it both on Hadoop, and a more flexible platform named REEF.
+1
+Introduction
+PCA,
+and the related Singular Value Decomposition (SVD),
+is a popular tool
+to compress high-
+dimensional data to fewer dimensions and uncover hidden patterns [16, 21].
+Given a dataset
+X ∈
+R
+n×p
+with SVD
+X = UΣV
+>
+,
+the product
+UΣ
+are the principal components and
+V
+are called
+the loadings.
+Recent
+randomized algorithms for PCA and SVD can scale to datasets with large
+n
+in a distributed setting [9, 15, 17].
+If the data are distributed close to a
+k
+-dimensional subspace
+(
+k  p
+),
+these algorithms need only two passes over
+X
+to compute the top
+k
+singular values.
+However, they require
+O(pk)
+memory, which could be a bottleneck for datasets that are both “tall
+and wide”, e.g., from text and graph domains.
+Karampatziakis and Mineiro [10] recently proposed
+the HashPCA algorithm to mitigate this bottleneck by interleaving a structured projection to lower
+dimension
+d  p
+with unstructured randomness within a randomized PCA algorithm [9]. HashPCA
+needs only
+O(dk)
+memory, and the parameter
+d
+can be chosen based on the underlying hardware.
+We provide an initial demonstration of the utility and scalability of HashPCA. We discuss distributed
+implementations of HashPCA on the MapReduce/Hadoop framework and a new distributed compu-
+tation platform named Retainable Evaluator Execution Framework (REEF) [5].
+REEF provides an
+abstraction on top of the cluster resource manager YARN [23] to make it easier to write distributed
+applications.
+Implementing machine learning algorithms on REEF offers key systems-level advan-
+tages over Hadoop to improve performance, scalability, and robustness – viz. caching, sophisticated
+aggregation,
+locality-awareness,
+and fault-awareness.
+We demonstrate some of these advantages
+using HashPCA on a real tall and wide dataset – a user-follower relationship graph from Twitter.
+Background and Related Work Our work builds upon Halko et al.’s recent algorithm for truncated
+SVD [9]. Other scalable algorithms have also been proposed for SVD on datasets that are either tall
+or wide [8, 15, 17, 18].
+Hashing has been effectively used to approximate high dimensional feature
+maps in many applications [19, 20, 24].
+It is typically implemented by representing all features as
+strings from an alphabet
+Σ
+and then using a hash function
+h : Σ
+∗
+→ {1, . . . , d}
+to map each original
+feature to a hashed feature.
+HashPCA utilizes feature hashing as a sparsity-preserving structured
+randomness to enable PCA on sparse datasets that are both tall and wide.
+There is increasing interest in platforms for writing distributed applications to process “Big Data”.
+Hadoop [25] is an open-source system that implements the MapReduce programming model [6].
+Spark [26], Asterix [3], and Stratosphere [12] provide data flow-based programming models coupled
+with parallel runtimes, while GraphLab [13], and Pregel [14] provide graph-parallel programming
+models. In contrast, REEF decouples the programming model from the runtime.
+1
+Algorithm 1 HashPCA: Truncated PCA with hashing
+Inputs:
+X
+n×p
+, H
+p×d
+, k, d
+. H
+not materialized
+1:
+Ω
+d×k
+←
+Random Gaussian matrix (
+Ω
+ij
+∼ N (0, 1)
+)
+2:
+Y
+d×k
+← (XH)
+>
+(XH) Ω / n
+.
+First data-parallel pass
+3:
+Q
+d×k
+←
+Gram-Schmidt Orthonormalization of the column space of
+Y
+.
+. O(dk)
+space
+4:
+Z
+d×k
+← (XH)
+>
+(XH) Q / n
+.
+Second data-parallel pass
+5:
+Υ
+˜
+Σ
+4
+1
+Υ
+>
+←
+Spectral decomposition of
+Z
+>
+Z
+. Z
+>
+Z ∈ R
+k×k
+6:
+return (
+˜
+V
+1
+= ZΥ(
+˜
+Σ
+2
+1
+)
+†
+,
+˜
+Σ
+1
+)
+. Σ
+†
+is the Moore-Penrose pseudo-inverse of
+Σ
+2
+Scalable PCA on Tall and Wide Datasets
+Let
+X ∈ R
+n×p
+be the data matrix.
+We assume that the data are centered.
+1
+The SVD
+X = UΣV
+>
+yields orthogonal
+matrices
+U ∈ R
+n×n
+and
+V ∈ R
+p×p
+,
+while
+Σ ∈ R
+n×p
+is a diagonal
+matrix
+with entries
+Σ
+ii
+= σ
+i
+in non-ascending order.
+Truncating by utilizing the top
+k
+singular values
+yields the bast rank-
+k
+approximation of
+X
+(
+k <= min(n, p)
+) in the Frobenius norm [7],
+leading
+to
+˜
+X = U
+k
+Σ
+k
+V
+>
+k
+where
+U
+k
+∈ R
+n×k
+,
+Σ
+k
+∈ R
+k×k
+,
+and
+V
+k
+∈ R
+p×k
+.
+Any SVD algorithm can
+compute
+V
+k
+and
+Σ
+k
+.
+However,
+for large
+n
+or
+p
+,
+only randomized SVD algorithms are practical.
+Randomized SVD algorithms work in two phases. In the first phase they employ a random projection
+matrix
+Ω
+as a way to probe the range of
+X
+(or the covariance
+1
+n
+X
+>
+X
+).
+This requires at least one
+pass over the data, which can be streamed along the examples since
+1
+n
+X
+>
+XΩ =
+1
+n
+P
+n
+i=1
+x
+i
+x
+>
+i
+Ω
+,
+where
+x
+>
+i
+is the
+i
+-th example (row) of
+X
+.
+Next, they orthogonalize the image of
+Ω
+under the data
+and project onto that basis in the second pass.
+Although these algorithms have been adapted for
+PCA before [8, 18], to the best of our knowledge, they assume that the orthogonalization step can
+be done efficiently.
+This is possible if either
+n
+or
+p
+is not too large, but not both.
+When
+p < n
+, this
+step uses
+O(pk)
+memory and has time complexity
+O(pk
+2
+)
+.
+It is efficient if
+p
+is modest, say,
+10
+6
+on
+current commodity hardware.
+However, for large datasets that also have large
+p
+, e.g., the adjacency
+matrix of an online social network, this step might become impractical.
+2
+HashPCA (Algorithm 1),
+employs structured randomness to reduce the number of features from
+p
+to
+d
+(where
+d  p
+) so that randomized SVD algorithms become viable.
+Thus,
+both the space
+complexity and communication cost
+(in a distributed setup) are reduced from
+O(pk)
+to
+O(dk)
+.
+Although not materialized,
+we represent the structured randomness as a matrix
+H ∈ R
+p×d
+.
+For
+sparse data, e.g. text or social graph data, hash based structured randomness [24] is computationally
+convenient and empirically effective.
+Conceptually,
+this scheme multiplies the data by a hashing
+matrix
+H ∈ R
+p×d
+which is determined by two hash functions
+h :
+{1, . . . , p} → {1, . . . , d}
+and
+ξ : {1, . . . , p} → {±1}
+, with
+H
+ij
+|
+ξ,h
+= ξ(i)1
+h(i)=j
+. Other choices of structured random projections
+such as subsampled fast real transforms (e.g. Walsh-Hadamard, Hartley) can be used, and should be
+used if the data vectors are dense.
+3
+Scalable Distributed Implementations
+In Algorithm 1, steps 2 and 4 are data-intensive and can be trivially parallelized along the rows of
+X
+.
+We now discuss the implementation of HashPCA on two distributed data processing frameworks:
+MapReduce/Hadoop and the Retainable Evaluator Execution Framework (REEF).
+MapReduce/Hadoop
+We perform one MapReduce job per pass,
+coordinated by a centralized
+Driver program.
+The dataset
+X
+resides on HDFS,
+and is partitioned row-wise (one example per
+line).
+In the first pass, each Mapper initializes a partial sum for
+Y
+in the
+setup()
+function, and
+uses a given random seed to initialize
+Ω
+.
+The
+map()
+function parses an example
+x
+i
+, hashes it and
+accumulates the partial covariance (
+H
+>
+x
+i
+(H
+>
+x
+i
+)
+>
+Ω
+) into
+Y
+.
+Each Mapper emits its partial sum
+Y
+as part of a single key-value pair in its cleanup() function.
+The Reducer aggregates all partial
+sums to obtain the projected covariance matrix.
+The Driver computes the orthonormalization and
+writes
+Q
+to HDFS. The second job is similar to the first, except that each Mapper also reads
+Q
+along
+with the data blocks, and the driver computes the spectral decomposition.
+1
+Uncentered data requires a simple rank-one modification to Algorithm 1 for additional
+O(d)
+space.
+2
+However, we are also looking at adopting some interesting recent ideas on distributed QR factorization [4].
+2
+HDFS
+NM
+REEF
+Driver
+Client
+…
+Evaluator 1
+Activity 1
+Cache
+Evaluator N
+Activity N
+Cache
+Q
+D
+1
+D
+M
+D
+2
+HDFS
+…
+REEF
+Driver
+…
+A
+B
+Services
+HDFS
+NM
+Evaluator
+Activity
+S
+e
+r
+v
+i
+c
+e
+s
+Services
+HDFS
+NM
+Evaluator
+Activity
+S
+e
+r
+v
+i
+c
+e
+s
+SisterHazelBand
+ferretprincess
+socrates_soc
+travisrclark
+FitnessTown
+washingtonpost
+JillianMichaels
+trohman
+LeighFrancis
+GabeStrom
+nichetitans
+IanJamesPoulter
+WritingHannah
+NickSantino
+PaulRushing
+SupermanLovesU
+JasonFinch
+riandawson
+evernote
+PeterRoyLord
+RomilPatel
+arobertwebb
+AndrewWindham
+MarketingZap
+chuckpalahniuk
+J14Magazine
+lifehacker
+TweeterNaire
+JoeyKingActress
+jimkirk1943
+OutsideMyBrain
+SebastianJ
+almostfearless
+zackalltimelow
+johnmaine
+OfficialVernonK
+ClaudiaWinkle
+Tony_Mandarich
+RealMattLucas
+oudiantebi
+Jonathan360
+NickKristof
+TravieMcCoy
+RidofThings_com
+adaptivetechlab
+zeldman
+justinglover
+billinman
+OnlineToolMan
+Gizmodo
+MarioSoulTruth
+naldzgraphics
+OFFICIALFTSK
+bradfallon
+nicholaspatten
+SteveSchuitt
+therealstylesp
+lancelaifer
+mikemayhew
+robertgrant
+mainohustlehard
+sethsimonds
+iamjonathancook
+dannywallace
+patricknorton
+markress
+peterdrew
+RickySantos
+ShannaMoakler
+RobBrydon
+stejules
+RayJ
+Marcus_Cooper
+lala
+TheRealBuzz
+joinRED
+marketingmoron
+adriandayton
+dzabriskie
+dashchang
+robhuebel
+radioheadnews
+timothyadam
+AltPress
+SocialNetworkTV
+JoyceMeyer
+MelissaSuzanne
+arthurcooper
+MusiqSoulchild
+VirginAmerica
+HuffPostPol
+TamekaRaymond
+denverpokerdude
+socialmediamind
+Mike_day26
+LarisaBelliveau
+msnbc_breaking
+KrisColvin
+AdrianneCurry
+VansWarpedTour
+McBookPro
+KDTrey5
+THErealDVORAK
+rocsidiaz
+JonSecada
+day26
+DAChesterFrench
+SouthwestAir
+AstrobiologyNAI
+MichaelAusiello
+grimmers
+RollingStone
+Supermac18
+jamokie
+_OB_
+IAmJohnLai
+DanMerriweather
+Hakicoma
+kiruba
+Ali_Sweeney
+MikeHill
+Marcome
+thebilly
+cynthialarson
+Localtweeps
+RobertCurrey
+MaxLucado
+CIOWhitePapers
+greggluhring
+JAE_MILLZ
+jephjacques
+ELLEmagazine
+cnnireport
+NixTheNews
+EmilyMcKay
+notandysamberg
+FastMuscleGain
+WarrenSapp
+comcastcares
+BOPandTigerBeat
+netmogul
+absolutelytrue
+genesimmons
+LilTwist
+mshowalter
+TheMarketaire
+R_E_A_C_T_I_V_E
+soyleslie
+digg_updates
+navylanier
+cnni
+djenuff
+Socializedteam
+iBankCoin4tw
+AllisonIraheta
+chrismckinley
+djenvy
+mattcutts
+thegame
+gruber
+slimthugga
+grantimahara
+mackmichaels
+AlexBlom
+Wakooz_RSS
+LanceScoular
+YoungJeezy
+BrittGastineau
+torianddean
+Montaignejns
+anexemines
+MonicaBrown
+REGYATES
+AlFerretti
+TRINArockstarr
+Amanda_Holden
+sitepointdotcom
+brendonboydurie
+openzine
+AlexKaris
+shannonseek
+alexalbrecht
+andipeters
+CraigTeich
+dantanner
+webaddict
+donttrythis
+TEYANATAYLOR
+GayleKing
+StyleQuickTips
+TerrenceJ
+WillieTaylor
+LoBosworth
+kaifulee
+ColonelTribune
+kyleandjackieo
+LIVESTRONGCEO
+SuzeOrmanShow
+EthanSuplee
+hypnogaja
+BobVila
+nprscottsimon
+amber_benson
+ThomasNutrition
+TonyYayo
+PokerReview
+edskimin
+bullseyevideo
+Adesoji
+hillharper
+giaiphapso
+greghsnow
+StephenMulhern
+realchriswebber
+BumbleCricket
+treypennington
+mauriciodesousa
+hasai
+MrTeller
+PsychicRadio
+lagresto
+NinjaChad
+MrNicholasKlein
+suadd
+TiffanyPollard
+JackLawless
+Health_Coach
+PliesDaRealist
+MagicSauceMedia
+denyseduhaime
+TweetStats
+Don_Crowther
+allhiphopcom
+NadiraHaniff
+sarahlane
+KevinLiles1
+StephHarrington
+verkoren
+NicheCompanion
+prsarahevans
+frandrescher
+jakeandamir
+LOA_Lover
+JimNorton
+THEsaragilbert
+JoeBiden
+CynthiaGoranson
+Retireat21
+NBCNews
+adage
+ZaZaGallery
+jacvanek
+EzineArticles
+3DThinking
+bryanbrinkman
+nextactioncoach
+mayhemstudios
+iPodiums
+jeffpulver
+Change_for_Iran
+GovMikeHuckabee
+GlenWoodfin
+RichardMcKay
+leannrimes
+paulwallbaby
+annavi_antonio
+brianadrian
+00joe
+jonathancoulton
+kara_dioguardi
+Macworld
+MrEdLover
+IAMYUNGJOC
+GarryParkes
+Twitterrific
+SteveWeber
+ItsAmeriie
+KBBusiness
+jupitusphillip
+Sarah_Turner
+benshephard
+ZacharyQuinto
+RichCurrie
+SheriTingle
+WeSocialMedia
+Peter_R_Casey
+KellyMitchell
+BrianCarlKelly
+Bethenny
+CV31
+ggw_bach
+chrisbosh
+eleesha
+RachelZoe
+1capplegate
+SabrinaSatoReal
+cortezrafa
+domisatwit
+JayOatway
+benjaminmadden
+AlohaArleen
+BillBailey
+Q_Tweetz
+mattbacak
+missfree
+chrisharrington
+Fearnecotton
+stephaniepratt
+ABC
+Orlando_Magic
+AnnCurry
+JustJared
+n2nbroadway
+CountingCrows
+ROC4LIFE
+realjohngreen
+matisyahu
+colinmeloy
+richardpbacon
+travelbargains
+SashaGrey
+TerryBreedlove
+JasonBraud
+dot_online_
+DSponsoring
+vprincess
+girlwithnoname
+Emeril
+brooklynmuseum
+aliciakeysmedia
+mdig1968
+GetYourWineNews
+gilbirmingham
+Brian_Hess
+Earn400Everyday
+jeffdurso
+inspiremetoday
+MarkIsMusing
+prosperitygal
+CHRISVOSS
+whodeani
+njection
+imrogb
+mikeshelby
+AdventureLive
+minadosgames
+rleseberg
+Chillami
+jimkerr
+Jennifer_Hess
+LionelRichie
+BeckyBuckwild
+god
+Kaldor4Judge
+MiracleFruitPlu
+thekillers
+DaivRawks
+olmertyair
+yllib
+Swagbucks
+behaviormarket
+theDukeOfSEO
+ArticlesEngine
+9miles
+pandora_radio
+KimberliHull
+FreeCashGifts
+MLMSuccessMedia
+technorati
+TimesFashion
+kotoripiyopiyo
+LilianChisca
+briansolis
+AnnieMac
+smosh
+HowardBienstock
+zonlyone
+emom
+SPbluebird
+missrogue
+clairecmc
+chaseathompson
+aaronparkinson
+beastieboys
+Windows
+TS_Elliott
+MyNameisRazzle2
+Paula_Deen
+FastCompany
+Reuters
+veterantraveler
+BBBaumgartner
+JohnCMaxwell
+hannityshow
+cwgabriel
+ambermac
+edibow
+larrybrauner
+CarsonDaly
+MuseumModernArt
+FePaesLeme
+Astro_127
+Squarespace
+tinybuddha
+MikeFilsaime
+bs
+Bloggeries
+DJCLUE
+DominicScott
+davelawrence
+drhorrible
+OpieRadio
+AnoopDoggDesai
+JaredLeto
+rtm
+andydick
+TheJetOnTNT
+MayorofLondon
+mfhorne
+thisisryanross
+timlovejoy
+darrenmonroe
+mariaandros
+VibeMagazine
+markdavidson
+hughhefner
+JimQuillen
+marketingwizdom
+TeddyShabba
+stanleytang
+Baron_Davis
+KevinHart4real
+CarrieWilkerson
+bgagliasso
+TheBusyBrain
+TheDigitalLife
+Andrew303
+alandavies1
+4everBrandy
+The_Masters
+Scobleizer
+JoyVBehar
+KrisJenner
+sorenmacbeth
+AlisonAgosti
+jimmycarr
+whitneyEVEport
+KRuddMP
+jeremypiven
+uwbci
+Newsweek
+SarahBrownUK
+inthefade
+MufiHannemann
+wyclef
+StephenAtHome
+InStyle
+zoecello
+JohnDonvan
+jayrosen_nyu
+MROFICIAL
+nxzerooficial
+mikesemple
+MikeAndMike
+dprogram
+Lisa_Nova
+Glinner
+Pretinho_Basico
+jennahaze
+blakeshelton
+CaringExperts
+JayPeete
+IranElection
+RSLT
+RandallHaws
+christoferdrew
+michaelemlong
+AHMalcolm
+doctorow
+frankieboyle
+iandavidchapman
+nightofthecats
+JayElectronica
+InfinityWard
+luxury__travel
+KiddKraddick
+RaymondAaron
+therealsavannah
+ciaobella50
+marhgil
+Dputamadre
+MichelleNews
+chasl
+realjordan
+mackmaine
+GinaUncensored
+MarcDeCaria
+EA
+honorsociety
+benirawan
+billy_burke
+evolvhealth
+Douglas_Stuart
+ScottAllen
+AraBSODMG
+carolz_place
+MyAppleStuff
+yahoo_shopping
+OfficialOzzy
+MTVBuzzworthy
+omarepps
+TheExpert
+justintv
+LarryFitzgerald
+stephenasmith
+MTVUK
+Lookcook
+Vince_Craine
+jasontryfon
+PretaGil
+kengo
+DunkinDonuts
+jim_turner
+stevepohlit
+LIVESTRONG
+therealjosh
+briancarter
+Hameed_Hemmat
+DanSchawbel
+iuliusg
+andreabichsel
+Bill_Romanos
+MarcWarnke
+jobsearchninja
+kirktaylorcom
+BobbyJindal
+MuscleNerd
+MikeYoung
+dorcyrussell
+JennyMcCarthy
+Mark_Sanchez
+JoeBudden
+TruthTweet
+latimes
+PearlJam
+overyy
+dannywood
+IAmKellyFierce
+jsullivanmusic
+LilJon
+ArticlesBin
+MichaelScott
+PoliticalTicker
+MaleVSFemale
+Alex_Jeffreys
+angelayee
+JackWeinzierl
+RobertsEmma
+firefox
+mcflymusic
+ana_maria_braga
+profitgroove
+ChelseaKane
+alroker
+WarrenWhitlock
+nicolane
+TUAW
+twitlive
+katiecouric
+iamboomkack
+MirandaCosgrove
+christianfea
+kmesiab
+JanelleMonae
+DaveGorman
+twittervision
+DaveNavarro
+ChrisSpagnuolo
+CassadeePope
+BillCrosby
+necolebitchie
+jordanknight
+ElizabethBanks
+lapena
+DesignerDepot
+classifiedtony
+Junior_Lima
+realeyestone
+Mr_Dupri
+teedubya
+MISSMYA
+MarioLopezExtra
+dsmpublishing
+mr_gadget
+ochocinco
+mark33
+JeanetteJoy
+Jason_Pollock
+kirstiealley
+SteveNash
+jennettemccurdy
+hodgman
+TheDebbyRyan
+RealDMitchell
+Debbas
+NathanFillion
+RonnieWilson
+1Omarion
+diablocody
+the_gman
+MichaelMillman
+JenniferJolan
+zaibatsu
+JimGaffigan
+itsmeleighton
+Jon_Favreau
+SherriEShepherd
+leolaporte
+DawnRichard
+TweetDeck
+YMCMB_BW
+Adrienne_Bailon
+marcoluque
+DavidHenrie
+Schofe
+JoelMadden
+mitchelmusso
+BrodyJenner
+Pink
+PEOPLEPets
+ChrisCuomo
+Ali_Nejad
+BartonSmart
+jackgraycnn
+UKCoachCalipari
+thelittleidiot
+TEDchris
+Refugees
+joesebok
+Etsy
+om
+Pogue
+SAI
+imogenheap
+NickCannon
+duhism
+steveouch
+crowdermusic
+BBCNews
+cshirky
+RickBakas
+foreclosuredeal
+thepodcast
+CC_Sabathia
+MATTHARDYBRAND
+AlineLii
+DebPenner
+agills
+MuchMusic
+chattyman
+Baella
+blackbottoms
+BryceSutton
+JulienceUK
+TimeToGetYours
+StylezMajor
+SkyNews
+Augustine25
+xeni
+NME
+SkeeterHansen
+finkd
+CaldeiraodoHuck
+BobbyV
+millorfernandes
+shaycarl
+promedia
+paramorefans
+KickAssRE
+markwalters
+ronanofficial
+blakegriffin32
+guestbook
+CindyLeavitt
+fredwilson
+richeisen
+MattLeinart
+TerranomalyST
+TreeBanker
+internetinfomed
+Stickam
+josephweaver
+serafinowicz
+dapsiua5
+Greatvine32
+TimWestwood
+greggblanchard
+AnthonyGemma
+randyschrum
+copyblogger
+martinamcbride
+TimmySabre
+bloggersblog
+Tyga
+GbrilliantQ
+davedays
+citador
+TexasJackFlash
+SuccessTutor
+Ade1965
+broadbandGNRL
+esmeeworld
+chanelwestcoast
+wishnie
+danicalabresa
+twittSuccess
+oasis
+DJPROSTYLE
+mousavi1388
+bobbyllew
+icerocket
+stevejankowski
+Myspace
+penn_
+drmikewooming
+dcrblogs
+dealersocial
+lovebscott
+Thee_LoLaMonroe
+boninho
+nineinchnails
+elijahmanor
+AppleInvestor
+adamcoomes
+danieltosh
+DRUDGE_REPORT
+thescript
+mlmMarketingNet
+queenoftheclick
+FrankBauer
+michaelsheen
+mainichijpedit
+realzest
+louisck
+boburnham
+RapidForex
+maynaseric
+marcmawhinney
+Raekwon
+CollegeHumor
+DougBenson
+BobCallahan
+techstartups
+coffeemaverick
+TheDailyShowFan
+roadrider57
+warrenellis
+dollars5
+JamieKennedy
+JackBastide
+playspymaster
+moonfruit
+ShamelessShamus
+HappySlip
+greggarbo
+pittyleone
+TomTroughton
+CNNnewsroom
+JayMewes
+Mediabistro
+HOT97
+ImMattGiraud
+TheMasonMusso
+emmyrossum
+drewseeley
+KFUCKINGP
+LaughingSquid
+hotdogsladies
+JanSimpson
+kevjumba
+noreaga
+MrSocial
+hartluck
+marqueshouston
+jowyang
+WordPress
+N3W_Media
+JonathanRKnight
+skinnermike
+CaliLewis
+JamesRivers
+mcflyharry
+MeghanMcCain
+santoEvandro
+TimJensen
+royantebi
+jeanlucr
+hollymontag
+Jayde_Nicole
+mikeyway
+williambeckett
+GabrielSaporta
+KrisAllen
+elizadushku
+wakooz
+NickyHilton
+mikepfs
+tmaduri
+rubarrichello
+formerlyCwalken
+Jason
+wired
+HarveyLevinTMZ
+oceara
+angiemartinez
+THEREALSWIZZZ
+comeagainjen
+TalibKweli
+Bridget
+TheRue
+stephenkruiser
+kibeloco
+SeanMalarkey
+thejuelzsantana
+brooksbayne
+FreeDigitalRead
+andreolifelipe
+ciara
+ehasselbeck
+KattPackAllDay
+Alyssa_Milano
+hollymadison
+MandyJiroux
+myfabolouslife
+kevinpollak
+DaniloGentili
+MrPeterAndre
+MsLaurenLondon
+danawhite
+mrtweet
+CHRISDJMOYLES
+EmilyOsment
+AlanCarr
+BarbaraJWalters
+spencerpratt
+RealHughJackman
+erniehalter
+ESQTV
+tinch
+RobRiggle
+JonasBrothers
+defamer
+thejoelstein
+sorayadarabi
+nicolerichie
+QueenRania
+paulfeig
+jack_welch
+jtimberlake
+goodhealth
+kevin_nealon
+CDCemergency
+peteyorn
+DwightHoward
+CMEGroup
+dannymasterson
+garyvee
+Padmasree
+BreakingNews
+ShawnJohnson
+JBieberious
+Bourdain
+brian_littrell
+socialmoms
+PattinsonRobT
+DrMiaRose
+TreeHugger
+PrancersWorld
+HaylieDuff
+DierksBentley
+rmindler
+araujofabio
+GuitarNews
+breagrant
+hillsongunited
+knarfny
+owlcity
+S_mystical
+WritingSpirit
+rolfjoho
+newscientist
+globoesportesp
+ScottMonty
+bep
+vluxemburgo
+NinaSky
+HealthLynx
+waynesutton
+RMWhitaker
+BabyPhat
+allenjesson
+rosana
+AnitaMatys
+Urgo
+TinchyStryder
+ClintonSparks
+BraveLad
+KoldCastTV
+TheoBecker8
+AlessandraCo
+McGiff
+roflquiz
+Envirowire
+SeanDonahoe
+CocktailJoJo
+blogyourworld
+BigBrotherHOH
+Mark_Cuban
+HairBoutique
+johnschulenburg
+joyntheir
+pramitjnathan
+SashaVujacic
+natalietran
+paramoreband
+IAmJericho
+BigBookofYou
+juliannehough
+IGN
+Fit_Coach
+darrenwilliger
+LPT365
+RichMuny
+Gladwell
+AlexisNeely
+julioyam
+donnieklang
+iheartquotes
+Kerrysherin
+Teairra_Mari
+adammshankman
+Forever21
+JohnEstrella
+theareteguy
+shawnemerriman
+AroundTheHorn
+PasteMagazine
+workhomexpert
+marknolan
+WendyWilliams
+brentcsutoras
+rede_globo
+PublicityGuru
+anewmode
+Jeanmano
+AmericanElement
+TradingGoddess
+MichaelHyatt
+PaulaBrett
+newmediajim
+UrbanOutfitters
+alydenisof
+VEJA
+Joey_Smith
+IanAspin
+Loyalty360
+nsjewel
+_McLaughlin
+denverfoodguy
+unmarketing
+iamkelis
+ChrisetteM
+muse
+BestSellerBob
+Pistachio
+RizzoTees
+Iceburner
+tenkijp
+Diddy_did_it
+revistasuper
+DJGREENLANTERN
+followgenerator
+momlogic
+GhostfaceKillah
+JimandKelly
+FredaMooncotch
+Missinfo
+limbaugh
+MarcoSantarelli
+cesarmillan
+JohanBruyneel
+ProducerRach
+persiankiwi
+EmailCopywriter
+BBCWorld
+Policani
+marisaorth
+Tyshalle
+AndyMilonakis
+jjbuss
+chadnilsson
+peaches_g
+MichDdot
+BryantSmith
+MariSmith
+azizansari
+joshgroban
+adamcarolla
+MTVBrasil
+qikipedia
+JohnLloydTaylor
+fansofGlambert
+bjork
+simonleung
+joshlam
+garymccaffrey
+tinytwitter
+rubenharris
+weirdchina
+jimmysmithtrain
+iphone_dev
+_FakeSteveJobs
+petershankman
+margaretcho
+MacTrast
+GWPStudio
+louiebaur
+YaGirlDWoods
+tferriss
+scott_mills
+lilduval
+S_C_
+joerogan
+3OH3
+PrinceSammie
+charltonbrooker
+JENNIFERHUDFANS
+kevincottrell
+DrJeffersnBoggs
+charlesyeo
+DuncanWierman
+MrsSOsbourne
+JackAllTimeLow
+iamwill
+JeffreeStar
+WayneMansfield
+meteorit
+PragueBob
+LucasCruikshank
+jerell
+EstelleDarlings
+PTI
+ENewsNow
+KarlRove
+JesseMcCartney
+ChrisPirillo
+macrumorslive
+cqc__
+andy_murray
+derekfisher
+TMZmoviefans
+DJDRAMA
+SportsCenter
+Dannymcfly
+therealTiffany
+TimbalandNews
+mcuban
+TiaMowry
+metrostation
+QtipTheAbstract
+shawnrobinson
+Moonalice
+WilliamShatner
+Shallowking
+OscarFilho
+Radioblogger
+MatthewPerry
+hashtags
+angleesoup
+NICKIMINAJ
+jamieoliver
+GuyKawasaki
+DavidArchie
+RobKardashian
+davemorin
+theBrandiCyrus
+MarceloTas
+KendraWilkinson
+SarahKSilverman
+travisbarker
+TreySongz
+Starbucks
+MissKatiePrice
+KourtneyKardash
+wefollow
+wossy
+LaurenConrad
+BillSimmons
+drsanjaygupta
+funnyordie
+showdavida
+moooris
+gossipgirl
+exectweets
+RyanSheckler
+questlove
+sween
+KimberlyCole1
+noushskaugen
+cakewrecks
+charitywater
+iTunesTrailers
+newtgingrich
+CBOE
+serenawilliams
+AmyJoMartin
+DENISE_RICHARDS
+YouLookGreat
+robcorddry
+gtdguy
+PaulaAbdul
+paulpierce34
+greggrunberg
+BrentSpiner
+amazonmp3
+DaveJMatthews
+moonfrye
+timoreilly
+pitchforkmedia
+neilhimself
+kingsthings
+johnlegend
+adventuregirl
+alyankovic
+freddurst
+Ustream
+michaelianblack
+DellOutlet
+davidgregory
+maddow
+Cheezburger
+JessicaSimpson
+TheOnion
+JimDeMint
+marcosfigueira
+metallica_com
+adnagam
+gossip
+thedomesticdiva
+SouljaBoy18
+BillHibbler
+OfficialKat
+John_M_Marshall
+JEthanChattman
+Joe
+kellyverge
+JohnnyDeppNews
+xzibit
+mollt
+vitorfasano
+InvestWithIman
+Gulmohar
+donJamokie
+petebray
+atrak
+juliasmola
+BBCTech
+yvettegr
+SunnyRainer
+robTomPattinson
+angela_pastry
+switchfoot
+o2smedia
+steverubel
+JayCataldo
+rascalflatts
+SporTV
+eduardosurita
+MelodyThornton
+dougpmd
+portnik
+datadirt
+JIDF
+WaltDisneyWorld
+mattuk
+JalenRose
+jgillardi
+kathystover
+TravisSharp
+karaswisher
+anteek
+juliaroy
+ralphclaxton
+SI_PeterKing
+loarules
+pintara3
+TiffaniBear
+guyoseary
+tonychall
+fresnorock
+JEFFHARDYBRAND
+AlexGoodall
+musicextension
+GiveMeGrits
+reba
+Yunaaaa
+jasonkeath
+jaybenoit
+ufc
+TawnyHeath
+peta
+coollike
+LaughItUp
+PeteCarroll
+Shaun_White
+Coachforyou
+thubten
+mok_oh
+KateOfficial
+DALLASAUSTIN
+raytoro
+interney
+30SECONDSTOMARS
+AhhPhotography
+engadget
+MarkCurtis_Wood
+NylonMag
+KikiValdes
+ScottGiorgini
+denversolarguy
+TOLuxurySuites
+MikeWhitaker
+FitBusinessman
+WeBlogtheWorld
+jeweljk
+MobMogul
+ideas4rent
+furomtv
+kingsofleonfans
+hypnotistchris
+thinkgeek
+Brat13
+AskAaronLee
+50_Cent
+WineTwits
+RealMichelleW
+BuzzEdition
+RobPattzNews
+twitt_erfolg_de
+bluefur
+JonathanGunson
+g1
+CharlesTrippy
+ESPN_FirstTake
+zefrank
+asahi
+melhoresfrases
+corbinbleu
+Parul_Sharma
+amandapalmer
+theviewtv
+ChadTEverson
+Janefonda
+felipesolari
+SharonHayes
+nikhil_parekh
+IMDb
+tavissmiley
+TheBigKlosowski
+Joan_Rivers
+GlenGilmore
+islandprincess2
+chamillionaire
+backstreetboys
+DavidWalkerIM
+tweeterapps
+simonwhite
+YouQuotedQuotes
+MTVHive
+tomhanks
+PamelaDAnderson
+kpereira
+KristenResource
+MarkRMatthews
+MarsPhoenix
+JasonMJames
+ivetesangalo
+skinnyjeans
+RealtorRyan
+alexa_chung
+sportycarrie
+blink182
+angelicaksy
+leplan
+BETAwards
+popstarmagazine
+TheRealRyanHiga
+HuffingtonPost
+ghincapie
+NKOTB
+TysonQuick
+iamMarkRonson
+ChrisCrocker
+TheEconomist
+suburbview
+imMKOlsen
+weirdnews
+DonLemonCNN
+CAPRICHO
+socialmediaclub
+kathika
+joeymcintyre
+JohnChow
+Trendeh
+hollywoodtv
+Therealkiss
+Lotay
+brunovassup
+Orrin_Woodward
+smashingmag
+DHughesy
+wtcc
+SocialMedia411
+CalvinHarris
+coffeetweet
+Wale
+kelly_clarkson
+tomdelonge
+bearfanron
+IdolNews
+NeYoCompound
+douglasi
+Slash
+Jeremih
+MIAuniverse
+DramaBeats
+gerardway
+Rex7
+TheSoup
+alicam
+DaveDube
+williger
+flwbooks
+upicks
+TFLN
+rockingjude
+ahj
+JANIEatCELEBUZZ
+frankiedelgado
+problogger
+Ann_Sieg
+Jessicaveronica
+AudrinaPatridge
+aliciakeys
+0boy
+programapanico
+hootsuite
+buckhollywood
+DJ_AM
+dannygokey
+mariashriver
+dougiemcfly
+wbaustin
+mmitchelldaviss
+MissKellyO
+MikeKlingler
+facebook
+usweekly
+ThisisDavina
+HugoGloss
+ryanleslie
+darthvader
+TomFelton
+YouTube
+RobMcNealy
+BradHoward
+rogiddy
+DAVID_LYNCH
+AubreyODay
+rodrigovesgo
+MLB
+ChrisMoylesShow
+UncleRUSH
+kathygriffin
+richardbranson
+ObamaNews
+yelyahwilliams
+TraceCyrus
+Ludacris
+Drake
+JohnCleese
+rafinhabastos
+JordinSparks
+106andpark
+solangeknowles
+jodrellbank
+KhloeKardashian
+NotTinaFey
+ParisHilton
+RWW
+rustyrockets
+CoryBooker
+mindykaling
+BestAt
+heidimontag
+manomenezes
+selenagomez
+ladygaga
+stewartcink
+trent_reznor
+digg
+EW
+stephenfry
+Lakers
+nfl
+Astro_Mike
+nerdist
+Schwarzenegger
+GavinNewsom
+samantharonson
+TerryMoran
+CBSNews
+jdickerson
+jimmyeatworld
+sacca
+taylorswift13
+threadless
+Nightline
+BJMendelson
+AgentM
+sockington
+stevenbjohnson
+womensweardaily
+levarburton
+jack
+Veronica
+tmagazine
+someecards
+dooce
+biz
+pennjillette
+peoplemag
+TheMandyMoore
+GStephanopoulos
+GMA
+DaneCook
+tonyrobbins
+feliciaday
+AFineFrenzy
+NBA
+BBCClick
+eonline
+petewentz
+MarthaStewart
+TIME
+nprpolitics
+mashable
+coldplay
+SHAQ
+kalpenn
+michellemalkin
+TOMS
+JasonKennedy1
+guardiannews
+JohannaFischlin
+gregjames
+FrankieTheSats
+CasinoJack
+mattlisk
+XXL
+mparent77772
+JorgeBessa
+sdesic
+SuperBowlSunday
+loic
+ViktoriaFoxx
+diplo
+tyrabanks
+agalleryartists
+gotCJ
+lizstrauss
+JoeDuck
+PastorMark
+Quincy
+Foodie_woman
+michaelabehsera
+BevanWilde
+BallbagBrand
+Marvel
+JasonBradbury
+StockShockmovie
+WWE
+northmix
+LawrenceBland
+fourzerotwo
+gucci1017
+djsamhouse
+kim
+MurrayNewlands
+DrJennifer
+GusShultz
+tedmurphy
+howard74
+Rajacenna
+BradPaisley
+ChantellePaige
+DanicaPatrick
+Onlinesteve
+zyngapoker
+GreenDayNews
+milblogging
+TWLOHA
+fakerpattz
+Campsterguy
+fun140
+ChuckNeuschafer
+RaymondLeBlanc
+brutonnb
+DBMendurance
+Louie__Rivera
+kogibbq
+ConradSwailes
+Windbaron
+sirdickbranson
+brianwmarshall
+ClintonNews
+sal_freshsole
+hg47
+PeteOlsen
+americanapparel
+peteinoz
+csiriano
+webmarketingmav
+mlm4ever
+PJA64X
+m22management
+Lennar
+joseserra_
+TimothyBlack
+RickM
+LFC
+usbargains
+robertomazzoni
+aots
+MarketingProfs
+Lloydbanks
+sxsw
+LoyalKNG
+CNETNews
+JesseNewhart
+EmilioKaram
+FrankIero
+geraldromine
+JenCHaughton
+nickcarter
+globoesportecom
+foxandfriends
+fatbellybella
+Moffly
+rhys_isterix
+KeithUrban
+ilthy
+DwyaneWade
+besserwerber
+willfrancis
+llcoolj
+thekatvond
+BobGarrett
+NelsonPiquet
+maryjblige
+neyoofficial
+_MAXWELL_
+TerryWygal
+majornelson
+benjamteal
+SandyLeah
+RightWingNews
+mikasounds
+Arfanchaudhry
+current
+PlayStation
+dcagle
+RonMDavies
+coolsi
+TPAIN
+JimMacMillan
+sexstylefashion
+digsby
+Twitition
+channingtatum
+liamgallagher
+shoemoney
+twibes
+GachapinBlog
+grader
+wikiweekbr
+MJJNews
+molfamily
+MarkClayson
+barak_obama
+justinbieber
+BAM__MARGERA
+GoUp
+LeToyaLuckett
+sternshow
+DeepakChopra
+tom_siwik
+CarinaSkye
+RachelleLefevre
+_samjones
+Lost_on_ABC
+shakira
+LeviLeipheimer
+ludwikc
+PhillyD
+oliviamunn
+CHRIS_Daughtry
+TwitPic
+JerryBroughton
+spam
+clatko
+O_Magazine
+EcoInteractive
+gemstars
+Rove
+MacHeist
+LarryWentz
+Brookelynbeats
+thinkreferrals
+twitrbackground
+AlexAllTimeLow
+judyrey
+joelcomm
+descargaoficial
+theofficenbc
+glennbeck
+paulocoelho
+WSJ
+StartupPro
+Lisa_Veronica
+Mike_Wesely
+fansoftwilight
+kamper
+EverywhereTrip
+Usher
+MariMoon
+yokoono
+fml
+falloutboy
+NYCPR
+andyroddick
+MileyCyrusNET
+Foodimentary
+StockTwits
+DaveMalby
+DonnieWahlberg
+ThisIsRobThomas
+chrisbrogan
+terrellowens
+Blogginaire
+jenifferaniston
+SeanKingston
+BET
+xavierlur
+tyrashow
+asherroth
+RealLamarOdom
+Kanye_Info
+todayshow
+kelliepickler
+LiveEarth
+shanedawson
+DitaVonTeese
+common
+FoxNews
+DiyanaAlcheva
+BustaRhymes
+ScotMcKay
+DazaTv
+78violet
+NASA
+RickSanchezTV
+ENews
+tommcfly
+caseywright
+JakeTAustin
+Lilyallen
+nprnews
+nansen
+hollywills
+DameElizabeth
+adamlambert
+TweetSmarter
+bretkona
+KELLYROWLAND
+espn
+marcosmion
+BBCBreaking
+CNN
+postsecret
+RevRunWisdom
+billyraycyrus
+Beyonce
+Eminem
+robdyrdek
+KeriHilson
+lolquiz
+MTV
+jason_mraz
+andersoncooper
+Tyrese
+SnoopDogg
+LucianoHuck
+kaj33
+JoeTrippi
+NickSwisher
+dickc
+JerryBrownGov
+ijustine
+LIFE
+peterfacinelli
+ddlovato
+mrdannyglover
+eddieizzard
+chriscornell
+katyperry
+LennyKravitz
+jimjonescapo
+whitehouse
+KevinSpacey
+goldman
+anamariecox
+FragDolls
+GiulianaRancic
+markhoppus
+JetBlue
+guardiantech
+TWTFM
+davos
+joelmchale
+TechCrunch
+wilw
+woot
+ThatKevinSmith
+zappos
+brookeburke
+lilyrosecooper
+Number10gov
+kevinrose
+WholeFoods
+MariahCarey
+SenJohnMcCain
+drdrew
+rainnwilson
+SaraBareilles
+chelseahandler
+MCHammer
+ashleesimpson
+ev
+souljaboy
+PerezHilton
+tonyhawk
+google
+50cent
+ashleytisdale
+algore
+nytimes
+lancearmstrong
+iamdiddy
+jimmyfallon
+justdemi
+KimKardashian
+BarackObama
+RyanSeacrest
+twitter
+Oprah
+cnnbrk
+britneyspears
+TheEllenShow
+aplusk
+Figure 1:
+On the left:
+(A) High-level architecture of a distributed application on REEF. (B) Data-
+parallel
+computation for HashPCA on REEF.
+On the right:
+A portion of the Twitter embedding
+showing a geographically coherent “British” cluster (top left) and a topically coherent “News” clus-
+ter (middle and bottom right).
+Retainable Evaluator Execution Framework (REEF)
+REEF is a framework that aims to make
+it
+easy to implement
+scalable,
+fault-tolerant
+runtime environments for a range of computational
+models.
+It
+provides an abstraction atop the cluster resource manager YARN to enable hardware
+and software resources to be retained across applications.
+Thus,
+REEF decouples the lifetimes
+of resources from the lifetimes of applications.
+REEF’s abstraction consists of the following – a
+Driver process that
+orchestrates control
+flow,
+Activities,
+which perform the data processing and
+computations (generalizing Mappers and Reducers),
+Evaluators that
+act
+as containers on which
+Activities are run, and Services, which are objects (e.g., cache, connections, etc.)
+that are retained
+by an Evaluator across Activities that run on it.
+The control flow is centralized in the Driver, which
+consists of user-supplied event handlers for events such as system startup, allocation of Evaluators,
+start and completion of Activities as well as various failure scenarios.
+Our implementation of HashPCA on REEF is similar to the one on Hadoop (Figure 1(B)).
+The
+dataset is pre-partitioned into
+M
+blocks on HDFS. The job Driver controls both passes and performs
+the orthonormalization and spectral decomposition.
+Based on the number of available machines (a
+user-given parameter), the Driver requests
+N
+Evaluators. The Driver then executes one Activity per
+Evaluator. Each Activity reads and processes
+M
+N
+data blocks. The Activities essentially perform the
+same computations as the Mappers in our Hadoop implementation. Upon completion, the Activities
+notify the Driver, which then starts the aggregation, akin to the Reducer.
+In our current implemen-
+tation, each Activity sends its partial sum directly to the Driver through a messaging API that relies
+on the Netty framework.
+If the message is too large for Netty to handle (specifically,
+larger than
+1MB [1]), the Activities write the partial sum matrices to HDFS. The Driver then reads the matrices
+from HDFS to perform the aggregation. The second pass is performed in a similar manner.
+Our experience with implementing HashPCA on both REEF and Hadoop highlighted four systems-
+level advantages of REEF. (1) Caching: Hadoop has high I/O overhead since it reads data from disk
+in both passes.
+In REEF, we implemented a simple cache on the Evaluator to store as many parsed
+and hashed examples as possible in memory in the first pass so that the second pass is faster.
+(2)
+Aggregation:
+REEF enables us to configure aggregation trees of different fan-outs and also con-
+trol how much data is read and when during aggregation.
+(3) Locality-aware Scheduling:
+Unlike
+Hadoop’s fixed greedy scheduling policy to allocate Mappers to blocks, REEF enables us to exploit
+more factors such as data locality, network topology, node capacities, etc. (4) Fault-Awareness: Un-
+like Hadoop’s a fixed fault tolerance policy of restart recovery, REEF enables us to adopt alternative
+fault handling mechanisms that could potentially improve performance.
+Currently, we have only implemented the Caching functionality and plan to incorporate the others
+in the future as REEF matures.
+Still, as our experiments will show, our implementation on REEF
+provided better performance and scalability than Hadoop, We believe this is a promising first step
+for building more scalable machine learning algorithms on REEF.
+3
+10
+30
+50
+0
+100
+200
+300
+400
+1000
+10000
+50000
+0
+100
+200
+300
+400
+5
+10
+20
+0
+200
+400
+600
+800
+Fix d=1000, vary k
+Fix k=30, vary d
+Speedup (d=1000, k=30)
+R
+u
+n
+t
+i
+m
+e
+(
+s
+)
+Number of dimensions (k)
+Number of hash buckets (d)
+Number of workers
+X
+X
+X
+X
+X
+X
+820
+1531
+1531
+2469
+X
+2149
+R
+u
+n
+t
+i
+m
+e
+(
+s
+)
+R
+u
+n
+t
+i
+m
+e
+(
+s
+)
+Mahout
+Mahout + Hash
+Hadoop
+REEF
+REEF (cache)
+Figure 2:
+Plots of runtimes as we vary
+k
+and
+d
+, fixing one at a time.
+Mahout crashed for all these
+settings, while Mahout + Hash worked (hashing time excluded). Also shown are the speedups.
+4
+Experiments
+We now present some initial experimental results that validate the utility of HashPCA as well as test
+the performance and scalability of our distributed implementations.
+Dataset and Setup We use a large public graph data set derived from a 2009 crawl of Twitter [11].
+We constructed the adjacency matrix,
+where entry (
+i
+,
+j
+) indicates if a user
+i
+follows user
+j
+.
+We
+removed users who followed
+< 5
+or
+> 300
+other users, yielding
+18
+million examples.
+The dimen-
+sionality (
+p
+) is
+29
+million. The dataset is in plain text Vowpal Wabbit format [2] and is 17GB in size.
+The experiments were run on a 23-node cluster on the Azure cloud service with Ubuntu 12.04.2
+VMs.
+Each instance is of class Medium (A2) with 3.5GB RAM, 10GB disk,
+and 2 virtual AMD
+Opteron 4171 HE cores. We installed Apache Hadoop 2.0.4 and used default replication of 3.
+Quality of HashPCA Results We run HashPCA on the Twitter graph data with parameters
+k = 30
+and
+d = 1.3
+million.
+The loadings form an “interest fingerprint” operator, which projects any user
+into a latent
+space based upon the set
+of users who are followed by that
+user.
+We can explore
+the impact
+of any single user on this latent
+representation by projecting a singleton follower set
+containing only that user.
+We did this for the
+2000
+most popular Twitter accounts in the dataset,
+and then used t-SNE [22] to project down to two dimensions for visualization.
+A portion of the
+visualization is shown in Figure 1.
+The figure shows both geographically coherent and topically
+coherent clusters, which indicate that PCA has captured interesting structure from the graph.
+Performance and Scalability We now compare the performance and scalability of our distributed
+implementations. We also present results for an open-source toolkit for SVD and PCA from Apache
+Mahout.
+We expect Mahout to crash since this dataset’s dimensionality is too large for its imple-
+mentation.
+Hence, we hash the dataset as a pre-processing step for Mahout.
+We pre-partitioned the
+dataset into 20 blocks on HDFS. Thus, Hadoop spawns 20 Mappers and REEF uses 20 Evaluators.
+We vary the two main parameters – number of PCA dimensions (
+k
+),
+and number of hash buckets
+(
+d
+), and also vary the number of compute nodes. Figure 2 shows the results.
+As expected, Mahout crashed since
+p
+is too large (we verified that in its implementation, a Reducer
+accumulates blocks of size
+O(pk)
+in memory, which is about 2.3GB per block without Java object
+overheads).
+HashPCA mitigates this bottleneck by bringing the memory needed from
+O(pk)
+down
+to
+O(dk)
+.
+Mahout works on the hashed dataset, but is still slower than our Hadoop implementation
+(between
+400%
+to
+1000%
+).
+Our REEF implementation is marginally faster than Hadoop,
+due to
+lower framework overheads (start-up, function calls, etc.).
+However, REEF with caching is
+40%
+to
+100%
+faster than Hadoop. The runtimes for our HashPCA implementations increases slowly with
+k
+and
+d
+, since the I/O cost of scanning is dominant. We also see near-linear speedups for both Hadoop
+and REEF – about
+3.3
+x as the number of nodes is quadrupled.
+REEF with caching has a higher
+speedup of
+3.6
+x since the whole dataset fits in the cache across 20 nodes in the second pass.
+5
+Conclusion and Ongoing Work
+We presented a new, scalable algorithm for PCA that combines structured and unstructured random-
+ness within a randomized PCA algorithm to scale to tall and wide datasets.
+We implemented the
+algorithm on MapReduce/Hadoop and REEF and discussed how REEF’s primitives provided greater
+efficiency and scalability.
+We provided an initial validation of the benefits of HashPCA using a real
+dataset from Twitter.
+Our ongoing work is on incorporating new REEF APIs for aggregation trees
+and scheduling (apart from caching) as well as adding fault-awareness into distributed PCA.
+4
+References
+[1]
+The netty project.
+http://netty.io
+.
+[2]
+Vowpal wabbit.
+http://hunch.net/
+˜
+vw
+.
+[3]
+S. Alsubaiee et al.
+Asterix: an open source system for“big data” management and analysis.
+VLDB (Demo), 2012.
+[4]
+D.
+F.
+G.
+Austin R.
+Benson and J.
+Demmel.
+Direct
+qr factorizations for tall-and-skinny matrices in mapreduce architectures.
+IEEE
+BigData, 2013.
+[5]
+B.-G. Chun et al.
+Reef: Retainable evaluator execution framework.
+VLDB (Demo), 2013.
+[6]
+J. Dean and S. Ghemawat.
+Mapreduce: simplified data processing on large clusters.
+OSDI, 2004.
+[7]
+C. Eckart and G. Young.
+The approximation of one matrix by another of lower rank.
+Psychometrika, 1(3):211–218, 1936.
+[8]
+N. Halko, P.-G. Martinsson, Y. Shkolnisky, and M. Tygert.
+An algorithm for the principal component analysis of large data sets.
+SIAM
+Journal on Scientific Computing, 33(5):2580–2594, 2011.
+[9]
+N. Halko, P.-G. Martinsson, and J. A. Tropp.
+Finding structure with randomness: Probabilistic algorithms for constructing approximate
+matrix decompositions.
+SIAM review, 53(2):217–288, 2011.
+[10]
+N. Karampatziakis and P. Mineiro. Combining Structured and Unstructured Randomness in Large Scale PCA. ArXiv e-prints, Oct. 2013.
+[11]
+H. Kwak, C. Lee, H. Park, and S. Moon.
+What is Twitter, a social network or a news media?
+In WWW ’10: Proceedings of the 19th
+international conference on World wide web, pages 591–600, New York, NY, USA, 2010. ACM.
+[12]
+M. Leich et al.
+Applying stratosphere for big data analytics.
+BTW, 2013.
+[13]
+Y. Low, D. Bickson, J. Gonzalez, C. Guestrin, A. Kyrola, and J. M. Hellerstein.
+Distributed graphlab: a framework for machine learning
+and data mining in the cloud.
+VLDB, 2012.
+[14]
+G. Malewicz et al.
+Pregel: a system for large-scale graph processing.
+ACM SIGMOD, 2010.
+[15]
+D. Okanohara.
+redsvd (software).
+https://code.google.com/p/redsvd, 2010.
+[16]
+K. Pearson. On lines and planes of closest fit to systems of points in space. The London, Edinburgh, and Dublin Philosophical Magazine
+and Journal of Science, 2.11:559–572, 1901.
+[17]
+R.
+ˇ
+Reh
+˚
+u
+ˇ
+rek and P. Sojka.
+Software Framework for Topic Modelling with Large Corpora.
+In Proceedings of the LREC 2010 Workshop
+on New Challenges for NLP Frameworks, pages 45–50, Valletta, Malta, May 2010. ELRA.
+http://is.muni.cz/publication/
+884893/en
+.
+[18]
+V. Rokhlin, A. Szlam, and M. Tygert.
+A randomized algorithm for principal component analysis.
+SIAM Journal on Matrix Analysis and
+Applications, 31(3):1100–1124, 2009.
+[19]
+Q. Shi, J. Petterson, G. Dror, J. Langford, A. Smola, and S. Vishwanathan.
+Hash kernels for structured data.
+The Journal of Machine
+Learning Research, 10:2615–2637, 2009.
+[20]
+S. Sonnenburg and V. Franc.
+Coffin: A computational framework for linear svms.
+In Proceedings of the 27th International Conference
+on Machine Learning, Haifa, Israel, 2010.
+[21]
+M. Turk and A. Pentland.
+Eigenfaces for recognition.
+Journal of cognitive neuroscience, 3(1):71–86, 1991.
+[22]
+L. Van der Maaten and G. Hinton.
+Visualizing data using t-sne.
+Journal of Machine Learning Research, 9(2579-2605):85, 2008.
+[23]
+V. Vavilapalli et al.
+Apache hadoop yarn: Yet another resource negotiator.
+SOCC, 2013.
+[24]
+K. Q. Weinberger, A. Dasgupta, J. Attenberg, J. Langford, and A. J. Smola.
+Feature hashing for large scale multitask learning.
+CoRR,
+abs/0902.2206, 2009.
+[25]
+T. White.
+Hadoop: The Definitive Guide.
+O’Reilly Media, Inc., 2009.
+[26]
+M. Zaharia, M. Chowdhury, M. J. Franklin, S. Shenker, and I. Stoica.
+Spark: cluster computing with working sets.
+HotCloud’10, 2010.
+5

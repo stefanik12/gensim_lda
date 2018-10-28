@@ -1,0 +1,2546 @@
+﻿Learning Multi-Modal Word Representation Grounded in Visual Context
+´
+Eloi Zablocki
+Benjamin Piwowarski
+Laure Soulier
+Patrick Gallinari
+Sorbonne Universit
+´
+es, UPMC Univ Paris 06, UMR 7606, CNRS, LIP6, F-75005, Paris, France
+{
+eloi.zablocki, benjamin.piwowarski, laure.soulier, patrick.gallinari
+}
+@lip6.fr
+Abstract
+Representing the semantics of words is a long-standing
+problem for the natural
+language processing commu-
+nity.
+Most
+methods
+compute word semantics
+given
+their textual
+context
+in large corpora.
+More recently,
+researchers attempted to integrate perceptual
+and vi-
+sual
+features.
+Most
+of
+these works consider
+the vi-
+sual appearance of objects to enhance word represen-
+tations but they ignore the visual environment and con-
+text in which objects appear. We propose to unify text-
+based techniques with vision-based techniques by si-
+multaneously leveraging textual and visual context to
+learn multimodal word embeddings.
+We explore vari-
+ous choices for what can serve as a visual context and
+present an end-to-end method to integrate visual con-
+text
+elements in a multimodal
+skip-gram model.
+We
+provide experiments and extensive analysis of the ob-
+tained results.
+1
+Introduction
+Representing word semantics
+is
+a
+long-standing prob-
+lem that
+conditions
+major
+applications
+such
+as
+auto-
+matic
+translation
+[Bahdanau et al., 2014],
+sentiment
+analysis
+[Maas et al., 2011],
+and
+text
+summarization
+[Rush et al., 2015].
+Distributional
+Semantic
+Models
+(DSMs) leverage large text corpora under the Distributional
+Hypothesis [Harris, 1954], a strong assumption which states
+that words that occur in similar contexts should have similar
+meanings,
+to produce fixed-length vectorial
+representation
+for words based on their co-occurrences in text corpora.
+To
+further
+improve
+the
+quality
+of
+word
+representa-
+tion,
+leveraging multimodal
+information is
+crucial.
+In-
+deed,
+psychological
+studies
+have
+given
+pieces
+of
+evi-
+dence
+that
+the
+meaning of
+words
+is
+grounded in per-
+ception [Glenberg and Kaschak, 2002,
+Barsalou, 2008] and
+[Gordon and Van Durme, 2013] report a bias between what
+is said in texts and what can be seen in images. These obser-
+vations outline the complementary roles of images and texts
+and bring new perspectives to multimodal approaches bridg-
+ing textual
+information with visual
+ones to improve nat-
+ural
+language processing tasks [Hill and Korhonen, 2014,
+Lazaridou et al., 2015]. Besides, it is worth mentioning that
+apple
+the
+red
+is
+juicy
+RQ1
+RQ2
+banana
+cat
+sim
+RQ3
+entity
+textual contexts
+visual contexts
+evaluation
+fusion
+Figure 1:
+Illustration of our approach and underlying re-
+search questions: RQ1 concerns the visual part of the model,
+RQ2 is about the integration of the visual part with the text
+model and RQ3 deals with the evaluation of the embeddings.
+this has become possible thanks to the exploitation of sig-
+nificant advances in computer vision offering efficient tools
+for semantic extraction in images [Krizhevsky et al., 2012,
+Xu et al., 2015].
+In
+this
+context,
+multimodal
+representation
+learning
+models
+have
+been
+proposed
+to
+en-
+hance
+word
+representations
+using
+either
+sequential
+[Kiela et al., 2014,
+Bruni et al., 2014] or joint
+fusion tech-
+niques
+[Hill and Korhonen, 2014,
+Lazaridou et al., 2015].
+However,
+most of these works ignore the visual context of
+objects.
+We posit
+that
+learning representations of contexts
+in different
+modalities
+should be
+a
+key component
+of
+multimodal DSMs. The importance of context is illustrated
+in a simple example (Figure 1). From an image of an apple
+on a black background,
+we can see its color,
+its texture
+and shape.
+From its context,
+e.g.,
+growing on a tree,
+we
+can infer the relative size of apples with respect to the tree
+leaves, and that apples are fruits that grow on trees. If there
+is someone that is eating the apple, we can infer that apples
+are edible,
+and so on.
+From this example,
+we understand
+why exploiting the
+visual
+surroundings
+and context
+of
+objects might be useful to grasp the semantics of words.
+arXiv:1711.03483v1 [cs.CL] 9 Nov 2017
+Images
+Texts
+Images
+Texts
+Images
+Texts
+sim
+sim
+word
+i
+sim
+word
+j
+word
+i
+sim
+word
+j
+word
+i
+word
+j
+word
+i
+word
+j
+word
+i
+word
+j
+word
+i
+word
+j
+sim
+Joint models
+Sequential models
+(a) Early fusion
+(b) Middle fusion
+(c) Late fusion
+Figure 2: Overview of early fusion, middle fusion, and late fusion techniques. Round-corner rectangles denote word embed-
+dings. Green is related to images and blue to text, orange round-corner rectangles are multimodal embeddings built from textual
+and visual resources. “sim” stands for an example of an evaluation task, namely word similarity.
+In this work, we propose a multimodal model for learning
+word representation, leveraging contexts in different modal-
+ities, namely texts and images. Our contribution is threefold:
+•
+We propose and experiment
+with various definitions of
+what visual context is (Section 4.1) – this has never been
+taken into account to the best of our knowledge in such
+models;
+•
+We propose a multimodal context-driven model to jointly
+learn representations from textual and visual modalities,
+where both modalities influence media-independent word
+embeddings (Section 4.2).
+One further
+strength of
+the
+model is that it does not require aligned images and text
+(i.e. images with captions);
+•
+We present
+a thorough analysis of the obtained results
+to determine the influence of the visual modality on the
+learned multimodal embeddings (Sections 5 and 6) by ex-
+perimenting with a set of word classification tasks.
+2
+Related Work
+Learning word representation from textual
+resources.
+Distributional
+Semantic Models (DSMs) are implicitly or
+explicitly based on a factorization of a co-occurrence ma-
+trix to compute the representation of
+words.
+Well-known
+models are GloVe [Pennington et al., 2014] and Word2Vec
+[Mikolov et al., 2013] on which we are based. In the latter,
+words are either predicted given their context (Continuous
+Bag Of Word model) or vice-versa (Skip-Gram model).
+In
+both cases,
+a representation is learned for both words and
+their context. Several modifications and improvements have
+been proposed to the Skip-Gram model, such as using Gaus-
+sian embeddings to account for the variance of the meaning
+of words [Vilnis and McCallum, 2014] and using extra in-
+formation provided by Knowledge Bases [Tian et al., 2016].
+Learning word representations
+from textual
+and vi-
+sual resources.
+Recent studies motivate the construction
+of
+general-purpose word embeddings with both language
+and perceptual
+inputs
+such as
+images.
+More
+precisely,
+psychological
+studies
+reveal
+that
+the meaning of
+words
+is
+grounded in perception [Glenberg and Kaschak, 2002,
+Barsalou, 2008]. Moreover, [Gordon and Van Durme, 2013]
+highlight the complementarity of language and images.
+In
+particular,
+the Human Reporting Bias states that
+the fre-
+quency with which people refer to things or actions in lan-
+guage does not correlate with real world frequencies. People
+usually do not mention common things, and rather talk and
+write about surprising events. This systematic bias with re-
+spect to real-world frequencies motivates researchers to ex-
+ploit visual information to learn word representation, lead-
+ing to multimodal approaches.
+With this in mind,
+two main lines of multimodal
+DSM
+approaches have been proposed: sequential models and joint
+models, as illustrated in Figure 2.
+Sequential
+methods separately construct
+visual
+and tex-
+tual word representations, and then combine them using dif-
+ferent techniques, i.e. through middle fusion or late fusion.
+Given separately learned representations
+in each modal-
+ity,
+middle fusion consists
+in merging them to form a
+multimodal
+vector
+(see Figure 2 (b)).
+Several
+aggrega-
+tion methods have been considered such as Concatenation
+[Kiela and Bottou, 2014],
+Singular
+Value
+Decomposition
+(SVD)
+[Bruni et al., 2012],
+Canonical
+Correlation Analy-
+sis (CCA) [Silberer and Lapata, 2012], Weighted Gram Ma-
+trix Combination [Hill et al., 2014] or the task-driven cross-
+modal mapping [Collell et al., 2017]. In late fusion (see Fig-
+ure 2 (c)),
+word representations
+are computed for
+each
+modality.
+Their multimodal interactions occur downstream
+in the task,
+as done in [Bruni et al., 2014] who use a sim-
+ple linear combination of similarity scores respectively ob-
+tained from textual
+and visual
+data.
+In most
+of
+the se-
+quential
+models
+cited above,
+textual
+representations
+are
+pre-trained Glove [Pennington et al., 2014]
+or
+Word2Vec
+[Mikolov et al., 2013]
+embeddings and the visual
+embed-
+dings are built from the aggregation (e.g. average or pooling)
+of activations obtained with a pre-trained CNN forwarded on
+images.
+While middle and late fusion prevent
+potentially ben-
+eficial
+interactions
+during
+training
+between
+the
+dif-
+ferent
+modalities,
+joint
+models
+directly
+learn
+a
+joint
+representation
+from textual
+and
+visual
+inputs
+(Fig-
+ure
+2
+(a)).
+This
+idea
+is
+close
+to
+the
+way
+humans
+learn
+grounded
+meaning
+in
+semantics
+as
+observed
+in
+[Glenberg and Kaschak, 2002] and [Barsalou, 2008].
+Some
+joint models require aligned texts and images. For example
+[Roller and Schulte im Walde, 2013] use a Bayesian model-
+ing approach based on the assumption that text and associ-
+ated images are generated using a shared set of underlying
+latent topics and [Kottur et al., 2016] ground word represen-
+tations into vision by trying to predict the abstract scene as-
+sociated to a given sentence.
+Our model
+follows an early
+fusion strategy but does not require aligned text and images.
+Closer to our work, extensions of the Word2Vec skip-gram
+were
+proposed.
+For
+example,
+[Hill and Korhonen, 2014]
+base their model
+on the assumption that
+the frequency of
+appearance of concrete concepts correlates with the like-
+lihood of
+“experiencing” it
+in the world.
+Perceptual
+in-
+formation for concrete concepts is then introduced to the
+model whenever that concept is encountered in the textual
+modality.
+Representations of concrete words are trained to
+predict
+surrounding words (as in the classical
+skip-gram
+model) and the perceptual features – feature-norms defined
+in [McRae et al., 2005] that describe objects as a set of fea-
+tures (typical
+color,
+usage,
+etc.).
+This work was later fol-
+lowed by [Lazaridou et al., 2015] whose method is designed
+to use natural images instead of the feature-norms which are
+constructed by hand. They force the representation of words
+for which they have images to be close to their visual (pre-
+trained) representation. Our work further exploit this line of
+research, but focuses on exploiting the visual context, which
+has not been done to the best of our knowledge.
+Using and modeling visual
+contexts.
+Several
+of
+the
+works presented above use the visual modality to constrain
+the textual representation to be close to the visual representa-
+tion of the object. Such a strategy has two drawbacks. First,
+there is an asymmetry in the consideration of the modali-
+ties: text defines a semantic context for each word – its sur-
+rounding words – while images are used to have visual in-
+formation about the object. Second, it does not use the fact
+that the context in which objects appear is informative and
+complementary to textual inputs to improve word represen-
+tation. Indeed, this fact is supported by several works such as
+[Bruni et al., 2012] who propose a middle fusion approach
+where a visual embedding is built by counting the number
+of visual words in images. This is the first attempt to apply
+the distributional hypothesis to images: Semantically simi-
+lar objects will tend to occur in similar environments in im-
+ages.
+Through their experiments, they come to the conclu-
+sion that the appearance of the context (surrounding of ob-
+jects) is more informative for semantics than the appearance
+of the object itself. In comparison to our model, their work
+does not propose to jointly learn embeddings from both vi-
+sual and textual context.
+This
+statement
+is
+strengthened
+with
+observa-
+tions
+in
+[Roller and Schulte im Walde, 2013]
+and
+[Bruni et al., 2014]. The former proposes a Latent Dirichlet
+Allocation (LDA) model. The latter uses a count-based tech-
+nique to learn multimodal
+word embedding by leveraging
+both visual
+and textual
+contexts.
+First,
+they build target-
+context
+count
+matrices
+for
+text
+(count
+of
+co-occurrence
+patterns
+with contexts)
+and images,
+using bag-of-visual
+words to represent images. They concatenate both matrices
+and perform rank reduction with SVD.
+They then split
+matrices
+(smoothed text
+and smoothed image matrices)
+and consider
+fusion at
+the feature level
+or
+scoring level.
+However,
+they use a “count-base” method which does not
+learn representation for
+contexts and performs poorly on
+semantic tasks, moreover, their approach uses bags of visual
+words representation for images.
+In addition to the identification of entities in their con-
+text, rich spatial information is present if objects can be lo-
+cated in the image.
+[Bruni et al., 2014] propose to use this
+intrinsic spatial information for contexts by dividing the im-
+age in 4x4 bins and considering visual words separately for
+each region. However, when it comes to learning representa-
+tions for words, exploiting spatiality is challenging and still
+largely under-explored.
+3
+Research Questions
+From reviewing the literature, we observe three main issues
+with current multimodal DSM for which there are no con-
+sensus answers:
+•
+Text
+and
+images
+are
+very
+different
+by
+nature
+[Gordon and Van Durme, 2013].
+A sentence has a linear
+structure with a list
+of tokens (words) while an image
+has
+spatially-organized quantifiable information (pixel
+values).
+In the skip-gram model,
+choosing surrounding
+words to be the context is a natural choice for a text, how-
+ever, in images, it is not clear what should be used as con-
+text to learn semantically rich representations for objects
+[Roller and Schulte im Walde, 2013, Bruni et al., 2014]).
+•
+Several multimodal fusion methods exist, but none of the
+models presented above is significantly better
+than the
+others,
+and the question to know how to build a multi-
+modal framework has no obvious answer, especially when
+the alignment between texts and images is missing.
+•
+Evaluation tasks to assess the quality of word embeddings
+are inherently biased [Faruqui et al., 2016], and it is hard
+to examine in depth the contribution brought by the visual
+modality [Collell and Moens, 2016].
+In contrast
+to other works in learning multimodal
+word
+representations,
+we posit that exploiting the visual context
+enhances the learned representation of words. This assump-
+tion makes us consider images of complex scenes containing
+many objects. Indeed, images of a single object give very lit-
+tle information about the object, how it is used for, where it
+can be found and so on.
+On the contrary,
+an image show-
+ing an object in its environment,
+being used or interacting
+with other objects, is much more informative thanks to the
+surrounding context. Accordingly, we address the following
+research questions, also illustrated in Figure 1: (RQ1) In im-
+ages, what can be used to learn semantic representations for
+objects? In particular, does context can capture some of the
+semantic of a word/entity? Note that in this work, we con-
+sider that the set of entities is the subset of the set of words
+that
+correspond to objects in images.
+(RQ2) How can we
+naturally integrate a visual model with a text-based model
+to form a multimodal DSM? (RQ3) How can we evaluate
+and examine the contribution given by the visual modality
+in the final word embeddings?
+4
+Model: Learning Multi-Modal
+Context-Driven Word Representations
+We present here a multimodal DSM model leveraging both
+visual
+and textual
+contexts of words in order to fulfill
+the
+distributional hypothesis. To do so, we first formalize a def-
+inition of visual context and propose experiments to select
+appropriate visual context elements (RQ1).
+We then introduce our multimodal joint model based on
+the skip-gram framework [Mikolov et al., 2013] (RQ2). The
+textual and visual parts of the model share the same word
+embeddings which are updated from both textual and visual
+inputs,
+but contexts are modality specific.
+One strength of
+our model relies on the fact that it does not require aligned
+data. Since this is not the focus of the paper, we assume that
+objects are already detected in images.
+4.1
+Representation learning with visual contexts
+In this section, we formalize what we name visual contexts
+and detail the choice of modeling that we propose.
+Formalization.
+Based on the original
+Word2Vec skip-
+gram algorithm that
+considers entities
+e
+(words) and their
+contexts
+C
+e
+= {c
+1
+, ..., c
+n
+}
+(
+n
+surrounding words within a
+window centered on the entity), we translate in what follows
+the distributional hypothesis for images to a concrete model.
+In our case,
+the contexts are visual contexts that we de-
+fine latter.
+The choice for visual
+context
+elements
+c ∈ C
+e
+does not
+need to correspond to a list
+of semantic entities
+[Levy and Goldberg, 2014]. For instance, visual context el-
+ements can be the surrounding objects,
+low-level
+features
+such as the visual appearance, or also the localization of the
+surrounding objects with respect to the considered entity.
+With this in mind, we define a function
+f
+θ
+, parametrized
+by
+θ
+(learned), such that for any entity
+e
+and visual context
+element
+c ∈ C
+e
+,
+f
+θ
+(c)
+is a vector of
+R
+d
+. These representa-
+tions are then used in the negative-sampling loss:
+L
+i
+= −
+X
+e∈D
+X
+c∈C
+e
+
+log σ(f
+θ
+(c)
+>
+t
+e
+)
++
+X
+c
+−
+log σ(−f
+θ
+(c
+−
+)
+>
+t
+e
+)
+
+(1)
+where
+D
+is the set of entities,
+t
+e
+is the embedding associated
+to the entity/word
+e
+(learned),
+c
+−
+is a negative context, and
+σ
+is the sigmoid function. This loss formulation is very close
+to the original skip-gram loss but integrates the learning of
+f
+θ
+which shares parameters (
+θ
+) for the computation of every
+context element.
+Choice of modeling.
+Given an entity
+e
+, we propose differ-
+ent ways of modeling an instance of visual context elements
+c ∈ C
+e
+and we detail how to build and parametrize
+f
+θ
+.
+High-level
+context
+(surrounding objects).
+An image
+I
+can be seen as a bag of
+objects:
+I
+= {o
+1
+, o
+2
+, ...}
+.
+This
+simple view gives high-level information about the environ-
+ment
+in which objects occur.
+Given an entity
+e = o
+i
+(for
+some
+i
+) in an image, we define
+C
+e
+= {o
+j
+, j 6= i}
+as the set
+of all other objects that appear in the image. Then, a context
+c = o
+j
+∈ C
+e
+is a surrounding object. We define
+f
+θ
+(c) = V
+c
+where
+V ∈ R
+M×d
+is a simple lookup table of embeddings
+for
+M
+objects,
+d
+the dimension of the representation space,
+and
+V
+c
+is the
+c
+th
+row of this matrix.
+Low-level context (image patches).
+At a coarser level, the
+set
+C
+e
+of
+all
+visual
+context
+elements can be seen as im-
+age patches from the full
+image where entity
+e
+is masked
+out
+with black pixels.
+We call
+this low-level
+context
+since
+it
+directly uses pixel
+values from the surroundings of en-
+tities.
+Using low-level
+context
+is interesting because some
+objects can be left unidentified in images by current models.
+However,
+this requires a bigger and more complex model
+and it
+is more difficult
+to extract
+meaningful
+information
+from pixel values.
+We suggest two possible choices to se-
+lect
+c ∈ C
+e
+: (1) The instance
+c
+is the full image where the
+entity is masked out by replacing RGB values with zeros;
+(2)
+c
+is a small
+image patch randomly chosen around the
+entity.
+In practice,
+there are several choices for
+c
+such that
+c ∈ C
+e
+= {c
+1
+, c
+2
+, ...}
+.
+In both cases,
+the image patch
+c
+is
+forwarded in a
+CNN,
+parametrized by
+θ
+1
+,
+to form an activation vector
+u
+c
+=
+CNN
+θ
+1
+(c) ∈ R
+B
+(where
+B
+is
+the size of
+the last
+CNN filter,
+and equals 2048 in our experiments) obtained
+at
+the last
+layer of the network.
+The visual
+context
+vector
+f
+θ
+(c) = Nu
+c
+is then formed with the projection of
+u
+c
+to
+the dimension
+d
+with a matrix
+N ∈ R
+d×B
+.
+Parameters to
+be learned are
+θ = {θ
+1
+, N }
+.
+Enhancing context
+with spatial
+information.
+When a
+dataset
+provides localization information for
+entities (i.e.
+bounding boxes or segmentation masks),
+we wish to use
+these annotations as it gives additional spatial information.
+For example, by looking at the position of a cup in an im-
+age with respect to a table or the hand of a person, one can
+infer that cups lie on tables and that they can be handed by
+people.
+We wish to enhance the visual
+contexts presented
+above with spatial information. We consider two methods to
+model what we name visual spatiality to compute a vector
+s
+(e,c)
+representing the visual relationships between
+e
+and
+c
+,
+and two models to integrate it with a visual context element
+c
+as
+f
+sp
+θ
+(c, s
+(e,c)
+) ∈ R
+d
+.
+The first method considers low-level features, and corre-
+sponds to a 4-d spatial
+vector whose components are the
+relative positions on the
+x
+and
+y
+axes of the two bounding
+boxes of
+e
+and
+c
+(denoted
+δ
+x
+and
+δ
+y
+), and the ratio of width
+and height between the two bounding boxes of
+e
+and
+c
+(
+δ
+width
+and
+δ
+height
+). The second method is a high-level features vec-
+tor,
+and corresponds to a 4-d spatial vector whose compo-
+nents are four indicator functions denoting whether the con-
+text
+c
+is below, beside, above, or bigger than the entity
+e
+(
+1
+if
+true,
+0
+otherwise). Following [Ludwig et al., 2016], the con-
+text is said to be “below” its entity if
+|δ
+x
+| ≤ δ
+y
+, “above” its
+entity if
+|δ
+x
+|
+≤ −δ
+y
+and “beside” otherwise.
+A context is
+said to be bigger than its entity if
+δ
+width
+δ
+height
+≥ 1
+.
+Once the spatial
+vector
+s
+(e,c)
+is built,
+it
+is integrated
+with the visual
+context
+embedding
+v
+c
+= f
+θ
+(c)
+,
+to form a
+spatially-informed visual context
+v
+sp
+c
+= f
+sp
+θ
+(c, s
+(e,c)
+)
+that is
+used in the skip-gram equations instead of
+f
+θ
+(c)
+.
+Again,
+two variants are considered:
+(1)
+a linear
+combination of
+the visual
+context
+v
+c
+with the spatial
+vector
+s
+(e,v)
+,
+i.e.
+f
+sp
+θ
+(c, s
+(e,c)
+) = M.(v
+c
+⊕ s
+(e,c)
+)
+where
+M ∈ R
+d×(d+4)
+and
+⊕
+denotes the concatenation operator; (2) a bilinear interac-
+tion
+f
+sp
+θ
+(c, s
+(e,c)
+) = s
+(e,c)
+Mv
+c
+where
+M ∈ R
+4×d×d
+.
+This
+model has more free parameters but considers a bilinear in-
+teraction between the spatial vector
+s
+(e,c)
+and the visual con-
+text
+v
+c
+.
+4.2
+Integration in a multimodal model
+We now present
+our
+multimodal
+representation learning
+model that integrates the previously presented visual module
+with the textual skip-gram. The main idea is that while word
+embeddings should be shared across modalities,
+context is
+media-specific.
+The contribution of each modality is con-
+trolled by a linear combination (hyper-parameter
+α
+,
+deter-
+mined by cross-validation) of modality-specific costs, which
+gives the following global loss function:
+L(T, U, θ) = L
+t
+(T, U) + αL
+i
+(T, θ)
+(2)
+where
+U
+denotes
+the
+textual
+context
+lookup
+ta-
+ble
+and
+L
+t
+(T, U )
+is
+the
+Word2Vec
+loss
+function
+[Mikolov et al., 2013].
+A crucial point is that this model does not require aligned
+texts and images to train the model,
+or
+extra pre-trained
+representations on external datasets – we only require that
+entities identified in images to be associated with a unique
+word of the vocabulary. Besides, we justify the use of a joint
+model
+as we think it
+is important
+that
+representations are
+learned both for entities and for contexts. Indeed, as the enti-
+ties embeddings are affected by both modalities, the context
+representations should change and be updated by transitivity
+between modalities through the shared embeddings.
+5
+Evaluation protocol
+In this section,
+we evaluate word embeddings on different
+tasks.
+In particular,
+we measure the performance of word
+embeddings built
+from visual
+data (RQ1) and multimodal
+data (RQ2).
+5.1
+Data
+We use a large collection of English texts,
+a dump of the
+Wikipedia
+database
+(http://dumps.wikimedia.org/enwiki),
+cleaned
+and
+tokenized
+with
+the
+Gensim software
+[
+ˇ
+Reh
+˚
+u
+ˇ
+rek and Sojka, 2010].
+This
+provides
+us
+with
+4.2
+million articles,
+and a vocabulary of
+2.1
+million unique
+words.
+For visual data,
+we use the Visual Genome dataset
+[Krishna et al., 2017] as it is a large image collection (108k
+images)
+with a large number
+of
+different
+objects
+(4842
+unique entities with more than 10 occurrences) in rich and
+complex scenes (31 object instances per image on average).
+5.2
+Scenarios and Baselines
+Scenarios.
+To evaluate the different
+components of
+our
+model,
+we evaluate different
+scenarios.
+In particular,
+we
+train the model
+that
+uses other objects as visual
+contexts
+(noted O),
+the model
+that
+uses image patches (P) and the
+model that uses full images (P
+full
+).
+Models that use spatial context information are also eval-
+uated and are denoted Sp
+(., ., .)
+where the first argument de-
+notes the visual context type (O, P or P
+full
+), the second the
+spatial
+context
+features (
+δ
+or
+c
+),
+and the third the integra-
+tion (
+⊕
+for concatenation and
+b
+for bilinear product integra-
+tion).
+For instance,
+Sp
+(
+P
+, δ, b)
+corresponds to using image
+patches, with low-level visual features and bilinear product.
+All combinations of those models with the skip-gram text-
+only model (T) are trained and evaluated to get multimodal
+word representations, with the method explained in section
+4.2.
+Baselines
+Our baseline (L) is inspired by the state-of-the-
+art model of [Lazaridou et al., 2015],
+since they use visual
+features from objects themselves to learn word representa-
+tions in contrast to the visual context features we use in our
+model. For any visual entity
+e
+, they assume that a visual vec-
+tor
+v
+e
+representing the entity is available.
+During training,
+along with the text-only skip-gram loss,
+the similarity be-
+tween the embedding of the entity and its visual appearance
+is maximized in a max-margin framework:
+L
+object
+=
+X
+e∈D
+X
+v
+−
+max(0, γ − cos(t
+e
+, v
+e
+) + cos(t
+e
+, v
+−
+))
+where
+γ
+is the margin and
+v
+−
+is the visual appearance of a
+“negative” object (random). For an object
+e
+,
+v
+e
+is kept fixed
+and visual information is incorporated each time the entity
+is encountered in text. We note this model L
++
+T where L
+corresponds to the visual loss and T the text-only skip-gram
+loss.
+To evaluate our visual context-driven multimodal repre-
+sentation learning model
+(RQ2),
+we also evaluate:
+1) the
+skip-gram text
+only model
+(noted T),
+and 2) a sequential
+model, noted O
+⊕
+T, where embeddings of model T are con-
+catenated with embeddings obtained from O and then pro-
+jected in a lower-dimensional space with PCA. This serves
+as a comparison point between our joint approach and a se-
+quential one.
+5.3
+Tasks
+Similarly
+to
+previous
+work
+[Lazaridou et al., 2015,
+Collell et al., 2017], we evaluate our model on three differ-
+ent semantic tasks, namely word similarity and relatedness,
+feature
+norm prediction,
+and
+abstractness/concreteness
+prediction.
+Each task serves as a biased indicator
+of
+the
+quality of
+the embeddings.
+We present
+these evaluation
+benchmarks in what follows.
+Word
+similarity
+and
+relatedness
+benchmarks.
+Se-
+mantic
+relatedness
+(resp.
+similarity)
+evaluates
+the
+sim-
+ilarity (resp.
+relatedness)
+degree of
+word pairs.
+We use
+several
+benchmarks
+which provide gold labels
+(i.e.
+hu-
+man
+judgment
+scores)
+for
+word
+pairs:
+WordSim353
+VisSim
+SemSim
+Simlex
+MEN
+WordSim
+Encyclopedic
+Taste
+Sound
+Taxonomic
+Function
+Tactile
+Color
+Shape
+Motion
+Similarity Evaluation
+Feature-norm Prediction Task
+baseline
+L
+43
+45
+16
+22
+17
+56
+49
+36
+76
+56
+17
+41
+60
+58
+Our models
+Objects
+O
+43
+54
+31
+64
+27
+48
+46
+35
+62
+48
+03
+21
+43
+36
+Patches
+P
+28
+35
+17
+35
+22
+30
+51
+23
+48
+37
+04
+24
+38
+30
+P
+full
+35
+42
+19
+43
+28
+30
+48
+30
+46
+35
+06
+23
+35
+27
+Spatial
+Sp
+(
+O
+, δ, ⊕)
+48
+57
+32
+58
+27
+40
+55
+28
+54
+50
+06
+24
+44
+37
+Sp
+(
+O
+, c, ⊕)
+48
+58
+30
+58
+25
+40
+60
+33
+54
+50
+11
+25
+41
+34
+Sp
+(
+O
+, δ, b)
+46
+56
+35
+54
+28
+37
+57
+27
+50
+50
+15
+24
+38
+32
+Sp
+(
+O
+, c, b)
+51
+61
+33
+62
+30
+38
+58
+27
+58
+47
+10
+22
+43
+34
+Ensemble
+L
++
+O
+45
+57
+33
+66
+34
+58
+52
+42
+74
+56
+02
+27
+53
+53
+Table 1:
+RQ1 results.
+The columns on the left
+part
+of the table are the Spearman correlations (multiplied by 100) on the
+word similarity benchmarks (only word pairs with visual entities are evaluated). The columns on the right side are the f1-scores
+(multiplied by 100) at the feature-norm prediction task (grouped by feature category as proposed in [Collell and Moens, 2016]).
+Best results are highlighted in bold.
+[Finkelstein et al., 2002],
+MEN
+[Bruni et al., 2014],
+SimLex-999
+[Hill et al., 2015],
+SemSim and
+VisSim
+[Silberer and Lapata, 2014].
+The spearman correlation is
+computed between the list
+of
+similarity scores given by
+the model
+(cosine-similarity between multimodal
+vectors)
+and the gold labels. The higher the correlation is, the more
+semantic is captured in the embeddings.
+While word simi-
+larity benchmarks are widely used for intrinsic embedding
+evaluation,
+they are biased in the sense that good intrinsic
+evaluation scores
+do not
+imply useful
+embeddings
+for
+downstream tasks as shown by [Faruqui et al., 2016].
+Feature norm prediction.
+[Collell and Moens, 2016] use
+the task of predicting features norms (e.g. ‘is red’, ‘can fly’)
+of objects given word representation to evaluate visual
+or
+textual-based representations. We consider this task to eval-
+uate our word embeddings and use the same setup for eval-
+uation.
+The evaluation dataset
+is an extract
+of the McRae
+dataset [McRae et al., 2005].
+There is a total of 43 charac-
+teristics grouped into 9 categories for 417 entities. A linear
+SVM classifier is trained and 5-fold validation scores are re-
+ported.
+Abstractness / Concreteness prediction.
+The USF norms
+[Nelson et al., 2004] give concreteness ratings for 3260 En-
+glish words.
+With a multimodal
+word representation,
+we
+wish to know if it
+contains information that
+can be used
+to predict the concreteness rating of the associated word. In
+practice, we train an SVM with a RBF kernel to predict the
+gold concreteness rating from word embeddings. Note that
+this task is only used to evaluate multimodal representations
+since visual-based ones cover too small a vocabulary.
+5.4
+Implementation details
+Experiments
+use
+python
+and
+Tensorflow
+[Abadi et al., 2016].
+Images
+are
+upscaled
+to
+the
+shape
+598 × 598
+and passed through a pre-trained Inception-V3
+CNN [Szegedy et al., 2016] to give spatial visual tensor of
+shape
+17 × 17 × 2048
+(before the ReLU at the “Mixed 7c”
+layer).
+One slice of the tensor with a shape
+1 × 1 × 2048
+corresponds to the activation of
+a region of
+the original
+image.
+We use 5 negative examples per
+entity,
+and our
+models are trained with stochastic gradient
+descent
+with
+learning rate
+l
+r
+= 10
+−3
+and mini-batches of size 64.
+N
+and
+M
+are regularized with a
+L
+2
+-penalty respectively weighted
+by scalars
+λ
+and
+µ
+.
+The values of hyperparameters were
+found with cross-validation:
+λ = 0.1
+,
+µ = 0.1
+,
+γ = 0.5
+,
+α = 0.2
+.
+6
+Experiments and Results
+RQ1: Evaluating visual context-driven semantic represen-
+tations of words.
+Table 1 reports the results of the exper-
+iments for RQ1 discussing what kind of visual information
+can be useful.
+The first conclusion we draw is that surroundings of enti-
+ties are more informative than the visual appearance of ob-
+jects for the evaluation on all of the word similarity bench-
+marks. Indeed, results of the word similarity task highlight
+that our model scenarios generally overpass baselines.
+For
+instance, results of our model P
+full
+is on average 29% higher
+than those of the baseline L. However, on the feature-norm
+prediction task,
+direct
+visual
+features from objects (model
+L) are better suited for the categories that describe visually
+the objects (e.g. is red in ‘Color’ category or is round in the
+‘Shape’ category) but not for the other non visual categories
+such as ‘Encyclopedic’, ‘Taste’ and ‘Sound’.
+To measure the complementarity of the features from ob-
+jects and from their surroundings, we also evaluated an en-
+semble model that combines the baseline L and the O model
+(L
++
+O) where ’
++
+’ denotes the summation of the loss func-
+tions when the embeddings are shared.
+Interestingly,
+com-
+bining visual contexts and direct features (L
++
+O) results in
+a model that has a very good average performance,
+show-
+ing the complementarity of visual contexts with visual entity
+representations.
+Our second observation shows that using spatial informa-
+tion is useful: performance is better on the word similarity
+VisSim
+SemSim
+Simlex
+MEN
+WordSim
+Encyclopedic
+Taste
+Sound
+Taxonomic
+Function
+Tactile
+Color
+Shape
+Motion
+Similarity Evaluation
+Feature-norm Prediction Task
+Conc.
+Basel.
+Text
+T
+48
+60
+33
+69
+63
+58
+52
+44
+79
+62
+11
+32
+54
+60
+42.1
+Sequential
+O
+⊕
+T
+49
+62
+33
+71
+64
+63
+55
+40
+72
+59
+12
+35
+54
+58
+43.7
+Joint
+L
++
+T
+52
+65
+34
+71
+65
+61
+55
+42
+80
+59
+11
+31
+54
+62
+43.4
+Our models
+Objects
+O
++
+T
+53
+66
+35
+75
+67
+62
+55
+46
+82
+61
+13
+33
+55
+61
+42.9
+Patches
+P
++
+T
+53
+65
+35
+72
+67
+60
+56
+49
+82
+60
+12
+32
+55
+61
+43.1
+P
+full
++
+T
+53
+65
+34
+73
+65
+60
+55
+44
+82
+63
+14
+32
+55
+59
+43.2
+Spatial
+Sp
+(
+O
+, δ, ⊕) +
+T
+52
+66
+36
+73
+64
+64
+59
+46
+81
+62
+06
+31
+57
+63
+42.5
+Sp
+(
+O
+, c, ⊕) +
+T
+54
+66
+35
+72
+64
+62
+56
+52
+80
+61
+13
+34
+57
+58
+43.7
+Sp
+(
+O
+, δ, b) +
+T
+54
+68
+38
+73
+66
+63
+56
+48
+81
+60
+13
+32
+56
+63
+42.5
+Sp
+(
+O
+, c, b) +
+T
+55
+67
+34
+75
+64
+61
+58
+46
+80
+63
+15
+34
+57
+62
+44.4
+Ensemble
+L
++
+O
++
+T
+54
+66
+35
+75
+65
+63
+55
+50
+82
+60
+10
+33
+55
+59
+43.9
+Table 2: RQ2 experimental results on word similarity evaluation benchmarks, feature-norm prediction task, concreteness pre-
+diction task (Conc.). Concreteness measures are coefficients of determination (
+R
+2
+) multiplied by 100.
+benchmarks (+9% improvement on average for Sp
+(
+O
+, c, b)
+w.r.t. O) and the feature-norm prediction task (+20%). Both
+high and low-level spatial features lead similar results. This
+reinforces our intuition that visual context, and more partic-
+ularly spatial information, are promising for learning word
+representation and reducing the Human Reporting Bias af-
+fecting texts and images.
+The third conclusion we draw is that high-level contexts
+(in O) yield better scores (+31%) than low-level
+contexts
+(P or P
+full
+). Using low-level visual features is a challenging
+problem. However, they are promising since they are cheap
+to collect,
+do not
+require context
+annotations,
+and contain
+rich information if handled correctly.
+The difficulty lies in
+the natural noise in the surroundings of objects and the need
+for visual modules that automatically extract high-level in-
+formation from raw pixel values.
+RQ2/RQ3: Evaluating our multimodal context-driven mul-
+timodal representation learning model / analysis.
+Table 2
+reports the results on RQ2 and RQ3.
+Embeddings are ini-
+tialized with pre-trained embeddings obtained from the text-
+only baseline.
+Results highlight that all of the trained multimodal out-
+perform the text-only baseline for all evaluation tasks.
+For
+instance, O
++
+T shows an average improvement of 9% over
+T.
+This is in-line with the conclusions of
+related works
+[Hill et al., 2014]. Besides, a joint model (e.g. O
++
+T) com-
+pares favorably to a sequential
+model
+(O
+⊕
+T) built
+from
+embeddings obtained from O and T as we note a 5% rela-
+tive improvement,
+showing that embeddings computed us-
+ing multiple modalities at once are beneficial. Like we did
+for RQ1, we also evaluated an ensemble model (L
++
+O
++
+T) to
+measure the complementarity of visual features in the mul-
+timodal model. Again, we generally notice a slight improve-
+ment over both O
++
+T and L
++
+T. This opens perspectives
+for formalizing and leveraging visual information from both
+entities and their context.
+The obtained results are consistent with the conclusions
+drawn above on the RQ1 analysis:
+visual
+surroundings of
+entities are more useful than direct features on the evaluated
+tasks (3.2% improvement);
+the combination of both mod-
+els shows the complementarity of the approaches, adding a
+spatial
+term for visual
+context
+significantly increases per-
+formances (6% improv.);
+finally,
+higher-level
+contexts are
+slightly easier to use than lower-level contexts (1% improv.).
+To get a deeper insight into learned embeddings, we aim
+at explaining the impact of the visual modality on the multi-
+modal word representation. To do so, we estimate the corre-
+lation between the shift measured on the embedding and the
+concreteness degree of a word. The result outlines a corre-
+lation of
+ρ
+Spearman
+= 0.33
+, showing that visual and concrete
+words see their embeddings being more changed than other
+non visual and abstract words. This was to be expected be-
+cause the visual part only adds information to visual entities.
+7
+Conclusion and Future Work
+In this work,
+we proposed a multimodal
+(text
+and image)
+context-based approach to learn word embeddings. Through
+extensive experiments,
+and in line with related work,
+we
+observed the complementarity of
+visual
+and textual
+data
+to learn word representations.
+More importantly,
+we have
+shown that visual surroundings of objects and their relative
+localization are very informative to build word representa-
+tions – actually, more than, but complementary to, the visual
+appearance of the objects themselves as exploited in previ-
+ous works.
+In future work,
+we will
+explore the use of downstream
+tasks to evaluate multimodal word embeddings as it might
+give finer insights on the way the visual part of the model
+contributes to learning representations.
+Orthogonally,
+we
+will focus on contexts and their learned representations. In
+particular,
+we would like to see if aligned and consistent
+multimodal representations are learned with weak supervi-
+sion provided by the entities. Also, we will extend our work
+to learn relation representations between objects based on
+multimodal representations and the exploitation of existing
+knowledge bases.
+Acknowledgments
+This work is partially supported by the CHIST-ERA EU
+project
+MUSTER
+1
+(ANR-15-CHR2-0005) and the Labex
+SMART (ANR-11-LABX-65)
+supported by French state
+funds
+managed by the ANR within the Investissements
+d’Avenir programme under reference ANR-11-IDEX-0004-
+02. We additionally thank Guillem Collell for providing pre-
+trained visual vectors needed for evaluating the baseline.
+References
+[Abadi et al., 2016]
+Abadi,
+M.,
+Agarwal,
+A.,
+Barham,
+P.,
+Brevdo, E., Chen, Z., Citro, C., Corrado, G. S., Davis, A., Dean,
+J., Devin, M.,
+et al.
+(2016).
+Tensorflow: Large-scale machine
+learning on heterogeneous distributed systems.
+arXiv preprint
+arXiv:1603.04467.
+[Bahdanau et al., 2014]
+Bahdanau, D., Cho, K., and Bengio, Y.
+(2014).
+Neural machine translation by jointly learning to align
+and translate.
+arXiv preprint arXiv:1409.0473.
+[Barsalou, 2008]
+Barsalou, L. W. (2008).
+Grounded Cognition.
+Annual Review of Psychology, 59(1):617–645.
+[Bruni et al., 2012]
+Bruni, E., Boleda, G., Baroni, M., and Tran,
+N.-K. (2012).
+Distributional semantics in technicolor.
+In ACL
+2012, volume 1.
+[Bruni et al., 2014]
+Bruni,
+E.,
+Tran,
+N.
+K.,
+and Baroni,
+M.
+(2014).
+Multimodal distributional semantics.
+Journal of Ar-
+tificial Intelligence Research, 49:1–47.
+[Collell and Moens, 2016]
+Collell, G. and Moens, M.-F. (2016).
+Is an Image Worth More than a Thousand Words ? On the
+Fine-Grain Semantic Differences between Visual and Linguis-
+tic Representations.
+In Coling 2016.
+[Collell et al., 2017]
+Collell,
+G.,
+Zhang,
+T.,
+and Moens,
+M.
+(2017).
+Imagined visual representations as multimodal embed-
+dings.
+In AAAI 2017.
+[Faruqui et al., 2016]
+Faruqui, M., Tsvetkov, Y., Rastogi, P., and
+Dyer, C. (2016). Problems with evaluation of word embeddings
+using word similarity tasks.
+arXiv preprint arXiv:1605.02276.
+[Finkelstein et al., 2002]
+Finkelstein,
+L.,
+Gabrilovich,
+E.,
+Ma-
+tias,
+Y.,
+Rivlin,
+E.,
+Solan,
+Z.,
+Wolfman,
+G.,
+and Ruppin,
+E.
+(2002).
+Placing search in context: the concept revisited.
+ACM
+Transactions on Information Systems, 20(1):116–131.
+[Glenberg and Kaschak, 2002]
+Glenberg,
+A.
+M.
+and Kaschak,
+M. P. (2002).
+Grounding language in action.
+Psychonomic bul-
+letin & review, 9(3):558–565.
+[Gordon and Van Durme, 2013]
+Gordon, J. and Van Durme, B.
+(2013).
+Reporting bias and knowledge acquisition.
+In Pro-
+ceedings of the 2013 workshop on Automated knowledge base
+construction - AKBC ’13, pages 25–30.
+[Harris, 1954]
+Harris,
+Z.
+S.
+(1954).
+Distributional
+structure.
+Word, 10(2-3):146–162.
+[Hill and Korhonen, 2014]
+Hill,
+F.
+and Korhonen,
+A.
+(2014).
+Learning abstract concept embeddings from multi-modal data:
+Since you probably can’t see what I mean.
+In EMNLP 2014.
+1
+http://www.chistera.eu/projects/muster
+[Hill et al., 2014]
+Hill,
+F.,
+Reichart,
+R.,
+and
+Korhonen,
+A.
+(2014).
+Multi-Modal Models for Concrete and Abstract Con-
+cept Meaning.
+Transactions of the Association for Computa-
+tional Linguistics, 2:285–296.
+[Hill et al., 2015]
+Hill,
+F.,
+Reichart,
+R.,
+and
+Korhonen,
+A.
+(2015).
+Simlex-999:
+Evaluating
+semantic
+models
+with
+(genuine)
+similarity estimation.
+Computational
+Linguistics,
+41(4):665–695.
+[Kiela and Bottou, 2014]
+Kiela,
+D.
+and
+Bottou,
+L.
+(2014).
+Learning image embeddings using convolutional
+neural
+net-
+works for improved multi-modal semantics.
+In EMNLP 2014.
+[Kiela et al., 2014]
+Kiela, D., Hill, F., Korhonen, A., and Clark,
+S. (2014).
+Improving multi-modal representations using image
+dispersion: Why less is sometimes more.
+In ACL 2014.
+[Kottur et al., 2016]
+Kottur,
+S.,
+Vedantam,
+R.,
+Moura,
+J.
+M.
+F.,
+and Parikh,
+D.
+(2016).
+Visualword2vec (vis-w2v):
+Learning
+visually grounded word embeddings using abstract scenes.
+In
+CVPR 2016.
+[Krishna et al., 2017]
+Krishna,
+R.,
+Zhu,
+Y.,
+Groth,
+O.,
+John-
+son,
+J.,
+Hata,
+K.,
+Kravitz,
+J.,
+Chen,
+S.,
+Kalantidis,
+Y.,
+Li,
+L.,
+Shamma, D. A., Bernstein, M. S., and Fei-Fei, L. (2017). Visual
+genome: Connecting language and vision using crowdsourced
+dense image annotations.
+International Journal of Computer
+Vision, 123(1):32–73.
+[Krizhevsky et al., 2012]
+Krizhevsky, A., Sutskever, I., and Hin-
+ton, G. E. (2012).
+Imagenet classification with deep convolu-
+tional neural networks.
+In NIPS 2012, pages 1097–1105.
+[Lazaridou et al., 2015]
+Lazaridou, A., Pham, N. T., and Baroni,
+M. (2015).
+Combining language and vision with a multimodal
+skip-gram model.
+In NAACL 2015.
+[Levy and Goldberg, 2014]
+Levy,
+O.
+and Goldberg,
+Y.
+(2014).
+Dependency-based word embeddings.
+In ACL 2014.
+[Ludwig et al., 2016]
+Ludwig, O., Liu, X., Kordjamshidi, P., and
+Moens, M. (2016).
+Deep embedding for spatial role labeling.
+CoRR, abs/1603.08474.
+[Maas et al., 2011]
+Maas, A. L., Daly, R. E., Pham, P. T., Huang,
+D., Ng, A. Y., and Potts, C. (2011).
+Learning word vectors for
+sentiment analysis.
+In ACL 2011.
+[McRae et al., 2005]
+McRae, K., Cree, G. S., Seidenberg, M. S.,
+and McNorgan, C. (2005).
+Semantic feature production norms
+for a large set of living and nonliving things. Behavior research
+methods, 37(4):547–559.
+[Mikolov et al., 2013]
+Mikolov, T., Sutskever, I., Chen, K., Cor-
+rado,
+G.,
+and Dean,
+J.
+(2013).
+Distributed Representations of
+Words and Phrases and their Compositionality.
+In NIPS, pages
+1–9.
+[Nelson et al., 2004]
+Nelson,
+D.
+L.,
+McEvoy,
+C.
+L.,
+and
+Schreiber,
+T.
+A.
+(2004).
+The university of south florida free
+association,
+rhyme,
+and word fragment norms.
+Behavior Re-
+search Methods, Instruments, & Computers, 36(3):402–407.
+[Pennington et al., 2014]
+Pennington,
+J.,
+Socher,
+R.,
+and Man-
+ning, C. D. (2014).
+Glove: Global vectors for word representa-
+tion.
+In EMNLP, volume 14, pages 1532–1543.
+[
+ˇ
+Reh
+˚
+u
+ˇ
+rek and Sojka, 2010]
+ˇ
+Reh
+˚
+u
+ˇ
+rek,
+R.
+and Sojka,
+P.
+(2010).
+Software Framework for Topic Modelling with Large Corpora.
+In Proceedings of the LREC 2010 Workshop on New Challenges
+for NLP Frameworks, pages 45–50, Valletta, Malta. ELRA.
+[Roller and Schulte im Walde, 2013]
+Roller,
+S.
+and Schulte im
+Walde, S. (2013).
+A Multimodal LDA Model Integrating Tex-
+tual, Cognitive and Visual Modalities.
+[Rush et al., 2015]
+Rush,
+A.
+M.,
+Chopra,
+S.,
+and Weston,
+J.
+(2015).
+A neural attention model for abstractive sentence sum-
+marization.
+In EMNLP 2015.
+[Silberer and Lapata, 2012]
+Silberer, C. and Lapata, M. (2012).
+Grounded models of
+semantic representation.
+In EMNLP-
+CoNLL.
+[Silberer and Lapata, 2014]
+Silberer, C. and Lapata, M. (2014).
+Learning grounded meaning representations with autoencoders.
+In ACL 2014.
+[Szegedy et al., 2016]
+Szegedy,
+C.,
+Vanhoucke,
+V.,
+Ioffe,
+S.,
+Shlens, J., and Wojna, Z. (2016).
+Rethinking the inception ar-
+chitecture for computer vision.
+In CVPR 2016.
+[Tian et al., 2016]
+Tian,
+F.,
+Gao,
+B.,
+Chen,
+E.,
+and Liu,
+T.
+(2016).
+Learning better word embedding by asymmetric low-
+rank projection of knowledge graph.
+J. Comput. Sci. Technol.,
+31(3).
+[Vilnis and McCallum, 2014]
+Vilnis,
+L.
+and
+McCallum,
+A.
+(2014).
+Word representations via gaussian embedding.
+arXiv
+preprint arXiv:1412.6623.
+[Xu et al., 2015]
+Xu,
+K.,
+Ba,
+J.,
+Kiros,
+R.,
+Cho,
+K.,
+Courville,
+A., Salakhutdinov, R., Zemel, R., and Bengio, Y. (2015). Show,
+Attend and Tell: Neural Image Caption Generation with Visual
+Attention.
+In ICML, pages 2048–2057.

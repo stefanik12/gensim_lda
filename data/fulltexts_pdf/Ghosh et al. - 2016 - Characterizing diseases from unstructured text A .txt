@@ -1,0 +1,2942 @@
+﻿Characterizing Diseases from Unstructured Text:
+A Vocabulary Driven Word2vec Approach
+Saurav Ghosh
+1, *
+, Prithwish Chakraborty
+1
+, Emily Cohn
+2
+, John S. Brownstein
+2,3
+, and
+Naren Ramakrishnan
+1
+1
+Department of Computer Science, Virginia Tech, Arlington, Vriginia, USA,
+2
+Children’s Hospital Informatics Program, Boston Children’s Hospital, Boston, Massachusetts, USA,
+3
+Department of Pediatrics, Harvard Medical School, Boston, Massachusetts, USA.
+*
+sauravcsvt@vt.edu
+ABSTRACT
+Traditional disease surveillance can be augmented with a wide variety of real-time sources such as, news and social media.
+However, these sources are in general unstructured and, construction of surveillance tools such as taxonomical correlations
+and trace mapping involves considerable human supervision. In this paper, we motivate a disease vocabulary driven word2vec
+model (Dis2Vec) to model diseases and constituent attributes as word embeddings from the HealthMap news corpus. We use
+these word embeddings to automatically create disease taxonomies and evaluate our model against corresponding human
+annotated taxonomies.
+We compare our model accuracies against several state-of-the art word2vec methods.
+Our results
+demonstrate that Dis2Vec outperforms traditional distributed vector representations in its ability to faithfully capture taxonomical
+attributes across different class of diseases such as endemic, emerging and rare.
+1 Introduction
+Traditional disease surveillance has often relied on a multitude of reporting networks such as outpatient networks, on-field
+healthcare workers, and lab-based networks. Some of the most effective tools while analyzing or mapping diseases, especially
+for new diseases or disease spreading to new regions, are reliant on building disease taxonomies which can aid in early detection
+of outbreaks.
+In recent years, the ready availability of social and news media has led to services such as HealthMap
+7
+which have been used
+to track several disease outbreaks from news media ranging from the flu to Ebola. However, most of this data is unstructured
+and often noisy. Annotating such corpora thus requires considerable human oversight. While significant information about
+both endemic
+4, 22
+and rare
+19
+diseases can be extracted from such news corpora, traditional text analytics methods such as
+lemmatization and tokenization are often shallow and do not retain sufficient contextual information. More involved methods
+such as topic models are too computationally expensive for real-time worldwide surveillance and do not provide simple
+semantic contexts that could be used to comprehend the data.
+In recent years, several deep learning based methods, such as word2vec and doc2vec, have been found to be promising
+in analyzing such text corpora. These methods once trained over a representative corpus can be readily used to analyze new
+text and find semantic constructs (e.g. rabies:zoonotic = salmonella:foodborne) which can be useful for automated taxonomy
+creation.
+Classical word2vec methods are generally unsupervised requiring no domain information and as such has broad
+applicability.
+However, for highly specified domains (such as disease surveillance) with moderate sized corpus, classical
+methods fail to find meaningful semantic relationships. For example, while determining the transmission method of salmonella
+given that rabies is zoonotic (i.e. querying rabies:zoonotic = salmonella:??), traditional word2vec methods such as skip-gram
+model trained on the HealthMap corpus fail to find a meaningful answer (saintpaul).
+Motivated by this problem, in this paper we postulate a vocabulary driven word2vec algorithm that can find meaningful
+disease constructs which can be used towards such disease knowledge extractions. For example, for the aforementioned task,
+vocabulary-driven word2vec algorithm generates the word foodborne, which is more meaningful in the context of disease
+knowledge extraction. Our main contributions are:
+•
+We formulate Dis2Vec, a vocabulary driven word2vec method which is used to generate disease specific word embeddings
+from unstructured health-related news corpus. Dis2Vec allows domain knowledge in the form of pre-specified disease-related
+vocabulary
+V
+to supervise the discovery process of word embeddings.
+•
+We use these disease specific word embeddings to generate automated disease taxonomies that are then evaluated against
+arXiv:1603.00106v2 [cs.LG] 3 Jun 2016
+Symptoms
+Exposures
+Transmission Agents
+Transmission Method
+0.98
+0.68
+0.94
+0.97
+0.93
+0.63
+0.86
+0.41
+0.95
+0.67
+0.78
+0.52
+Em e rg ing
+Ende m ic
+Ra re
+Figure 1.
+Comparative performance evaluation of disease specific word2vec model (Dis2Vec) across the disease
+characterization tasks for 3 different class of diseases - endemic (blue), emerging (red) and rare (green). The axes along the
+four vertices represent the modeling accuracy for the disease characterization of interest viz. symptoms, transmission agents,
+transmission methods, and exposures. The area under the curve for each disease class represent the corresponding overall
+accuracy over all the characterizations. Best characterization performance can be seen for emerging diseases.
+human curated ones for accuracies.
+•
+Finally, we evaluate the applicability of such word embeddings over different class of diseases - emerging, endemic and rare
+for different taxonomical characterizations.
+Preview of our results:
+In Figure 1,
+we provide a comparative performance evaluation of Dis2Vec across the disease
+characterization tasks for endemic,
+emerging and rare diseases.
+It can be seen that Dis2Vec is best able to characterize
+emerging diseases. Specifically, it is able to capture symptoms, transmission methods and transmission agents, with near-perfect
+accuracies for emerging diseases. Such diseases (e.g. Ebola, H7N9) draw considerable media interest due to their unknown
+characteristics. News articles reporting emerging outbreaks tend to focus on all characteristics of such diseases - symptoms,
+exposures, transmission methods and transmission agents. However, for endemic and rare diseases, transmission agents and
+exposures are better understood, and news reports tend to focus mainly on symptoms and transmission methods. Dis2Vec can
+still be applied for these class of diseases but with decreased accuracy for these under-represented characteristics.
+2 Related Work
+The related works of interest for our problem are primarily from the field of neural-network based word embeddings and their
+applications in a variety of NLP tasks.
+In recent years, we have witnessed a tremendous surge of research concerned with
+representing words from unstructured corpus to dense low-dimensional vectors drawing inspirations from neural-network
+language modeling.
+3, 5, 15
+These representations, referred to as word embeddings, have been shown to perform with considerable
+accuracy and ease across a variety of linguistic tasks.
+1, 6, 20
+Mikolov et al.
+12, 13
+proposed skip-gram model, currently a state-of-the-art word embedding method, which can be trained
+2/15
+using either hierarchical softmax (SGHS)
+13
+or the negative sampling technique (SGNS).
+13
+Skip-gram models have been found
+to be highly efficient in finding word embedding templates from huge amounts of unstructured text data and uncover various
+semantic and syntactic relationships. Mikolov et al.
+13
+also showed that the such word embeddings have the capability to capture
+linguistic regularities and patterns. These patterns can be represented as linear translations in the vector space. For example,
+vec(Madrid) - vec(Spain) + vec(France) is closer to vec(Paris) than any other word in their corpus.
+9, 14
+Levy et al.
+10
+analyzed the theoretical founding of skip-gram model and showed that the training method of SGNS can be
+converted into a weighted matrix factorization and its objective induces a implicit factorization of a shifted PMI matrix - the
+well-known word-context PMI matrix
+2, 21
+shifted by a constant offset.
+In,
+11
+Levy et al.
+performed an exhaustive evaluation
+showing the impact of each parameter (window size, context distribution smoothing, sub-sampling of frequent words and
+others) on the performance of SGNS and other recent word embedding methods, such as GLoVe.
+16
+They found that SGNS
+consistently profits from larger negative samples (
+>
+1
+) showing significant improvement on various NLP tasks with higher
+values of negative samples.
+Previous works on neural embeddings (including the skip-gram model) define the contexts of a word to be its linear context
+(words preceding and following the target word). Levy et al.
+8
+generalized the skip-gram model and used syntactic contexts
+derived from automatically generated dependency parse-trees. These syntactic contexts were found to capture more functional
+similarities, while the bag-of-words nature of the contexts in the original skip-gram model generates broad topical similarities.
+3 Model
+3.1 Problem Overview
+Disease taxonomy generation is the process of tabulating characteristics of diseases w.r.t. several pre-specified categories such
+as symptoms and transmission agents.
+Table 1 gives an example of taxonomy for three diseases viz. an emerging disease
+(H7N9), an endemic disease (avian influenza) and a rare disease (plague). Traditionally, such taxonomies are human curated -
+either from prior expert knowledge or by combining a multitude of reporting sources. News reports covering disease outbreaks
+can often contain disease specific information, albeit in an unstructured way.
+Our aim is to generate automated taxonomy
+of diseases similar to Table 1 using such unstructured information from news reports. Such automated methods can greatly
+simplify the process of generating taxonomies, especially for emerging diseases, and lead to a timely dissemination of such
+information towards public health services. In general, such disease related news corpus is of moderate size for deep-learning
+methods and as explained in section 1, unsupervised methods often fail to extract meaningful information. Thus we incorporate
+domain knowledge in the form of a flat-list of disease related terms such as disease names, possible symptoms and possible
+transmission methods, hereafter referred to as the vocabulary
+V
+. Figure 2 shows the process of automated taxonomy generation
+where we employ a supervised word2vec method referred to as Dis2Vec which takes the following inputs - (a) the pre-specified
+disease vocabulary
+V
+and (b) unstructured news corpus
+D
+and generates embeddings for each word (including words in the
+vocabulary
+V
+) in the corpus.
+Once word embeddings are generated, we employ a cosine comparator to create a tabular list
+of disease taxonomies similar to Table 1. In this cosine comparator, to classify each disease for a taxonomical category, we
+calculate the cosine similarities between the embedding for the disease name and embeddings for all possible words related to
+that category. Then, we sort these cosine similarities (in descending order) and extract the words (higher up in the order) closer
+to the disease name hereafter referred to as top words found for that category. For example, to extract the transmission agents
+for plague, we calculate the cosine similarities between the embedding for the word plague and the embeddings for all possible
+terms related to transmission agents and extract the top words by sorting the terms w.r.t. these similarities. We can compare the
+top words found for a category with the human annotated words to compute the accuracy of the taxonomy generated from
+word embeddings. In the next 2 subsections, we will briefly discuss the basic word2vec model (skip-gram model with negative
+sampling) followed by the detailed description of our vocabulary driven word2vec model Dis2Vec.
+3.2 Basic Word2vec Model
+In this section, we present a brief description of SGNS - the skip-gram model introduced in
+12
+trained using the negative sampling
+procedure in.
+13
+The objective of the skip-gram model is to infer word embeddings that will be relevant for predicting the
+surrounding words in a sentence or a document. The skip-gram model can also be trained using Hierarchical Softmax method
+as shown in.
+13
+3.2.1 Setting and Notation
+The inputs to the skip-gram model are a corpus of words
+w
+∈
+W
+and their corresponding contexts
+c
+∈
+C
+where
+W
+and
+C
+are the
+word and context vocabularies. In SGNS, the contexts of word
+w
+i
+are defined by the words surrounding it in an
+L
+-sized context
+window
+w
+i
+−
+L
+, . . . ,
+w
+i
+−
+1
+,
+w
+i
++
+1
+, . . . ,
+w
+i
++
+L
+. Therefore, the corpus can be transformed into a collection of observed context and word
+pairs as
+D
+. The notation
+#
+(
+w
+,
+c
+)
+represents the number of times the pair
+(
+w
+,
+c
+)
+occurs in
+D
+. Therefore,
+#
+(
+w
+) =
+∑
+c
+∈
+C
+(
+w
+,
+c
+)
+and
+#
+(
+c
+) =
+∑
+w
+∈
+W
+(
+w
+,
+c
+)
+where
+#
+(
+w
+)
+and
+#
+(
+c
+)
+are the total number of times
+w
+and
+c
+occurred in
+D
+. Each word
+w
+∈
+W
+corresponds
+3/15
+Vocabulary
+Flat list of words
+(influenza, cough, etc.)
+Vocabulary
+Flat list of words
+(influenza, cough, etc.)
+Disease 
+outbreak
+News
+(HealthMap)
+Disease 
+outbreak
+News
+(HealthMap)
+Dis2Vec
+Disease specific 
+embeddings
+Taxonomy
+Categories
+Cosine 
+Comparator
+Taxonomy 
+Table
+Tx. 
+methods
+Tx. 
+agents
+Exposures
+Symptoms
+Figure 2.
+Automated taxonomy generation from unstructured news corpus (HealthMap) and a pre-specified vocabulary (
+V
+).
+Dis2Vec inputs these information to generate disease specific word embeddings that are then passed through a cosine
+comparator to generate the taxonomy for the disease of interest.
+Table 1.
+Human curated disease taxonomy for three diseases from three different class of diseases (endemic, emerging, and
+rare).
+Disease
+Transmission
+methods
+Transmission
+agents
+Clinical symptoms
+Exposures
+Avian influenza (en-
+demic)
+zoonotic
+domestic animal,
+wild animal
+Fever,
+cough,
+sore
+throat, diarrhea, vom-
+iting
+animal
+exposure,
+farmer,
+market,
+slaughter
+H7N9 (emerging)
+zoonotic
+domestic animal
+Fever,
+cough,
+pneu-
+monia
+farmer,
+market,
+slaughter,
+animal
+exposure
+Plague (rare)
+vectorborne,
+zoonotic
+flea, wild animal
+Sore, fever, headache,
+muscle ache,
+vomit-
+ing, nausea
+animal
+exposure,
+veterinarian,
+farmer
+to a vector
+w
+∈
+R
+T
+and similarly, each context
+c
+∈
+C
+is represented as a vector
+c
+∈
+R
+T
+, where
+T
+is the dimensionality of the
+4/15
+word or context embedding. The entries in the vectors are the latent parameters to be learned.
+3.2.2 Objective of SGNS
+SGNS tries to maximize the probability whether a single word-context pair
+(
+w
+,
+c
+)
+was generated from the observed corpus
+D
+.
+Let
+P
+(
+D
+=
+1
+|
+w
+,
+c
+)
+refers to the probability that
+(
+w
+,
+c
+)
+was generated from the corpus, and
+P
+(
+D
+=
+0
+|
+w
+,
+c
+) =
+1
+−
+P
+(
+D
+=
+1
+|
+w
+,
+c
+)
+the probability that
+(
+w
+,
+c
+)
+was not. The objective function for a single
+(
+w
+,
+c
+)
+pair is modeled as:
+P
+(
+D
+=
+1
+|
+w
+,
+c
+) = σ (
+w
+·
+c
+) =
+1
+1
++
+e
+−
+w
+·
+c
+(1)
+where w and c are the T -dimensional latent parameters or vectors to be learned.
+The objective of the negative sampling is to maximize
+P
+(
+D
+=
+1
+|
+w
+,
+c
+)
+for observed
+(
+w
+,
+c
+)
+pairs while minimizing
+P
+(
+D
+=
+0
+|
+w
+,
+c
+)
+for randomly sampled ”negative” contexts (hence the name ”negative sampling”), under the assumption that randomly
+selecting a context for a given word will tend to generate an unobserved
+(
+w
+,
+c
+)
+pair.
+SGNS’s objective for a single
+(
+w
+,
+c
+)
+observation is then:
+log
+σ (
+w
+·
+c
+) +
+k
+·
+E
+c
+N
+∼
+P
+D
+[
+log
+σ(−
+w
+·
+c
+N
+)]
+(2)
+where
+k
+is the number of ”negative” samples and
+c
+N
+is the sampled context,
+drawn according to the smoothed unigram
+distribution P
+D
+(
+c
+) =
+#
+(
+c
+)
+α
+∑
+c
+#
+(
+c
+)
+α
+where
+α =
+0
+.
+75 is the smoothing parameter.
+The objective of
+SGNS
+is trained in an online fashion using stochastic gradient updates over the observed pairs in the corpus
+D
+. The global objective then sums over the observed
+(
+w
+,
+c
+)
+pairs in the corpus:
+l
+SGNS
+=
+∑
+(
+w
+,
+c
+)∈
+D
+
+log
+σ (
+w
+·
+c
+) +
+k
+·
+E
+c
+N
+∼
+P
+D
+[
+log
+σ(−
+w
+·
+c
+N
+)]
+
+(3)
+Optimizing this objective will have a tendency to generate similar embeddings for observed word-context pairs, while scattering
+unobserved pairs in the vector space. Intuitively, words that appear in similar contexts or tend to appear in the contexts of each
+other should have similar embeddings.
+3.3 Disease Specific Word2vec Model (Dis2Vec)
+In this section, we introduce Dis2Vec, a disease specific word2vec model whose objective is to generate word embeddings
+which will be useful for automatic disease taxonomy creation given an input unstructured corpus
+D
+. We used a pre-specified
+disease-related vocabulary
+V
+(domain information) to guide the discovery process of word embeddings in Dis2Vec. The input
+corpus
+D
+consists of a collection of
+(
+w
+,
+c
+)
+pairs.
+Based on
+V
+, we can categorize the
+(
+w
+,
+c
+)
+pairs into three types as shown
+below:
+•
+D
+(
+d
+)
+= {(
+w
+,
+c
+)
+: w
+∈
+V
+∧
+c
+∈
+V
+}
+, i.e. both the word w and the context c are in
+V
+•
+D
+(¬
+d
+)
+= {(
+w
+,
+c
+)
+: w
+/
+∈
+V
+∧
+c
+/
+∈
+V
+}
+, i.e. neither the word w nor the context c are in
+V
+•
+D
+(
+d
+)(¬
+d
+)
+= {(
+w
+,
+c
+)
+: w
+∈
+V
+⊕
+c
+∈
+V
+}
+, i.e. either the word w is in
+V
+or the context c is in
+V
+but both cannot be in
+V
+Therefore, the input corpus
+D
+can be represented as
+D
+=
+D
+(
+d
+)
++
+D
+(¬
+d
+)
++
+D
+(
+d
+)(¬
+d
+)
+.
+Each of these categories of
+(
+w
+,
+c
+)
+pairs
+needs special consideration while generating disease specific embeddings.
+3.3.1 Vocabulary Driven Negative Sampling
+The first category (
+D
+(
+d
+)
+) of
+(
+w
+,
+c
+)
+pairs, where both
+w
+and
+c
+are in
+V
+(
+w
+∈
+V
+∧
+c
+∈
+V
+), is of prime importance in generating
+disease specific word embeddings.
+Our first step in generating such embeddings is to maximize
+log
+σ (
+w
+·
+c
+)
+in order to
+achieve similar embeddings for these disease word-context pairs. Apart from maximizing the dot products, following classical
+approaches,
+13
+negative sampling is also required to generate robust embeddings. In Dis2Vec, we adopt a vocabulary (
+V
+) driven
+negative sampling for these disease word-context pairs. In this vocabulary driven approach, instead of random sampling we
+sample negative examples (
+c
+N
+) from the set of non-disease contexts, i.e. contexts which are not in
+V
+(
+c
+/
+∈
+V
+). This targeted
+sampling of negative contexts will ensure dissimilar embeddings of disease words (w
+∈
+V
+) and non-disease contexts (c
+/
+∈
+V
+),
+thus scattering them in the vector space. However, sampling negative examples only from the set of non-disease contexts may
+lead to overfitting and thus, we introduce a sampling parameter
+π
+s
+which controls the probability of drawing a negative example
+5/15
+from non-disease contexts (
+c
+∈
+V
+) versus disease contexts (
+c
+∈
+V
+). Dis2Vec’s objective for
+(
+w
+,
+c
+) ∈
+D
+(
+d
+)
+is shown below in
+equation 4.
+l
+D
+(
+d
+)
+=
+∑
+(
+w
+,
+c
+)∈
+D
+(
+d
+)
+
+log
+σ (
+w
+·
+c
+)
+(4)
++
+k
+· [
+P
+(
+x
+k
+< π
+s
+)
+E
+c
+N
+∼
+P
+D
+c
+/
+∈
+V
+[
+log
+σ(−
+w
+·
+c
+N
+)]
++
+P
+(
+x
+k
+≥ π
+s
+)
+E
+c
+N
+∼
+P
+D
+c
+∈
+V
+[
+log
+σ(−
+w
+·
+c
+N
+)]]
+
+where
+x
+k
+∼
+U
+(
+0
+,
+1
+)
+, U(0,1) being the uniform distribution on the interval [0,1].
+If
+x
+k
+< π
+s
+, we sample a negative context
+c
+N
+from the unigram distribution
+P
+D
+c
+/
+∈
+V
+where
+D
+c
+/
+∈
+V
+is the collection of
+(
+w
+,
+c
+)
+pairs for which
+c
+/
+∈
+V
+and
+P
+D
+c
+/
+∈
+V
+=
+#
+(
+c
+)
+α
+∑
+c
+/
+∈
+V
+#
+(
+c
+)
+α
+where
+α
+is the smoothing parameter. For values of
+x
+k
+≥ π
+s
+, we sample
+c
+N
+from the unigram distribution
+P
+D
+c
+∈
+V
+and
+P
+D
+c
+∈
+V
+=
+#
+(
+c
+)
+α
+∑
+c
+∈
+V
+#
+(
+c
+)
+α
+.
+Therefore, optimizing the objective in equation 4 will have a tendency to generate disease specific word embeddings for values
+of
+π
+s
+≥
+0
+.
+5
+due to the reason that higher number of negative contexts (
+c
+N
+) will be sampled from the set of non-disease contexts
+(c
+/
+∈
+V
+) with
+π
+s
+≥
+0
+.
+5.
+3.3.2 Out-of-vocabulary Objective Regularization
+The second category (
+D
+(¬
+d
+)
+) of
+(
+w
+,
+c
+)
+pairs consists of those pairs for which both
+w
+and
+c
+are not in
+V
+(
+w
+/
+∈
+V
+∧
+c
+/
+∈
+V
+).
+These pairs are uninformative to us in generating disease specific word embeddings since both
+w
+and
+c
+are not a part of
+V
+.
+However, minimizing their dot products will scatter these pairs in the embedding space and thus, a word
+w
+/
+∈
+V
+can have similar
+embeddings (or, get closer) to a word
+w
+∈
+V
+which should be avoidable in our scenario.
+Therefore, we need to maximize
+log
+σ (
+w
+·
+c
+)
+for these
+(
+w
+,
+c
+)
+pairs in order to achieve similar (or, closer) embeddings. We adopt the basic objective function of
+SGNS for
+(
+w
+,
+c
+) ∈
+D
+(¬
+d
+)
+as shown below in equation 5.
+l
+D
+(¬
+d
+)
+=
+∑
+(
+w
+,
+c
+)∈
+D
+(¬
+d
+)
+
+log
+σ (
+w
+·
+c
+) +
+k
+·
+E
+c
+N
+∼
+P
+D
+[
+log
+σ(−
+w
+·
+c
+N
+)]
+
+(5)
+3.3.3 Vocabulary Driven Objective Minimization
+Lastly, the third category (
+D
+(
+d
+)(¬
+d
+)
+) consists of
+(
+w
+,
+c
+)
+pairs where either
+w
+is in
+V
+or
+c
+is in
+V
+(
+w
+∈
+V
+⊕
+c
+∈
+V
+) but both cannot
+be in
+V
+.
+Consider an arbitrary
+(
+w
+,
+c
+)
+pair belonging to
+D
+(
+d
+)(¬
+d
+)
+.
+As per the objective (equation 3) of SGNS, two words are
+similar to each other if they share the same contexts or if they tend to appear in the contexts of each other (and preferably both).
+If
+w
+∈
+V
+and
+c
+/
+∈
+V
+, then maximizing
+log
+σ (
+w
+·
+c
+)
+will have the tendency to generate similar embeddings for the disease word
+w
+∈
+V
+and non-disease words
+/
+∈
+V
+which share the same non-disease context
+c
+/
+∈
+V
+. On the other word, if
+c
+∈
+V
+and
+w
+/
+∈
+V
+,
+then maximizing
+log
+σ (
+w
+·
+c
+)
+will drive the embedding of the non-disease word
+w
+/
+∈
+V
+closer to the embeddings of disease
+words
+∈
+V
+sharing the same disease context
+c
+∈
+V
+. Therefore, we posit that the dot products for this category of
+(
+w
+,
+c
+)
+pairs
+should be minimized, i.e. the objective
+log
+σ(−
+w
+·
+c
+)
+should be optimized in order to ensure dissimilar embeddings for these
+(
+w
+,
+c
+)
+pairs. However, minimizing the dot products of all such word-context pairs may lead to over-penalization and thus we
+introduce an objective selection parameter
+π
+o
+which controls the probability of selecting
+log
+σ(−
+w
+·
+c
+)
+versus
+log
+σ (
+w
+·
+c
+)
+. The
+objective for
+(
+w
+,
+c
+) ∈
+D
+(
+d
+)(¬
+d
+)
+is shown below in equation 6.
+l
+D
+(
+d
+)(¬
+d
+)
+=
+∑
+(
+w
+,
+c
+)∈
+D
+(
+d
+)(¬
+d
+)
+
+P
+(
+z
+< π
+o
+)
+log
+σ(−
+w
+·
+c
+)
+(6)
++
+P
+(
+z
+≥ π
+o
+)
+log
+σ (
+w
+·
+c
+)
+
+where
+z
+∼
+U
+(
+0
+,
+1
+)
+,
+U(0,1) being the uniform distribution over the interval [0,1].
+If
+z
+< π
+o
+,
+log
+σ(−
+w
+·
+c
+)
+gets optimized,
+otherwise Dis2Vec optimizes
+log
+σ (
+w
+·
+c
+)
+. Therefore, optimizing the objective in equation 6 will have a tendency to generate
+disease specific embeddings with values of
+π
+o
+≥
+0
+.
+5
+due to the reason that the objective
+log
+σ(−
+w
+·
+c
+)
+will be selected for
+optimization with a higher probability over log
+σ (
+w
+·
+c
+)
+.
+Finally, the overall objective of Dis2Vec comprising all three categories of
+(
+w
+,
+c
+)
+pairs can be defined as below.
+l
+Dis2Vec
+=
+l
+D
+(
+d
+)
++
+l
+D
+(¬
+d
+)
++
+l
+D
+(
+d
+)(¬
+d
+)
+(7)
+Similar to SGNS, the objective in equation 7 is trained in an online fashion using stochastic gradient updates over the three
+categories of
+(
+w
+,
+c
+)
+pairs.
+6/15
+Algorithm 1: Dis2Vec model
+Input
+: Unstructured corpus
+D
+= {(
+w
+,
+c
+)}
+,
+V
+Output : word embeddings w
+∀
+w
+∈
+W
+, column embeddings c
+∀
+c
+∈
+C
+1
+Categorize
+D
+into 3 types:
+D
+(
+d
+)
+= {(
+w
+,
+c
+)
+: w
+∈
+V
+∧
+c
+∈
+V
+}
+,
+D
+(¬
+d
+)
+= {(
+w
+,
+c
+)
+: w
+/
+∈
+V
+∧
+c
+/
+∈
+V
+}
+,
+D
+(
+d
+)(¬
+d
+)
+= {(
+w
+,
+c
+)
+: w
+∈
+V
+⊕
+c
+∈
+V
+}
+2
+for each
+(
+w
+,
+c
+) ∈
+D
+do
+3
+if
+(
+w
+,
+c
+) ∈
+D
+(
+d
+)
+then
+4
+train the
+(
+w
+,
+c
+)
+pair using the objective in equation 4
+5
+else if
+(
+w
+,
+c
+) ∈
+D
+(¬
+d
+)
+then
+6
+train the
+(
+w
+,
+c
+)
+pair using the objective in equation 5
+7
+else
+8
+train the
+(
+w
+,
+c
+)
+pair using the objective in equation 6
+3.4 Parameters in Dis2Vec
+Dis2Vec inherits all the parameters of SGNS, such as dimensionality (
+T
+) of the word embeddings, window size (
+L
+), number of
+negative samples (
+k
+) and context distribution smoothing (
+α
+). It also introduces two new parameters - the objective selection
+parameter (
+π
+o
+) and the sampling parameter (
+π
+s
+). The explored values for each of the aforementioned parameters are shown in
+Table 6.
+4 Experimental Evaluation
+We evaluated Dis2Vec against several state-of-the art methods.
+In this section,
+we first provide a brief description of our
+experimental setup, including the disease news corpus, human annotated taxonomy and the domain information used as the
+vocabulary
+V
+for the process. We present our experimental findings in Section 4.2 where we have compared our model against
+several baselines and also explore its applicability to emerging diseases.
+4.1 Experimental Setup
+4.1.1 Corpus
+We collected a dataset corresponding to a corpus of public health-related news articles in English extracted from HealthMap,
+7
+a
+prominent online aggregator of news articles from all over the world for disease outbreak monitoring and real-time surveillance
+of emerging public health threats. Each article contains the following information - textual content, disease tag, reported date
+and location information in the form of (lat, long) coordinates. The articles were reported during the time period 2010 to 2014
+and correspond to locations from all over the world. The textual content of each article was pre-processed by sentence splitting,
+tokenization and lemmatization via BASIS Technologies’ Rosette Language Processing (RLP) tools.
+17
+After pre-processing,
+the corpus consisting of 124850 articles was found to contain 1607921 sentences, spanning 52679298 words.
+Words that
+appeared less than 5 times in the corpus were ignored, resulting in a vocabulary of 91178 words.
+4.1.2 Human Annotated Taxonomy
+Literature reviews were conducted for each of the 39 infectious diseases of interest in order to make classifications for
+transmission methods, transmission agents, clinical symptoms and exposures or risk factors.
+Methods of transmission were first classified into 8 subcategories - direct contact, droplet, airborne, zoonotic, vectorborne,
+waterborne, foodborne, and environmental.
+For many diseases, multiple subcategories of transmission methods could be
+assigned.
+Transmission agents were classified into 8 subcategories - wild animal, fomite, fly, mosquito, bushmeat, flea, tick
+and domestic animal.
+The category of clinical symptoms was broken down into 8 subcategories: general, gastrointestinal,
+respiratory, nervous system, cutaneous, circulatory, musculoskeletal, and urogenital. A full list of the symptoms within each
+subcategory can be found in Table 2.
+For disease exposures or risk factors, 7 subcategories were assigned based on those
+listed/most commonly reported in the literature. The subcategories include: healthcare facility , healthcare worker, schoolchild,
+mass gathering, travel, animal exposure, and weakened immune system. The animal exposure category was further broken down
+into farmer, veterinarian, market and slaughter. For some diseases, there were no risk factors listed, and for other diseases,
+multiple exposures were assigned.
+4.1.3 Disease Vocabulary
+V
+Disease vocabulary
+V
+is provided as prior knowledge to Dis2Vec in order to generate disease specific word embeddings as
+explained in section 3.3.
+V
+is represented by a flat list of disease-related terms consisting of disease names (influenza, h7n9,
+7/15
+Table 2.
+Symptom categories and corresponding words.
+Symptom Category
+Words
+General
+Fever, chill, weight loss, fatigue, lethargy,
+headache
+Gastrointestinal
+Abdominal pain, nausea, diarrhea, vomit-
+ing
+Respiratory
+Cough, runny nose, sneezing, chest pain,
+sore throat, pneumonia, dyspnea
+Nervous system
+Mental status,
+paralysis,
+paresthesia,
+en-
+cephalitis, meningitis
+Cutaneous
+Rash, sore, pink eye
+Circulatory
+Hemorrhagic
+Musculoskeletal
+Joint pain, muscle pain, muscle ache
+22.4%
+50.0%
+13.8%
+13.8%
+Transmission
+Agents
+Exposures
+Symptoms
+Transmission
+Method
+Figure 3.
+Distribution of word counts corresponding to each taxonomical category in the disease vocabulary (
+V
+). Words
+related to clinical symptoms constitute the majority of
+V
+with relatively much smaller percentages of terms related to
+exposures, transmission agents and transmission methods
+plague, ebola, etc.), all possible words related to transmission methods(vectorborne, foodborne, waterborne, etc.), all possible
+words related to transmission agents (flea, domestic animal, mosquito, etc.), all possible words related to clinical symptoms
+(fever, nausea, paralysis, cough, headache, etc.) and all possible words related to exposures or risk factors (healthcare facility,
+slaughter, farmer, etc.). Total number of words in
+V
+is found to be 103. In Figure 3, we show the distribution of word counts
+associated with different taxonomical categories in the disease vocabulary (
+V
+). As depicted in Figure 3, half of the words in
+V
+are terms related to clinical symptoms followed by exposures or risk factors (
+22
+.
+4%
+), transmission methods (
+13
+.
+8%
+) and
+transmission agent(s) (13
+.
+8%).
+8/15
+4.1.4 Baselines
+We compared the following baseline models with Dis2Vec on the four disease characterization tasks.
+•
+SGNS: Unsupervised skip-gram model with negative sampling
+13
+described in section 3.2.
+•
+SGHS: skip-gram model trained using the hierarchical softmax algorithm
+13
+instead of negative sampling.
+•
+CBOW
+: Continuous bag-of-words model described in.
+12
+Unlike skip-gram models, the training objective of the CBOW model
+is to correctly predict the target word given its contexts (surrounding words).
+CBOW
+is denoted as a bag-of-words model as the
+order of words in the contexts does not have any impact on the model.
+All models (both baselines and Dis2Vec) were trained on the HealthMap corpus using a
+T
+-dimensional word embedding via
+gensim’s word2vec software.
+18
+We explored a large space of parameters for each model.
+In Table 6, we provide the list of
+parameters, the explored values for each parameter and the applicable models corresponding to each parameter. Apart from the
+parameters listed in Table 6, we also applied the sub-sampling technique developed by Mikolov et al.
+13
+to each model in order
+to counter the imbalance between common words (such as, is, of, the, a, etc.) and rare words.
+In the context of NLP, these
+common words are referred to as stop words. For more details on the sub-sampling techniques, please see Mikolov et al.
+13
+Our
+initial experiments (not reported) demonstrated that both the baselines and Dis2Vec showed improved results on the disease
+characterization tasks with sub-sampling versus without sub-sampling.
+4.1.5 Accuracy Metric
+We evaluate the automatic taxonomy generation methods such that for a taxonomical characteristic of a disease, models that
+generate similar set of terms (top words) as the human annotated ones are more preferable. As such, we use cosine similarity
+in a min-max setting between the aforementioned sets for a particular characterization category as our accuracy metric. The
+overall accuracy of a model for a category can be found by averaging the accuracy values across all diseases of interest. This is
+a bounded metric (between
+0
+and
+1
+) where higher values indicate better model performance. We can formalize the metric as
+follows.
+Let
+D
+be the disease and
+C
+be the taxonomical category under investigation.
+Furthermore, let
+C
+1
+,
+C
+2
+, · · · ,
+C
+N
+be all
+possible terms or words related to
+C
+and
+H
+1
+,
+H
+2
+, · · · ,
+H
+M
+be the human annotated words. Then the characterization accuracy
+corresponding to category C and disease D is given below in equation 8.
+Accuracy
+(
+C
+,
+D
+) =
+1
+M
+M
+∑
+j
+=
+1
+cosine
+(
+D
+,
+H
+j
+) −
+min
+i
+cosine
+(
+D
+,
+C
+i
+)
+max
+i
+cosine
+(
+D
+,
+C
+i
+) −
+min
+i
+cosine
+(
+D
+,
+C
+i
+)
+(8)
+where
+D
+,
+H
+j
+and
+C
+i
+represent the word embeddings for
+D
+,
+H
+j
+and
+C
+i
+.
+min
+i
+cosine
+(
+D
+,
+C
+i
+)
+and
+max
+i
+cosine
+(
+D
+,
+C
+i
+)
+represent the
+maximum and minimum cosine similarity values between
+D
+and the word embeddings of the terms related to
+C
+. Therefore,
+equation 8 indicates that if the human annotated word
+H
+j
+is among the top words found by the word2vec model for the category
+C, then the ratio in the numerator is high leading to high accuracy and vice versa.
+4.2 Results
+In this section we try to ascertain the efficacy and the applicability of Dis2Vec by investigating some of the pertinent questions
+related to the problem of disease characterization.
+1.
+Sample-vs-objective: which is the better method to incorporate disease vocabulary information into Dis2Vec?
+2.
+Does disease vocabulary information improve disease characterization?
+3.
+What are beneficial parameter configurations for characterizing diseases?
+4.
+Importance of taxonomical categories - how should we construct the disease vocabulary?
+5.
+Can Dis2Vec be applied to characterize emerging, endemic and rare diseases?
+Sample-vs-objective: which is the better method to incorporate disease vocabulary information into Dis2Vec?
+As
+described in Section 3,
+there are primarily two different ways by which disease vocabulary information (
+V
+) guides the
+generation of embeddings for Dis2Vec (a) by modulating negative sampling parameter (
+π
+s
+) for disease word-context pairs
+(
+(
+w
+,
+c
+) ∈
+D
+(
+d
+)
+) referred to as Dis2Vec-sample and (b) by modulating the objective selection parameter (
+π
+o
+) for non-disease
+words or non-disease contexts (
+(
+w
+,
+c
+) ∈
+D
+(
+d
+)(¬
+d
+)
+) referred to as Dis2Vec-objective.
+We investigate the importance of these
+two strategies by comparing the accuracies for each strategy individually (Dis2Vec-sample and Dis2Vec-objective) as well as
+combined together (Dis2Vec-combined) under the best parameter configuration for a particular task in Table 3. As can be seen,
+9/15
+Table 3.
+Comparative performance evaluation of Dis2Vec-combined against Dis2Vec-objective and Dis2Vec-sample across the
+4 characterization tasks under the best parameter configuration for that model and task combination. The value in each cell
+represents the overall accuracy across the 39 diseases for that particular model and characterization task. We use equation 8 as
+the accuracy metric in this table.
+Characterization tasks
+Dis2Vec-sample
+Dis2Vec-objective
+Dis2Vec-combined
+Symptoms
+0.635
+0.945
+0.940
+Exposures
+0.590
+0.540
+0.597
+Transmission methods
+0.794
+0.754
+0.734
+Transmission agents
+0.505
+0.506
+0.516
+Overall average accuracy
+0.631
+0.686
+0.697
+Table 4.
+Comparative performance evaluation of Dis2Vec against SGNS, SGHS and CBOW across the 4 characterization tasks
+under the best parameter configuration for that model and task combination. The value in each cell represents the overall
+accuracy across the 39 diseases for that particular model and characterization task. We use equation 8 as the accuracy metric in
+this table.
+Characterization tasks
+CBOW
+SGHS
+SGNS
+Dis2Vec
+Symptoms
+0.498
+0.560
+0.620
+0.945
+Exposures
+0.383
+0.498
+0.605
+0.597
+Transmission methods
+0.481
+0.765
+0.792
+0.794
+Transmission agents
+0.274
+0.466
+0.498
+0.516
+Overall average accuracy
+0.409
+0.572
+0.629
+0.713
+no single strategy is best across all tasks. Henceforth, we select the best performing strategy for a particular task as our Dis2Vec
+in the next Table 4.
+Does disease vocabulary information improve disease characterization?
+Dis2Vec was designed to incorporate disease
+vocabulary information in order to guide the generation of disease specific word embeddings.
+To evaluate the importance
+of such vocabulary information in Dis2Vec, we compare the performance of Dis2Vec against the baseline word2vec models
+described in section 4.1.4 under the best parameter configuration for a particular task. These baseline models do not permit
+incorporation of any vocabulary information due to their unsupervised nature. Table 4 presents the accuracy of the models for
+the 4 disease characterization tasks - symptoms, exposures, transmission methods and transmission agents. As can be seen,
+Dis2Vec performs the best for 3 tasks and in average. It is also interesting to note that Dis2Vec achieves higher performance
+gain over the baseline models for the symptoms category than the other categories. The superior performance of Dis2Vec in
+the symptoms category can be attributed to two factors - (a) higher ercentage of symptom words in the disease vocabulary
+V
+(see Figure 3) and (b) higher occurrences of symptom words in the HealthMap news corpus.
+News articles reporting a
+disease outbreak generally tend to focus more on the symptoms related to the disease rather than the other categories. Given the
+functionality of Dis2Vec, higher occurrences of symptom terms in outbreak news reports will lead to generation of efficient
+word embeddings for characterizing disease symptoms.
+Table 5.
+Comparative performance evaluation of Dis2Vec with full vocabulary against each of the 6 conditions of Dis2Vec
+with a truncated vocabulary across the 4 characterization tasks where the truncated vocabulary consists of disease names and all
+possible terms related to a particular taxonomical category. We use equation 8 as the accuracy metric in this table.
+Characterization tasks
+Dis2Vec
+(Exposures)
+Dis2Vec
+(Transmission methods)
+Dis2Vec
+(Transmission agents)
+Dis2Vec
+(Symptoms)
+Dis2Vec
+(full vocabulary)
+Symptoms
+0.597
+0.581
+0.165
+0.883
+0.945
+Exposures
+0.554
+0.557
+0.315
+0.416
+0.597
+Transmission methods
+0.748
+0.768
+0.517
+0.455
+0.794
+Transmission agents
+0.446
+0.459
+0.467
+0.457
+0.516
+What are beneficial parameter configurations for characterizing diseases?
+To identify which parameter settings are
+beneficial for characterizing diseases, we looked at the best parameter configuration of all the 6 models on each task.
+We
+then counted the number of times each parameter setting was chosen in these configurations (see Table 6).
+We compared
+10/15
+Table 6.
+Comparison of different parameter settings for each model, measured by the number of characterization tasks in
+which the best configuration had that parameter setting. Non-applicable combinations are marked by ‘NA’
+Method
+T
+L
+k
+α
+π
+s
+π
+o
+300 : 600
+5 : 10 : 15
+1 : 5 : 15
+0
+.
+75 : 1
+0
+.
+3 : 0
+.
+5 : 0
+.
+7
+0
+.
+3 : 0
+.
+5 : 0
+.
+7
+Dis2Vec-combined
+2 : 2
+3 : 1 : 0
+2 : 1 : 1
+1 : 3
+4 : 0 : 0
+0 : 2 : 2
+Dis2Vec-sample
+2 : 2
+2 : 1 : 1
+1 : 1 : 2
+4 : 0
+1 : 2 : 1
+NA
+Dis2Vec-objective
+3 : 1
+2 : 2 : 0
+1 : 1 : 2
+3 : 1
+NA
+2 : 0 : 2
+SGNS
+2 : 2
+2 : 2 : 0
+0 : 2 : 2
+2 : 2
+NA
+NA
+SGHS
+3 : 1
+1 : 0 : 3
+NA
+NA
+NA
+NA
+CBOW
+0 : 4
+0 : 4 : 0
+NA
+NA
+NA
+NA
+Table 7.
+Comparative performance evaluation of Dis2Vec against SGNS, SGHS and CBOW across the 4 characterization tasks
+for each class of diseases (emerging, endemic and rare) under the best parameter configuration for a particular
+{
+disease class,
+task, model
+}
+combination. We use equation 8 as the accuracy metric in this table.
+Class
+Characterization Tasks
+CBOW
+SGHS
+SGNS
+Dis2Vec
+Emerging
+Symptoms
+0.589
+0.671
+0.722
+0.977
+Exposures
+0.356
+0.495
+0.516
+0.679
+Transmission methods
+0.407
+0.885
+0.898
+0.945
+Transmission agents
+0.528
+0.587
+0.795
+0.975
+Endemic
+Symptoms
+0.453
+0.583
+0.671
+0.930
+Exposures
+0.421
+0.512
+0.642
+0.631
+Transmission methods
+0.472
+0.820
+0.851
+0.856
+Transmission agents
+0.164
+0.399
+0.408
+0.415
+Rare
+Symptoms
+0.506
+0.536
+0.599
+0.949
+Exposures
+0.377
+0.525
+0.616
+0.670
+Transmission methods
+0.503
+0.760
+0.755
+0.775
+Transmission agents
+0.320
+0.522
+0.512
+0.515
+standard settings of each parameter as explored in previous research.
+11
+For the new parameters
+π
+s
+and
+π
+o
+introduced by Dis2Vec,
+we chose the values
+0
+.
+3
+,
+0
+.
+5
+and
+0
+.
+7
+in order to analyze the impact of these parameters with values
+<
+0
+.
+5
+and
+≥
+0
+.
+5
+.
+For
+Dis2Vec-objective and Dis2Vec-combined, some trends emerge regarding the parameter
+π
+o
+that these two models consistently
+benefit from values of
+π
+o
+≥
+0
+.
+5
+validating our claims in section 3.3 that when
+π
+o
+≥
+0
+.
+5
+, disease words and non-disease words
+get scattered from each other in the vector space,
+thus tending to generate disease specific embeddings.
+However,
+for
+π
+s
+we observe mixed trends.
+As expected, Dis2Vec-sample benefits from higher values of sampling parameter
+π
+s
+≥
+0
+.
+5
+.
+But
+Dis2Vec-combined seems to prefer lower values of
+π
+s
+<
+0
+.
+5
+and higher values of
+π
+o
+≥
+0
+.
+5
+for the disease characterization tasks.
+For the smoothing parameter(
+α
+),
+all the applicable models prefer smoothed unigram distribution (
+α =
+0
+.
+75
+) for negative
+sampling except Dis2Vec-combined which is in favor of unsmoothed distribution (
+α =
+1
+.
+0
+) for characterizing diseases. For the
+number of negative samples
+k
+, all the applicable models seem to benefit from
+k
+>
+1
+except Dis2Vec-combined which seems to
+prefer
+k
+=
+1
+. For the window size (
+L
+), all the models prefer smaller-sized context windows (either 5 or 10) except SGHS which
+prefers larger-sized windows (
+L
+>
+10
+) for characterizing diseases. Finally, regarding the dimensionality (
+T
+) of the embeddings,
+Dis2Vec-combined, Dis2Vec-sample and SGNS are in equal favor of both 300 and 600 dimensions.
+Dis2Vec-objective and
+SGHS prefer 300 dimensions and CBOW is in favor of 600 dimensions for characterizing diseases.
+Importance of taxonomical categories - how should we construct the disease vocabulary?
+We followup our previous
+analysis by investigating the importance of words related to each taxonomical category in constructing the disease vocabulary
+towards final characterization accuracy. To evaluate a particular category, we used a truncated disease vocabulary consisting of
+disease names and the words in the corresponding category to drive the discovery of word embeddings in Dis2Vec under the best
+parameter configuration for that category. We compared the accuracy of each of these conditions (Dis2Vec (exposures), Dis2Vec
+(transmission methods), Dis2Vec (transmission agents), Dis2Vec (symptoms)) against Dis2Vec (full vocabulary) across the 4
+characterization tasks. Table 5 presents our results for this analysis and provides multiple insights as follows. (a) Constructing
+the vocabulary with words related to all the categories leads to better characterization across all the tasks.
+(b) As expected,
+Dis2Vec
+(symptoms) is the second best performing model for the symptoms category but it’s performance is degraded for other
+tasks. The same goes for Dis2Vec (transmission methods) and Dis2Vec (transmission agents). (c) Therefore, it indicates that
+11/15
+in order to achieve reasonable characterization accuracy for a category, we need to supply at least the words related to that
+category along with the disease names in constructing the vocabulary.
+Can Dis2Vec be applied to characterize emerging, endemic and rare diseases?
+We classified the 39 diseases of interest
+into 3 classes as follows.
+For classifying each disease, we plotted the time series of the counts of HealthMap articles with
+disease tag equal to the corresponding disease.
+•
+Endemic
+: We considered a disease as endemic if the counts of articles were consistently high for all years with repeating
+shapes. E.g.- rabies, avian influenza, west nile virus.
+•
+Emerging
+: We considered a disease as emerging if the counts of articles were historically low, but have peaked in recent
+years. E.g.- Ebola, H7N9, MERS.
+•
+Rare
+: We considered a disease as rare if the counts were consistently low for all years with or without sudden spikes. E.g.-
+plague, chagas, japanese encephalitis. We also considered a disease as rare if the counts of articles were high in 2010/2011, but
+have since fallen down and depicted consistently low counts. E.g.- tuberculosis.
+Following classification, we found 4 emerging diseases, 12 endemic diseases and 23 rare diseases.
+The full list of the
+diseases under each class and the time series plots of the HealthMap article counts for these diseases can be accessed at
+Dis2Vec
+−
+supplementary
+. In Table 7, we compared the accuracy of Dis2Vec against the baseline word2vec models for each
+class of diseases across the 4 characterization tasks under the best parameter configuration for a particular
+{
+disease class,
+task, model
+}
+combination. It can be seen that Dis2Vec is the best performing model for majority of the
+{
+disease class, task
+}
+combinations except
+{
+endemic, exposures
+}
+and
+{
+rare, transmission agents
+}
+.
+It is interesting to note that for the symptoms
+category, Dis2Vec performs better than the baseline models across all the disease classes. Irrespective of disease class, news
+reports generally mention the symptoms of the disease while reporting an outbreak.
+As the characteristics of the emerging
+diseases are relatively unknown w.r.t. endemic and rare, news media reports also tend to focus on other categories (exposures,
+transmission methods, transmission agents) apart from the symptoms to create awareness among the general public. Therefore,
+Dis2Vec performs better than the baseline models across all the categories for the emerging diseases.
+For endemic and rare
+diseases, Dis2Vec outperforms the baseline models w.r.t. the symptoms category.
+For other categories, Dis2Vec performs
+better overall, although the performance gain is not high in comparison to the symptoms. News media reports tend to neglect
+categories other than symptoms while reporting outbreaks of endemic and rare diseases. In Figure 4, we show the top words
+found for each category of an emerging disease (H7N9), an endemic disease (avian influenza) and a rare disease (plague) across
+all the models.
+The human annotated words corresponding to each category of these diseases can be found in Table 1.
+We
+selected these 3 diseases due to their public health significance and the fact that these diseases have complete coverage across
+all the taxonomical categories (see Table 1).
+It is interesting to note that for H7N9, the top words found by Dis2Vec for the
+symptoms category contain all the human annotated words fever, cough and pneumonia, while the top words found by SGNS
+only contain the word fever. For exposures (H7N9), Dis2Vec is able to capture three human annotated words animal exposure,
+farmer, slaughter.
+However, SGNS is only able to capture the word animal.
+For the symptoms category of the rare disease
+plague, Dis2Vec is able to detect three human annotated words sore, fever and headache with SGNS only being able to detect
+the word fever. Moreover, Dis2Vec is able to characterize the transmission method of plague as vectorborne with SGNS failing
+to do so.
+5 Conclusions
+Classical word2vec methods such as SGNS and SGHS have been applied to solve a variety of linguistic tasks with considerable
+accuracy. However, such methods fail to generate satisfactory embeddings for highly specific domains such as healthcare where
+uncovering the relationships with respect to domain specific words is of greater importance than the non-domain ones. These
+algorithms are by design unsupervised and do not permit the inclusion of domain information to find interesting embeddings.
+In this paper, we have proposed Dis2Vec, a disease specific word2vec framework that given an unstructured news corpus and
+domain knowledge in terms of important words, can find interesting disease characterizations. We demonstrated the strength of
+our model by comparing it against three classical word2vec methods on four disease characterization tasks. Dis2Vec exhibits
+the best overall accuracy for 3 tasks across all the diseases and in general, its relative performance improvement is found to
+be empirically dependent on the amount of supplied domain knowledge.
+Consequently, Dis2Vec works especially well for
+characteristics with more domain knowledge (symptoms) and is found to be a promising tool to analyze different class of
+diseases viz. emerging, endemic and rare. In future, we aim to analyze a greater variety of diseases and try to ascertain common
+relationships between such diseases across different geographical regions.
+12/15
+6 Supplementary Data
+The disease specific word embeddings generated by Dis2Vec from the HealthMap corpus can be accessed at
+Dis2Vec-
+supplementary.
+References
+1.
+M. Baroni, G. Dinu, and G. Kruszewski.
+Don’t count, predict! a systematic comparison of context-counting vs. context-
+predicting semantic vectors.
+In ACL (1), pages 238–247, 2014.
+2.
+M. Baroni and A. Lenci.
+Distributional memory:
+A general framework for corpus-based semantics.
+Computational
+Linguistics, 36(4):673–721, 2010.
+3.
+Y. Bengio, H. Schwenk, J.-S. Sen
+´
+ecal, F. Morin, and J.-L. Gauvain.
+Neural probabilistic language models.
+In Innovations
+in Machine Learning, pages 137–186. Springer, 2006.
+4.
+P. Chakraborty, N. Ramakrishnan, et al.
+Forecasting a moving target: Ensemble models for ILI case count predictions.
+In
+Proceedings of the 2014 SIAM International Conference on Data Mining, Philadelphia, Pennsylvania, USA, April 24-26,
+2014, pages 262–270, 2014.
+5.
+R. Collobert and J. Weston.
+A unified architecture for natural language processing: Deep neural networks with multitask
+learning.
+In Proceedings of the 25th international conference on Machine learning, pages 160–167. ACM, 2008.
+6.
+R. Collobert, J. Weston, L. Bottou, M. Karlen, K. Kavukcuoglu, and P. Kuksa.
+Natural language processing (almost) from
+scratch.
+The Journal of Machine Learning Research, 12:2493–2537, 2011.
+7.
+C. C. Freifeld, K. D. Mandl, B. Y. Reis, and J. S. Brownstein.
+Healthmap: global infectious disease monitoring through
+automated classification and visualization of internet
+media reports.
+Journal
+of
+the American Medical
+Informatics
+Association, 15(2):150–157, 2008.
+8.
+O. Levy and Y. Goldberg.
+Dependency-based word embeddings.
+In Proceedings of the 52nd Annual Meeting of the
+Association for Computational Linguistics, ACL 2014, June 22-27, 2014, Baltimore, MD, USA, Volume 2: Short Papers,
+pages 302–308, 2014.
+9.
+O. Levy and Y. Goldberg.
+Linguistic regularities in sparse and explicit word representations.
+In Proceedings of the
+Eighteenth Conference on Computational Natural Language Learning, CoNLL 2014, Baltimore, Maryland, USA, June
+26-27, 2014, pages 171–180, 2014.
+10.
+O. Levy and Y. Goldberg.
+Neural word embedding as implicit matrix factorization.
+In Advances in Neural Information
+Processing Systems 27:
+Annual Conference on Neural Information Processing Systems 2014,
+December 8-13 2014,
+Montreal, Quebec, Canada, pages 2177–2185, 2014.
+11.
+O. Levy, Y. Goldberg, and I. Dagan.
+Improving distributional similarity with lessons learned from word embeddings.
+TACL, 3:211–225, 2015.
+12.
+T. Mikolov,
+K. Chen,
+G. Corrado,
+and J. Dean.
+Efficient estimation of word representations in vector space.
+CoRR,
+abs/1301.3781, 2013.
+13.
+T. Mikolov, I. Sutskever, K. Chen, G. S. Corrado, and J. Dean.
+Distributed representations of words and phrases and
+their compositionality.
+In Advances in Neural Information Processing Systems 26: 27th Annual Conference on Neural
+Information Processing Systems 2013. Proceedings of a meeting held December 5-8, 2013, Lake Tahoe, Nevada, United
+States., pages 3111–3119, 2013.
+14.
+T. Mikolov, W. Yih, and G. Zweig.
+Linguistic regularities in continuous space word representations.
+In Human Language
+Technologies: Conference of the North American Chapter of the Association of Computational Linguistics, Proceedings,
+June 9-14, 2013, Westin Peachtree Plaza Hotel, Atlanta, Georgia, USA, pages 746–751, 2013.
+15.
+A.
+Mnih and G.
+E.
+Hinton.
+A scalable hierarchical distributed language model.
+In Advances in neural information
+processing systems, pages 1081–1088, 2009.
+16.
+J. Pennington, R. Socher, and C. D. Manning.
+Glove: Global vectors for word representation.
+In Proceedings of the 2014
+Conference on Empirical Methods in Natural Language Processing, EMNLP 2014, October 25-29, 2014, Doha, Qatar, A
+meeting of SIGDAT, a Special Interest Group of the ACL, pages 1532–1543, 2014.
+17.
+N. Ramakrishnan, P. Butler, S. Muthiah, et al.
+’beating the news’ with embers: Forecasting civil unrest using open source
+indicators.
+In Proceedings of the 20th ACM SIGKDD International Conference on Knowledge Discovery and Data Mining,
+pages 1799–1808, New York, NY, USA, 2014. ACM.
+13/15
+18.
+R.
+ˇ
+Reh
+˚
+u
+ˇ
+rek and P. Sojka.
+Software Framework for Topic Modelling with Large Corpora.
+In Proceedings of the LREC
+2010 Workshop on New Challenges for NLP Frameworks,
+pages 45–50,
+Valletta,
+Malta,
+May 2010.
+ELRA.
+http:
+//is.muni.cz/publication/884893/en
+.
+19.
+T. Rekatsinas, S. Ghosh, S. R. Mekaru, E. O. Nsoesie, J. S. Brownstein, L. Getoor, and N. Ramakrishnan.
+Sourceseer:
+Forecasting rare disease outbreaks using multiple data sources.
+In Proceedings of the 2015 SIAM International Conference
+on Data Mining, pages 379–387.
+20.
+J. Turian, L. Ratinov, and Y. Bengio.
+Word representations: a simple and general method for semi-supervised learning.
+In
+Proceedings of the 48th annual meeting of the association for computational linguistics, pages 384–394. Association for
+Computational Linguistics, 2010.
+21.
+P. D. Turney and P. Pantel. From frequency to meaning: Vector space models of semantics. Journal of Artificial Intelligence
+Research, 37:141–188, 2010.
+22.
+Z. Wang, P. Chakraborty, S. R. Mekaru, J. S. Brownstein, J. Ye, and N. Ramakrishnan.
+Dynamic poisson autoregression
+for influenza-like-illness case count prediction.
+In Proceedings of the 21th ACM SIGKDD International Conference on
+Knowledge Discovery and Data Mining, pages 1285–1294. ACM, 08 2015.
+14/15
+H7N9
+Avian influenza
+Plague
+Dis
+2
+Vec
+SGNS
+SGHS
+CBOW
+diar r he a
+fe ve r
+he m orrhag ic
+c oug h
+pneumonia
+e nc e p ha litis
+s ne e zing
+he m orrhag ic
+fe ve r
+m e ntal_s tatus
+he m orrhag ic
+fe ve r
+e nc e p ha litis
+pneumonia
+dys pnea
+diar r he a
+p a r a lys is
+naus ea
+s or e _thr oat
+runny_nos e
+H 7N 9
+(a)
+Symptoms
+Dis
+2
+Vec
+SGNS
+SGHS
+CBOW
+c oug h
+c h ill
+pneumonia
+e nc e p ha litis
+r as h
+he m orrhag ic
+m e ntal_s tatus
+par e s the s ia
+s ne e zing
+e nc e p ha litis
+he m orrhag ic
+dys pnea
+pneumonia
+fe ve r
+le thar g y
+s ne e zing
+pink_e ye
+c he s t_pain
+runny_nos e
+m us c le _ac he
+A V IA N _IN F L U E N Z A
+(b)
+Symptoms
+Dis
+2
+Vec
+SGNS
+SGHS
+CBOW
+headac he
+s or e
+he m orrhag ic
+e nc e p ha litis
+diar r he a
+s ne e zing
+fe ve r
+he m orrhag ic
+pink_e ye
+fe ve r
+le thar g y
+m e ntal_s tatus
+e nc e p ha litis
+pneumonia
+he m orrhag ic
+fe ve r
+pneumonia
+r as h
+p a r a lys is
+par e s the s ia
+joint_p a in
+m us c le _pain
+vom iting
+par e s the s ia
+he m orrhag ic
+runny_nos e
+s ne e zing
+m e ntal_s tatus
+P L AG U E
+(c)
+Symptoms
+Dis
+2
+Vec
+SGNS
+SGHS
+CBOW
+ve te r ina r ia n
+anim al
+e xpos ure
+s laug hte r
+farm e r
+he althc ar e _wor ke r
+tr a ve l
+ve te r ina r ia n
+anim al
+s c hoolc hild
+he althc ar e _wor ke r
+e xpos ure
+anim al
+tr a ve l
+m as s _g athe ring
+s laug hte r
+weakened_immune_s ys tem
+tr a ve l
+m arket
+he althc ar e _wor ke r
+H 7N 9
+(d)
+Exposures
+Dis
+2
+Vec
+SGNS
+SGHS
+CBOW
+m as s _g athe ring
+s laug hte r
+anim al
+ve te r ina r ia n
+he a lthc a r e _fa c ility
+s laug hte r
+m as s _g athe ring
+anim al
+ve te r ina r ia n
+he a lthc a r e _fa c ility
+s laug hte r
+m as s _g athe ring
+anim al
+he althc ar e _wor ke r
+e xpos ure
+anim al
+m as s _g athe ring
+farm e r
+ve te r ina r ia n
+s laug hte r
+A V IA N _IN F L U E N Z A
+(e)
+Exposures
+Dis
+2
+Vec
+SGNS
+SGHS
+CBOW
+tr a ve l
+he a lthc a r e _fa c ility
+ve te r ina r ia n
+he althc ar e _wor ke r
+c hild
+anim al
+m as s _g athe ring
+tr a ve l
+e xpos ure
+ve te r ina r ia n
+anim al
+ve te r ina r ia n
+e xpos ure
+s c hoolc hild
+m as s _g athe ring
+m arket
+e xpos ure
+ve te r ina r ia n
+m as s _g athe ring
+he a lthc a r e _fa c ility
+P L AG U E
+(f)
+Exposures
+Dis
+2
+Vec
+SGNS
+SGHS
+CBOW
+wild_anim al
+fle a
+dom e s tic _anim al
+bus hmeat
+fom ite
+bus hmeat
+bus hmeat
+dom e s tic _ani
+H 7 N 9
+(g)
+Transmission Agents
+Dis
+2
+Vec
+SGNS
+SGHS
+CBOW
+dom e s tic _anim al
+wild_anim al
+dom e s tic _anim al
+wild_anim al
+dom e s tic _anim al
+fom ite
+m os q uito
+fly
+A V IA N _IN F L U E N Z A
+(h)
+Transmission Agents
+Dis
+2
+Vec
+SGNS
+SGHS
+CBOW
+fle a
+bus hmeat
+bus hmeat
+fle a
+fle a
+bus hmeat
+wild_anim al
+tic k
+P L AG U E
+(i)
+Transmission Agents
+Dis
+2
+Vec
+SGNS
+SGHS
+CBOW
+air b or ne
+zoonotic
+zoonotic
+air b or ne
+zoonotic
+air b or ne
+dr ople t
+ve c tor b or ne
+H 7N 9
+(j)
+Transmission Method
+Dis
+2
+Vec
+SGNS
+SGHS
+CBOW
+zoonotic
+air b or ne
+zoonotic
+ve c tor b or ne
+zoonotic
+dir e c t_c onta c t
+e nvironm e ntal
+ve c tor b or ne
+A V IA N _IN F L U E N Z A
+(k)
+Transmission Method
+Dis
+2
+Vec
+SGNS
+SGHS
+CBOW
+ve c tor b or ne
+dir e c t_c onta c t
+dir e c t_c onta c t
+air b or ne
+wate rb orne
+zoonotic
+e nvironm e ntal
+dr ople t
+P L AG U E
+(l)
+Transmission Method
+Figure 4.
+Case study for emerging, endemic and rare diseases: Disease characterization accuracy plot for Dis2Vec (first
+quadrant, red), SGNS (second quadrant, blue), SGHS (third quadrant, green), and CBOW (fourth quadrant, orange) w.r.t. H7N9
+(left, emerging), avian influenza (middle, endemic) and plague (right, rare). The shaded area in a quadrant indicates the cosine
+similarity (scaled between 0 and 1) of the top words found for the category of interest using corresponding model, as evaluated
+against the human annotated words (see Table 1). The top words found for each model is shown in the corresponding quadrant
+with radius equal to its average similarity with the human annotated words for the disease. Dis2Vec shows best overall
+performance with noticeable improvements for symptoms w.r.t. all diseases.
+15/15

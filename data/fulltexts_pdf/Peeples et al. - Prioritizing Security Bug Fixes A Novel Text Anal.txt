@@ -1,0 +1,1320 @@
+﻿Prioritizing Security Bug Fixes: 
+A Novel Text Analytics Approach
+Cody R. Peeples 
+Cisco Systems, Inc. 
+7200 Kit Creek Road 
+Res. Triangle Pk., NC, USA 27709 
++1-919-392-6383 
+copeeple@cisco.com 
+Pete Rotella 
+Cisco Systems, Inc. 
+7200 Kit Creek Road 
+Res. Triangle Pk., NC, USA 27709 
++1-919-392-3854 
+protella@cisco.com 
+Mark-David McLaughlin 
+Cisco Systems, Inc. 
+200 Beaver Brook Road 
+Boxborough, MA, USA 01719 
++1-978-936-0188 
+marmclau@cisco.com 
+Abstract – The Cisco defect tracking database contains data on 
+thousands of bugs contained in millions of lines of source code. 
+The likelihood of an attacker finding and exploiting any given 
+bug is low; however Cisco is focused on further reducing this 
+risk. 
+Rich 
+semantic 
+content 
+of 
+natural 
+language 
+bug 
+descriptions may contain clues as to whether or not a bug is 
+likely to be exploitable. In this paper, we use the word2vec 
+semi-supervised 
+language 
+embedding 
+technique 
+with 
+paragraph vectors to capture the semantic content of bug 
+descriptions in numeric vectors. Positive training labels were 
+applied to the vectors corresponding to bugs submitted by a 
+group of internal security testers who have detailed and direct 
+knowledge 
+of 
+attacker 
+motives 
+and 
+techniques. 
+Negative 
+training labels were assigned to a sample of bugs that had been 
+evaluated 
+by 
+security 
+experts 
+as 
+having 
+no 
+security 
+implications. These positive and negative labels were used as 
+the 
+dependent 
+variables 
+in 
+a 
+logistic 
+regression 
+modeling 
+exercise, with each element of the bug descriptions vector as a 
+separate independent variable. Subsequent predictions using 
+the logistic regression model might be thought of, or described 
+as, a semantic quality score. This semantic quality score was 
+combined with the Common Vulnerability Scoring System, 
+Version 2 (CVSSv2) score to arrive at a vulnerability risk 
+metric for each individual bug. This risk metric (called "Risk 
+Index Plus") was found to agree with subject matter expert 
+vulnerability risk evaluations better than the metric ("Risk 
+Index") previously used at the corporate level to prioritize 
+security bug fixes
+. 
+Keywords – Software security, vulnerabilities, customer risk, 
+modeling, text analysis, prediction, customer experience. 
+I. INTRODUCTION 
+Durin
+g the final stage of testing and bug fixing for a new 
+software release, engineering and release management teams 
+tend to emphasize reducing the backlog of key bugs, which 
+include: 
+•
+Showstoppers 
+•
+Teststoppers 
+•
+Severity 1 bugs 
+•
+Operationally-impacting bugs 
+•
+Customer-found bugs 
+•
+Highly vulnerable security bugs. 
+However, 
+since 
+key 
+reliability 
+bugs 
+are 
+far 
+more 
+frequently discovered than highly vulnerable security bugs, 
+the tendency among our industry's engineering and release 
+management teams (and, often, quality assurance teams) is 
+to primarily focus on reliability, rather than security (except 
+for 
+the 
+most 
+critical 
+security 
+bugs). 
+Inadequate 
+fix 
+prioritization of known security bugs that have not reached 
+critical status is common among development teams in the 
+software industry. ("Critical," here, is defined in terms of 
+the likelihood of exploitability and the resulting deleterious 
+impact of the exploit.) To ameliorate this situation, the Cisco 
+Security Research team developed a "Risk Index" model to 
+evaluate the risk of each known vulnerability that has not yet 
+been fixed. 
+This initial Risk Index model includes, in addition to the 
+CVSSv2 score [7], a linear combination of several other 
+factors: Age of the bug, whether the bug has already been 
+publicly disclosed, and the market characteristics of the 
+product. The coefficients of all four of these independent 
+variables in the model were developed based on expert 
+opinion (by the Security Research team), and had not been 
+empirically tested prior to our study. As an initial attempt, 
+this Risk Index model has worked fairly well in practice – 
+there is general agreement that the exploitability/impact 
+index ranks the risk that the vulnerability presents fairly 
+well, and therefore is a reasonable way to prioritize bug 
+fixing efforts for the security issues. However, the Security 
+Research 
+team 
+and 
+the 
+engineering 
+teams 
+have 
+been 
+uncomfortable with the model for several reasons: 
+•
+Were the correct risk factors identified? Are there 
+important factors that have been left out? 
+•
+Are the current factors properly weighted? 
+•
+Can the importance of the existing factors be 
+empirically verified? 
+•
+Given the rapid changes in the software security 
+landscape, can a method to periodically modify 
+the model be developed to keep up with these 
+changes? 
+•
+Are there other factors that should be examined? 
+The text fields included in the bug reports, for 
+example, usually contain extensive information 
+about the bug and the context of its discovery, 
+impact, and remediation. 
+In an attempt to improve on the model in these important 
+respects, we designed and developed an empirically-derived 
+model that we hoped would provide a stronger mathematical 
+basis to the initiative, and that we also hoped would augment 
+the "exploitability" idea that we believe is underrepresented 
+in the original Risk Index model and in CVSSv2 scoring. 
+Prior work in the Department of Information Engineering 
+and Computer Science at the University of Trento, Italy, 
+suggests that CVSSv2 scoring does not adequately factor in 
+the likelihood of the exploitation aspect of vulnerability risk, 
+but does capture the impact aspect relatively well [1,2]. 
+CVSSv2 is the most influential factor in the Risk Index 
+model. 
+The result of this recent work is what we call the "Risk 
+Index Plus" model. We discovered during modeling and 
+validation 
+that 
+the 
+age, 
+product 
+characteristics, 
+and 
+disclosure status elements of the linear combination of 
+factors that we had included in the original Risk Index model 
+are not appreciably improving the ability of CVSSv2 alone 
+to assess meaningful risk. But the additional textual analysis 
+method we developed for the Risk Index Plus model, using 
+the natural language "description" field in the bug system, 
+does appreciably augment the CVSSv2 data in terms of 
+accurate assessment of risk, particularly the exploitability 
+component of risk. In other words, the Risk Index Plus 
+model is better than either CVSSv2 or the original Risk 
+Index 
+model 
+in 
+properly 
+assigning 
+a 
+quantitative 
+risk 
+estimate to each known security bug
+. 
+II. RISK DEFINITION & MEASUREMENT 
+How did we define "risk" in our commercial software 
+delivery context? Our team used a simple definition for this 
+and 
+related 
+studies: 
+"Risk" 
+is 
+the 
+likelihood 
+that 
+a 
+vulnerability exists in an area of code that can be exploited, 
+combined with the estimated impact of a potential exploit in 
+that code region. But are there reliable and accurate ways to 
+quantify risk in an environment in which there are few 
+known exploits, such as in the routing and switching market? 
+Our immediate need was to develop and implement a model 
+that is specific to our own corporate software environment; 
+therefore, there exists a major data limitation: We are unable 
+to rely on the use of publicly-available exploit data and bug 
+text fields from outside sources, since exploitation potential 
+often appears to be specific to not only our company, but also 
+specific to individual systems we develop. Using data from 
+a wide range of companies and open source is certainly a 
+worthwhile exercise, since a generalized model, if do-able, 
+would offer clues to all companies and organizations as to 
+how to improve software security, but high specificity to our 
+particular 
+environment 
+is 
+a 
+more 
+pressing 
+immediate 
+concern. To address the general need, a follow-on study is 
+designed to use multiple corporate sources of exploit data. 
+To 
+identify 
+and 
+quantify 
+risk 
+in 
+our 
+corporate 
+environment, we have relied on assessments from a team of 
+Security 
+Incident 
+Responders. 
+These 
+highly-trained 
+and 
+experienced analysts focus on assessing software security 
+situations, on identifying remedies to the product teams, and 
+on making recommendations to security executives and 
+engineering teams regarding possible improvements to the 
+overall 
+Cisco 
+Security 
+Development 
+Lifecycle 
+(CSDL) 
+process 
+and 
+its 
+constituent 
+practices 
+(such 
+as 
+threat 
+modeling, protocol testing, and penetration testing). 
+The Security Incident Responders have been essential 
+evaluators of risk for our project, particularly during the 
+validation phase of the model development. We asked seven 
+Security 
+Incident 
+Responders 
+to 
+assess 
+the 
+risk 
+to 
+the 
+customers of 20 randomly selected bugs, from the bug 
+population that had previously been referred by Engineering 
+and other groups, and to quantify the estimated risk to the 
+customers. They were not instructed to use CVSSv2 or the 
+Risk Index model ratings, but instead, they were asked to 
+classify the risk each bug represented based on the definition 
+previously provided in this Section. This team also gathered 
+any data they felt was necessary, which may have included 
+bug 
+age, 
+product 
+type, 
+and 
+disposition 
+category. 
+The 
+Security Incident Responders were asked, subsequent to the 
+Risk Index calculations, to rate, on a Likert scale of 1.0 to 
+10.0 
+(with 
+10.0 
+being 
+the 
+most 
+risky 
+situation), 
+a 
+likelihood/impact aggregate risk value for each of the 20 
+bugs. How much of a risk does each bug, if left unfixed, 
+pose for the customers? These ratings were used to compare 
+the results of the Risk Index and Risk Index Plus models, and 
+also to validate the improvements seen with Risk Index Plus. 
+We 
+purposely 
+refrained 
+from 
+giving 
+the 
+Security 
+Incident Responders guidance or advice on how to do their 
+individual risk ratings – instead of relying on our authors' 
+judgment, 
+we 
+relied 
+on 
+the 
+judgment 
+of 
+these 
+senior 
+engineers who evaluate and gauge risk, using their own 
+personal definitions, every day on their regular job. There is 
+variability in the ratings results, as we expected – several of 
+the seven are highly-experienced, several are more thorough 
+than the others in digging into the code, and several are more 
+cognizant of the implications of an exploitable situation. But 
+at 
+the 
+aggregate 
+level, 
+we 
+believe 
+that 
+the 
+Incident 
+Responders characterize the riskiness of any bug very well. 
+They are routinely in touch with actual customer situations, 
+including 
+real-time 
+assessments 
+of 
+the 
+impact 
+to 
+the 
+customers. In addition, they work closely with the internal 
+engineers who diagnose, resolve, and document the history 
+of the security vulnerabilities. 
+A follow-on validation study is underway to include 
+three Security Managers (in addition to the seven Security 
+Incident Responders) in order to add a wider perspective to 
+all the assessments. A sample of 30 previously-rated bugs 
+(i.e., rated using the original Risk Index model, which 
+includes CVSSv2 scoring) is being used in this second 
+validation 
+exercise. 
+We 
+hope 
+to 
+improve 
+the 
+model's 
+accuracy by adding substantially more validation data and 
+by expanding the perspective on the extent of risk in practice 
+by including the Security Managers' input
+. 
+III. MODEL CONSTRUCTION 
+In this Section, we describe in some detail the original Risk 
+Index model and the follow-on model, Risk Index Plus. 
+A. Risk Index Model 
+The "Risk Index Plus" model is an extension of earlier 
+work, called the "Risk Index" model. As mentioned earlier, 
+the Risk Index Model is a linear combination of several 
+factors. The coefficients of these factors are estimates made 
+by 
+a 
+team 
+from 
+the 
+Security 
+Research 
+group. 
+The 
+coefficients had not been determined empirically, but were 
+based on the experience and understanding of analysts from 
+several security teams. This non-empirically based approach 
+has been viewed as a stopgap measure to be used for bug 
+fixing prioritization until an empirically-substantiated model 
+is developed and validated. 
+CVSSv2 score is the most important factor in the Risk 
+Index model, followed by "product priority." Some products 
+are widely adopted or deployed in critical infrastructure, and 
+exploitation of these products have been considered to be 
+very impactful. Less-used and more peripheral products 
+have been considered less likely to be targets of attack. 
+Figure 1: Overview of paragraph/word embedding and semantic quality model training process flow, pre-validation stage
+Similarly, a bug that has been present in the field for a 
+long time for this model is considered to be more likely to 
+be exploited, since attackers would have had more time to 
+find the vulnerability and discover ways to exploit it. The 
+amount of time the vulnerability has been known is also 
+included 
+because 
+this 
+factor 
+may 
+affect 
+customers’ 
+regulatory compliance situations. Our company has a 28-day 
+internal quality metric to measure the efforts to resolve all 
+software defects. Not all of the defects are fixed in every 
+version 
+of 
+software 
+available 
+to 
+customers 
+within 
+this 
+internal goal – some low-security-rated bugs, though not 
+many, are fixed later. 
+Bugs that have been publicly disclosed (and fixed) have 
+likewise been considered to be more likely to be exploited. 
+Attackers have access to information about the bug and the 
+code area that may help in formulating an effective attack. 
+Using these four factors and their estimated coefficients, 
+the original Risk Index model was defined as: 
+𝑅𝑅𝑅𝑅𝑅𝑅𝑅𝑅 𝐼𝐼𝐼𝐼𝐼𝐼𝐼𝐼𝐼𝐼 = 𝑆𝑆𝐼𝐼𝑅𝑅 𝐼𝐼𝐼𝐼𝐼𝐼𝐼𝐼𝐼𝐼 ∗ 𝑎𝑎 + 𝐴𝐴𝐴𝐴𝐼𝐼 𝐹𝐹𝑎𝑎𝐹𝐹𝐹𝐹𝐹𝐹𝐹𝐹 ∗ 𝑏𝑏 +
+𝑃𝑃𝐹𝐹𝐹𝐹𝐼𝐼𝑃𝑃𝐹𝐹𝐹𝐹 𝑃𝑃𝐹𝐹𝑅𝑅𝐹𝐹𝐹𝐹𝑅𝑅𝐹𝐹𝑃𝑃 ∗ 𝐹𝐹 + 𝐷𝐷𝑅𝑅𝑅𝑅𝐹𝐹𝐷𝐷𝐹𝐹𝑅𝑅𝐼𝐼𝐼𝐼 𝐹𝐹𝑎𝑎𝐹𝐹𝐹𝐹𝐹𝐹𝐹𝐹 ∗ 𝐼𝐼 
+Coefficients a, b, c, and d for the four independent variables 
+are proprietary values; however, the four factors are listed in 
+the above equation in the order of importance/strength. 
+Table 1 shows the criticality ratings, derived from the model 
+result, that provide Engineering with fix priority guidance. 
+The baseline model score is heavily weighted toward a 
+Security 
+Impact 
+Rating 
+(SIR), 
+which 
+is 
+essentially 
+the 
+CVSSv2 score condensed from 100 possible scores, from 0.0 
+to 10.0, down to four possible score categories, as shown in 
+Table 2
+. 
+Risk Index Scores 
+Category 
+Range 
+Critical 
+1-1.7 
+Major 
+1.8-2.5 
+Significant 
+2.6-3.1 
+Moderate 
+3.2-3.5 
+Insignificant 
+≥3.6 
+Table 1: Risk Index model scoring 
+Table 2: Risk Index model constituent factors and factor coefficients 
+The "disclosure status" factor has two possible values, a 
+1 for a bug that has been disclosed, and a 2 for a bug that has 
+not been publicly disclosed. The "product priority" factor has 
+three levels, 1, 2, and 3, with 3 being the product types that 
+would result in the most impact/damage from an attack. The 
+"age of defect" factor has five levels, one through five, with 
+numeric values of 1, 2, 3, 4 and 5, where older defects have 
+lower values for this factor, corresponding to higher risk
+. 
+B. Risk Index Plus Model
+The Risk Index Plus model is a refinement and extension 
+of the original Risk Index model described above. The Risk 
+Index Plus model is a linear combination of two factors. The 
+first is Security Impact Rating (a condensed version of the 
+CVSSv2 score), and it has the same significance as in the 
+baseline/original model. The second is a semantic quality 
+factor, 
+Q
+, determined by processing the natural language bug 
+description field. All bug records in our bug tracking system 
+contain lengthy descriptions of the bugs, the code location, 
+the deleterious symptoms, and other information useful to 
+the engineers who fix the bugs and test the fixes. 
+1) 
+Semantic quality factor overview – The paragraph 
+vectors approach [6] was implemented to generate vector 
+representations 
+of 
+a 
+subset 
+of 
+the 
+security-flagged 
+bug 
+descriptions (one "description' field for each bug) from the 
+Cisco bug tracking database. This implementation includes 
+the calculation of word vectors using 1-skip-grams for use in 
+inferring paragraph vectors for new bug descriptions that 
+arrive after the paragraph vector model is trained, that is, for 
+subsequent 
+test 
+data 
+and 
+validation 
+data. The 
+implementation was carried out using Python Gensim: Topic 
+Modelling for Humans v. 0.12.2 [5], and it makes use of the 
+models.Doc2Vec and model.infer_vector functions included 
+in Gensim. Figure 1 provides an overview flowchart of how 
+these calculations are performed, how the training/test data 
+split was handled, and how the logistic regression model 
+relates to the paragraph vector model for the calculation of 
+the semantic quality factor.
+2) Data processing and pre-validation
+– The bug text 
+descriptions were gathered for all bugs that were flagged for 
+security review and submitted between August, 2009, and 
+December, 2015. A randomly-selected 70% subset of all 
+these bug descriptions was embedded in a 100-dimensional 
+vector space using the ‘Doc2Vec’ model method of Gensim 
+0.12.2 
+[5]. 
+The 
+text 
+was 
+preprocessed 
+minimally 
+by 
+converting to lower-case and removing punctuation and 
+other non-alphanumeric characters. In addition to computing 
+document vectors directly for 70% of the bug descriptions 
+collected, word vectors were computed in skip-gram fashion 
+to allow inference of the document vectors for the remaining 
+30% of bug descriptions, as well as to allow for inference for 
+the 
+bug 
+descriptions 
+used 
+in 
+subsequent 
+validation 
+experiments. At the conclusion of this modeling stage, we 
+have a convenient representation of each bug description as 
+a 100-dimensional vector of real numbers, as well as a model 
+that will allow for inference of a similar vector for any new 
+bug descriptions fetched from additional bug reports. 
+Our intent was to use these vectors to train a logistic 
+regression model that could provide a prediction mechanism 
+that quantifies the risk status of new bugs. To do so, we 
+needed 
+training 
+labels; 
+therefore, 
+we 
+applied 
+positive 
+training labels to all the bugs that both received non-zero 
+(i.e., 
+CVSSv2 
+score 
+greater 
+than 
+zero) 
+security 
+exploitability/impact ratings and were submitted by our team 
+of security testing specialists. We applied negative training 
+labels to the set of bugs that were determined to have no 
+security impact after expert review. These labels were used 
+to train a logistic regression model on the training sample. 
+The independent variables of the regression model were each 
+of the 100 elements of the bug description embedding vector. 
+The predictions of this model were computed for each of the 
+bugs in the test sample and an ROC curve (see Figure 2) was 
+generated. 
+Figure 2: Receiver Operator Characteristics curve for logistic regression 
+model’s prediction of training labels on the test data set
+3) Validation data 
+– The validation data that was acquired 
+in our case study (details are given in the following Section) 
+also 
+was 
+used 
+to 
+improve 
+the 
+semantic 
+quality 
+factor 
+Security Impact Rating in the original Risk Index 
+SIR Category 
+CVSSv2 equivalent 
+SIR Index 
+Critical 
+9.0-10.0 
+1 
+High 
+7.0-8.9 
+2 
+Medium 
+4.0-6.9 
+3 
+Low 
+0.0-3.9 
+4 
+model. The paragraph vector approach that was used for 
+embedding bug descriptions is similar to an auto-encoder 
+neural network in some respects. It similarly uses gradient 
+descent 
+with 
+backpropagation 
+and 
+randomly 
+initialized 
+weights 
+(driving 
+a 
+softmax 
+activation 
+function) 
+when 
+training the embedding model. It is widely known that these 
+techniques can be numerically sensitive and also suffer from 
+problems 
+such 
+as 
+local 
+minima 
+and 
+gradient 
+explosion. While retaining the same training and testing 
+labels for the logistic regression model, and after gathering 
+the 
+expert 
+rankings 
+for 
+the 
+validation 
+experiment, 
+we 
+computed the document and word vector representations 
+several times and selected the embedding that provided the 
+best comparison to the expert rankings. 
+Likewise, the validation data was used to numerically 
+optimize the linear coefficients of SIR and Q for the Risk 
+Index Plus model. The optimization objective was to 
+maximize the average of the Spearman rank correlation 
+coefficient between the Risk Index Plus model and the 
+Security Incident Response Managers’ risk rankings. As a 
+result of this, we arrived at the following equation: 
+𝑅𝑅𝑅𝑅𝑅𝑅𝑅𝑅 𝐼𝐼𝐼𝐼𝐼𝐼𝐼𝐼𝐼𝐼
++
+= 0.625 ∗ 𝑆𝑆𝐼𝐼𝑅𝑅.
+.
++ 1.25(1 − 𝑄𝑄)
+Note that SIR means the same here as it does in the baseline 
+Risk Index model and that Q is the response prediction of the 
+logistic regression model, and thus is a real number between 
+0 and 1.
+4) Discussion 
+– It is necessary to point out that the use of 
+the validation experiment results in the model construction 
+process may give rise to doubts about the validity of the 
+resulting model. However, we believe this to be a necessary 
+Figure 3: Post-validation process flow 
+feature of an interesting and novel conceptual model for 
+evaluating the risk of new security bugs. Figure 3 illustrates 
+the 
+post-validation 
+process 
+flow, 
+with 
+the 
+dashed 
+lines 
+representing feedback loops pertaining to our validation 
+performance metrics, and therefore a potential threat to 
+validity. 
+In this process flow, we are attempting to capture the 
+semantics 
+associated 
+with 
+vulnerability 
+impact 
+and 
+the 
+likelihood of exploitation in the vector representations of the 
+bug descriptions. Furthermore, we aim to capture better 
+those concepts that CVSSv2 does not adequately capture. 
+Our method for interpreting the concepts stored in the vector 
+representations of these descriptions relies on an imperfect 
+foundation, our selection of training labels for the logistic 
+regression model. This is not a cut-and-dried statistical or 
+mathematical 
+problem, 
+though 
+we 
+do 
+apply 
+advanced 
+concepts from these domains. These steps are necessary in 
+order 
+to 
+capture 
+the 
+cognitive 
+and 
+the 
+security-domain 
+qualities that we desire in the model. We believe the results 
+to be meaningful, interesting, and novel, but also appreciate 
+that this does not entirely excuse the use of validation data 
+in 
+model 
+construction, 
+and 
+are 
+currently 
+undertaking 
+additional validation experiments that are more completely 
+independent of the model construction. 
+IV. CASE STUDY AND VALIDATION 
+We designed and conducted a case study to validate the 
+findings of the logistic regression modeling exercise. The 
+modeling 
+and 
+validation 
+exercises 
+are 
+not 
+entirely 
+straightforward and unambiguous for several reasons: 
+•
+The dependent variable values in the modeling 
+work are a sample of our corporate penetration 
+testing 
+results, 
+for 
+all 
+the 
+company's 
+software 
+systems, performed by the Security Testing team. 
+These test results are not exactly exploits, but are 
+the closest dataset of sufficient size that we have 
+available for systems we develop and sell. The 
+actual number of field exploits experienced with 
+these systems is very low, so we are not able to use 
+only that data to build an accurate model. (As 
+mentioned in Section II, using exploit data from 
+other companies we believe will produce results 
+that are not sufficiently accurate to apply to our 
+internal systems – the use of true exploit data is part 
+of a future planned study.) 
+•
+Penetration testing is a reasonable proxy for actual 
+exploits, but there are several obvious differences. 
+The main difference is that penetration testers have 
+easy access to the source code and to all the bug 
+reports, including security- and reliability-focused 
+reports. But penetration test results are the closest 
+to actual exploits that we have knowledge of and 
+sufficient data for. 
+•
+The validation steps, capitalizing on the knowledge 
+and 
+experience 
+of 
+the 
+Security 
+Incident 
+Responders, rely on the assumption that their risk 
+assessments are true indicators of the potential for 
+exploits in the field. This proxy for exploits (in the 
+validation work) is the best we have, given the 
+paucity of actual field exploits of our code. 
+•
+Variation in the individual risk assessments is to be 
+expected, since each Security Incident Responder 
+has his/her own experience in different software 
+systems, a different level of overall experience, 
+and, his/her own view as to what constitutes risk. 
+We will be exploring these differences in our future 
+work, 
+and 
+believe 
+that 
+understanding 
+these 
+differences 
+will 
+enable 
+us 
+to 
+extract 
+valuable 
+information about the nature of software security 
+risk and how it can be, in various ways, exploited, 
+and, conversely, minimized. 
+As mentioned above in Section II, a sample of 20 defects 
+was 
+evaluated 
+by 
+seven 
+different 
+Security 
+Incident 
+Responders 
+to 
+collect 
+their 
+expert 
+opinions 
+of 
+the 
+risk 
+ranking of those defects. The paragraph vectors for the same 
+test sample were inferred using the word vectors of the 
+word2vec model and semantic quality scores were generated 
+from these inferred vectors through the trained logistic 
+regression model. Spearman’s rank correlation coefficient 
+was computed to compare the rankings of the trained model 
+to those of the Security Incident Responders. The Security 
+Incident 
+Responders 
+rankings 
+were 
+also 
+compared 
+to 
+CVSSv2-only rankings to permit a baseline comparison. 
+Results suggest that the technique combining the semantic 
+quality scores with the CVSSv2 scores captured additional 
+risk information compared to CVSSv2 alone
+. 
+V
+. 
+RESULTS
+SIR alone appears to explain the bulk of the correlation 
+between Incident Responder ratings and the Risk Index 
+model (see Table 3). However, it appears that the semantic 
+quality factor, Q, was able to capture some risk information 
+that SIR alone was not. While the random variation in 
+Spearman’s Correlation Coefficient calculated on a sample 
+of 20 observations is significant compared to any of the 
+absolute differences observed between Risk Index and Risk 
+Index Plus correlations with IRs, several of the differences, 
+(such as for IRs 4, 6, and 7), approach the magnitude of one 
+standard deviation. There is also a consistent pattern in that 
+each of the seven IRs' correlations were higher with Risk 
+Index Plus compared to the baseline Risk Index. 
+Incident 
+Responders 
+SIR 
+Q 
+Risk 
+Index 
+Risk 
+Index 
+Plus 
+IR 1 
+0.75 
+0.36 
+0.67 
+0.80 
+IR 2 
+0.37 
+0.34 
+0.31 
+0.41 
+IR 3 
+0.61 
+0.33 
+0.62 
+0.66 
+IR 4 
+0.62 
+0.56 
+0.58 
+0.78 
+IR 5 
+0.69 
+0.30 
+0.63 
+0.69 
+IR 6 
+0.51 
+0.53 
+0.52 
+0.66 
+IR 7 
+0.44 
+0.36 
+0.39 
+0.55 
+Table 3: Initial validation results – Spearman rank correlation coefficients 
+of Incident Responder ratings and the Risk Index models factors 
+Apart from the CVSSv2 score, none of the other factors 
+included 
+in 
+the 
+original 
+Risk 
+Index 
+model 
+contribute 
+appreciably to the predictive power of the model. Bug age, 
+product type, and disclosure status, as shown in Table 4 
+below, can be considered to be minor predictive factors, 
+therefore we did not include these in the Risk Index Plus 
+model: 
+Table 4: Correlation comparisons among SIR, Risk Index, bug age, and 
+disclosure status 
+VI. THREATS TO VALIDITY
+There 
+are 
+several 
+threats 
+to 
+validity, 
+and 
+two 
+have 
+already been mentioned in Section III: 
+•
+Penetration testing is assumed to be a reasonable 
+proxy for field exploits. We have checked this 
+assumption with many experts in the field, both 
+inside and outside our company, and the unanimous 
+agreement is that it is a good proxy. But we will 
+continue our study and use actual exploit data that 
+is publicly available from many companies to test 
+this assumption. 
+•
+Security Incident Responders' assessment of risk is 
+a 
+reasonable 
+proxy 
+for 
+the 
+validation 
+of 
+the 
+modeling results. "Risk" can be a very broad and 
+imprecise 
+term, 
+so 
+we 
+are 
+inclined 
+to 
+use 
+the 
+definition 
+given 
+above 
+(in 
+Section 
+II) 
+for 
+our 
+purposes: The likelihood that a software bug exists 
+in an area of code that can be exploited, plus the 
+estimated impact of the potential exploit. Further 
+work will be done in this area to better understand 
+the interaction between exploitability and impact, 
+and to attempt to quantify the importance of each in 
+the 
+types 
+of 
+situations 
+that 
+are 
+commonly 
+experienced in the field. 
+There are several additional threats to validity that have 
+been touched on in a previous Section (Section III.D): 
+•
+The independent variables of the logistic regression 
+model are in a sense not fully independent. The bug 
+description text fields are derived from bugs that 
+have 
+already 
+been 
+evaluated 
+by 
+the 
+Incident 
+Response team. For these analyses to occur, the 
+bug ID needs to be referred to the team, and 
+therefore some self-selection occurs (but none of 
+the bugs uncovered during penetration testing are 
+used for this). We believe that since we use the Risk 
+Index and Risk Index Plus to prioritize the fixing of 
+bugs already uncovered, the threat is minimal. At 
+some 
+point, 
+we 
+will 
+want 
+to 
+use 
+an 
+upgraded 
+version of Risk Index Plus to prioritize fixes that 
+have not yet been referred to any security team, if 
+such a model using our approach is possible. 
+•
+Part 
+of 
+the 
+validation 
+dataset 
+was 
+used 
+to 
+numerically optimize the linear coefficients of the 
+SIR and Q model factors – with the expanded 
+validation dataset, we will be able to reduce this 
+possible source of error. 
+•
+The 
+fairly 
+low 
+volume 
+(n=20) 
+of 
+validation 
+assessments presents a risk to the accuracy of the 
+findings. The security teams are in the process of 
+assessing an additional 30 bugs, with assessments 
+done by 10 experts, and we expect the current 
+results 
+will 
+be 
+confirmed 
+and 
+the 
+accuracy 
+improved. 
+VI. SUMMARY
+The general word2vec approach was tested, for its ability 
+to capture semantic content related to the risk of exploitation 
+of 
+vulnerabilities, 
+using 
+natural 
+language 
+descriptions 
+embedded in the bug reports. These experiments have 
+shown that the approach has potential. Perhaps the most 
+challenging aspect in undertaking such a project is selecting 
+appropriate 
+training 
+data 
+and 
+labels 
+for 
+the 
+supervised 
+learning model. Using bug descriptions that were filed by 
+security engineers with extensive knowledge of attacker 
+motives and techniques, as supervised learning examples, 
+appears to be useful in identifying important risk factors that 
+expert 
+security 
+analysts 
+agree 
+with 
+but 
+that 
+are 
+not 
+thoroughly captured by standard CVSSv2 scoring. 
+VI. NEXT STEPS
+The 
+following 
+areas 
+are 
+planned 
+(or 
+underway) 
+for 
+further investigation: 
+•
+A 
+second 
+validation 
+series 
+is 
+underway 
+(see 
+description in Section II). This expanded validation 
+exercise will further check to see if the logistic 
+regression model's accuracy confirms the results of 
+the initial validation. 
+•
+As also mentioned in Section II, publicly-available 
+exploit data, published by Cisco and other software 
+industry companies, will be used in a follow-up 
+study as the dependent variable in a modeling 
+exercise. 
+If 
+possible, 
+we 
+will 
+use 
+textual 
+bug 
+descriptions for the semantic quality portion of the 
+independent 
+variable dataset. We 
+will also 
+use 
+internal Cisco bug descriptions in cases in which 
+public exploit data is available but specific bug 
+descriptions are not. 
+Incident 
+Responders 
+SIR 
+Age 
+Disclosure 
+Risk 
+Index 
+IR 1 
+0.75 
+0.14 
+-0.18 
+0.67 
+IR 2 
+0.37 
+-0.03 
+0.02 
+0.31 
+IR 3 
+0.61 
+0.39 
+0.16 
+0.62 
+IR 4 
+0.62 
+0.14 
+0.05 
+0.58 
+IR 5 
+0.69 
+0.21 
+0.05 
+0.63 
+IR 6 
+0.51 
+0.27 
+0.12 
+0.52 
+IR 7 
+0.44 
+0.08 
+-0.10 
+0.39 
+•
+Vector 
+construction 
+has 
+not 
+yet 
+been 
+fully 
+optimized, and we plan to tune the parameters in 
+our follow-on work. 
+Previous work [4] has identified, with fairly good 
+precision 
+(45%) 
+and 
+recall 
+(80%), 
+hitherto 
+undiscovered 
+vulnerabilities 
+in 
+the 
+total 
+bug 
+database. This work will be expanded using the 
+vector space approach and risk values calculated 
+using this current study's penetration testing results. 
+Also, 
+parameter 
+optimization 
+and 
+advances 
+in 
+sequential 
+modeling 
+[3,4] 
+will 
+be 
+used 
+in 
+the 
+follow-up study. Bug fix prioritization is critical, 
+but 
+we 
+also 
+believe 
+that 
+security 
+escapes 
+are 
+sometimes 
+as 
+problematic 
+as 
+the 
+analyzed 
+and 
+evaluated 
+bugs 
+that 
+have 
+been 
+detected 
+in 
+inspection and testing practices. 
+If the second validation exercise yields equivalent or 
+better results than the first, we anticipate that the Risk Index 
+Plus 
+ratings 
+will 
+become 
+a 
+formal 
+requirement 
+at 
+the 
+"execution 
+commit" 
+lifecycle 
+checkpoint, 
+where 
+development of a new release is approved and metric goals, 
+to be met before release to the field is allowed, are specified 
+and required. Currently, the CVSSv2 score (as transformed 
+into an SIR rating) is now used for this purpose, but we 
+anticipate that Risk Index Plus scores will augment this. 
+ACKNOWLEDGMENTS 
+In addition to the members of the Cisco Product Security 
+Incident Response Team, we would like to thank Klee 
+Michaelis, Graham Holmes, Shiva Persaud-Deolall, Doug 
+Sibley, and Omar Santos, all of Cisco Systems,, Inc., for 
+their constructive ideas and other valuable help throughout 
+the course of this work. 
+REFERENCES 
+[1]
+Allodi, L. 2013. Internet
+-
+scale vulnerability
+risk assessment 
+(Extended Abstract). In 
+Proceedings of Usenix Security LEET 2013
+, 
+Washington, D.C. 
+[2]
+Allodi, L. and Massacci, F. 2014. Comparing vulnerability severity 
+and exploits using case-control studies. ACM TISSEC, Vol. 17, 
+Issue 1, 2014. ACM, NY. DOI= 
+http://doi.acm.org/10.1145/2630069. 
+[3]
+Gegick, M., Rotella, P., and Williams, L. Predicting attack-prone 
+components. In 
+Proceedings of the International Conference on 
+Software Testing Verification and Validation
+g (Denver, CO, Apr. 1-
+4, 2009) 181-190. 
+[4]
+Gegick, M., Rotella, P., and Xie, T. 2010. Identifying security fault 
+reports via text mining. In 
+Proceedings of the International 
+Conference on Software Engineering
+(Cape Town, South Africa, 
+May 2-8, 2010) 526-536. DOI: 10.1109/MSR.2010.5463340v 
+[5]
+Hurek, R. and Sojka, P. 2010. Software Framework for Topic 
+Modelling with Large Corpora. In 
+Proceedings of the LREC 2010 
+Workshop on New Challenges for NLP Frameworks
+(ELRA, Valetta, 
+Malta, May 2010) 45-50. 
+[6]
+Le, Q. and Mikolov, T. 2014. Distributed Representations of 
+Sentences and Documents. arXiv1405.1503. 2014. 
+http://arxiv.org/abs/1405.1503. 
+[7]
+Mell, P., Scharfone, K., and Romansky, S. 2007. A Complete Guide 
+to the Common Vulnerability Scoring System v 2.0; (June, 2007); 
+https://www.first.org/cvss/cvss-v2-guide.pdf. 

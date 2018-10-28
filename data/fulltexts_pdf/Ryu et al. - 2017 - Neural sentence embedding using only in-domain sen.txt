@@ -1,0 +1,2061 @@
+﻿1
+Pattern Recognition Letters
+journal homepage: www.elsevier.com
+Neural sentence embedding using only in-domain sentences for out-of-domain sentence
+detection in dialog systems
+Seonghan Ryu
+a,
+∗∗
+, Seokhwan Kim
+b
+, Junhwi Choi
+a
+, Hwanjo Yu
+a
+, Gary Geunbae Lee
+a
+a
+Pohang University of Science and Technology (POSTECH), 77 Cheongam-Ro, Nam-Gu, Pohang, 37673, Republic of Korea
+b
+Institute for Infocomm Research (I2R), 1 Fusionopolis Way, # 21-01 Connexis (South Tower), 138632, Singapore
+ABSTRACT
+To ensure satisfactory user experience,
+dialog systems must be able to determine whether an input
+sentence is in-domain (ID) or out-of-domain (OOD). We assume that only ID sentences are available
+as training data because collecting enough OOD sentences in an unbiased way is a laborious and
+time-consuming job.
+This paper proposes a novel neural sentence embedding method that represents
+sentences in a low-dimensional continuous vector space that emphasizes aspects that distinguish ID
+cases from OOD cases.
+We first used a large set of unlabeled text to pre-train word representations
+that are used to initialize neural sentence embedding.
+Then we used domain-category analysis as an
+auxiliary task to train neural sentence embedding for OOD sentence detection.
+After the sentence
+representations were learned, we used them to train an autoencoder aimed at OOD sentence detection.
+We evaluated our method by experimentally comparing it to the state-of-the-art methods in an eight–
+domain dialog system; our proposed method achieved the highest accuracy in all tests.
+c
+2018 Elsevier Ltd. All rights reserved.
+1.
+Introduction
+Dialog systems provide natural-language interfaces between
+humans and machines.
+Because human conversation can range
+among topics,
+many studies have been recently conducted on
+multi-domain dialog systems [5, 8, 14, 24, 27]. However, these
+systems are also restricted to a closed set
+of target
+domains
+and thus cannot provide appropriate responses to out-of-domain
+(OOD) requests.
+For example,
+a dialog system that
+was de-
+signed to cover
+schedule
+and
+message
+domains could receive
+OOD requests such as “Would you recommend Italian restau-
+rants for me?” that is in the
+restaurant
+domain or “Please
+record Game of Thrones.” that is in the
+TV program
+domain.
+To maintain user experience,
+the system must detect OOD re-
+quests and provide appropriate back-o
+ff
+responses such as re-
+jection, rather than providing unrelated responses.
+The main goal of this paper is to develop an accurate OOD
+sentence detection method. We define OOD sentence detection
+∗∗
+Corresponding author: Tel.:
++
+82-54-279-5567; fax:
++
+82-54-279-2299;
+e-mail:
+ryush@postech.ac.kr
+(Seonghan Ryu),
+kims@i2r.a-star.edu.sg
+(Seokhwan Kim),
+chasunee@postech.ac.kr
+(Junhwi Choi),
+hwanjoyu@postech.ac.kr
+(Hwanjo Yu),
+gblee@postech.ac.kr
+(Gary Geunbae Lee)
+as a binary classification problem of determining whether the
+system can respond appropriately to an input sentence, i.e.,
+f (x)
+=
+
+
+
+
+
+
+
+ID
+,
+if x belongs to a domain d
+∈
+D
+,
+OOD
+,
+otherwise
+,
+(1)
+where x is
+an input
+sentence,
+D is
+a closed set
+of
+target
+domain-categories such as
+schedule
+or
+message
+, ID denotes
+in-domain, and OOD denotes out-of-domain.
+Most
+previous studies [19,
+31] use both ID sentences and
+OOD sentences to train OOD sentence detection. Collecting ID
+sentences is a necessary step in building many data-driven di-
+alog systems.
+However,
+the task of collecting enough OOD
+sentences to cover
+all
+other
+domains is laborious and time-
+consuming.
+Therefore,
+the goal of this paper is to develop an
+accurate OOD sentence detection method that requires only ID
+sentences for training.
+In this work, we present a novel neural sentence embedding
+method that represents sentences in a low-dimensional contin-
+uous vector space that emphasizes aspects that distinguish ID
+cases from OOD cases.
+First,
+we use large set
+of unlabeled
+text
+to pre-train word representations for the initialization of
+neural
+sentence embedding.
+Second,
+we use the similarity
+between OOD sentence detection and domain-category anal-
+arXiv:1807.11567v1 [cs.CL] 27 Jul 2018
+2
+ysis [11,
+15,
+19,
+32] to train neural sentence embedding with
+only ID sentences.
+Domain-category analysis is a task that
+assigns one of a
+closed set of target domains to a given sentence; this anal-
+ysis system can be trained using only ID sentences that are
+collected for each domain.
+We think that the task of OOD
+sentence detection is more similar to domain-category anal-
+ysis than to other tasks such sentiment analysis or speech-
+act analysis, so we expect that the features (i.e., representa-
+tion) of a sentence extracted by a domain-category analysis
+system can be used for OOD sentence detection too.
+Therefore we adopt
+a feature extractor
+that
+is
+trained for
+domain-category analysis,
+and use it as a neural sentence em-
+bedding system for OOD sentence detection. Lastly, the learned
+representations of ID sentences are used to train an autoencoder
+that detects whether an input sentence is ID or OOD based on
+its reconstruction error. To the best of our knowledge, this is the
+first study that applies neural sentence embedding to solve the
+sentence representation problem of OOD sentence detection.
+The remainder of this paper is organized as follows: In Sec-
+tion 2,
+we review previous studies.
+In Section 3,
+we describe
+our method in detail.
+In Section 4, we explain our experimen-
+tal data,
+evaluation metrics,
+and methods to be compared.
+In
+Section 5,
+we show and discuss the experimental
+results.
+In
+Section 6, we conclude this paper.
+2.
+Related work
+Previous studies [12, 19, 31] on OOD sentence detection use
+sentence representations based on bag-of-words models, which
+have limitations in representing rare or unknown words; those
+words are likely to appear in OOD sentences.
+Lane et al. [12]
+proposed an in-domain verification (IDV) method, which uses
+only ID sentences to build domain-wise one-vs.-rest classifiers
+that
+generate low confidence scores for OOD sentences,
+and
+then uses the scores as evidence that
+a sentence was OOD.
+We implemented this method and compared it
+to our work.
+Nakano et
+al.
+[19]
+proposed an two-stage domain selection
+framework, which uses both ID sentences and OOD sentences
+to build multi-domain dialog systems;
+the main contribution
+is to use discourse information to prevent
+erroneous domain
+switching,
+but
+whenever developers expand the domain of a
+dialog system they must reassess all OOD sentences because
+some will
+become ID due to the change of the boundary be-
+tween ID and OOD. Tur et al. [31] used syntactic feature and se-
+mantic feature for OOD sentence detection; web search queries
+are used as OOD sentences to eliminate the need to collect
+OOD sentences,
+but such queries are noisy because some are
+actually ID, and they cannot be obtained readily without using
+a commercial
+search engine.
+Compared to these studies,
+the
+main contribution of this paper is a neural sentence embedding
+method that can understand rare words and unknown words.
+Recently, neural sentence embedding methods have been as-
+sessed for their ability to solve the sentence representation prob-
+lem. Paragraph Vector [13] is a well-known method that uses a
+large set of unlabeled text to learn sentence representations, but
+the representations are not optimized for a specific task because
+WORD
+REPRESENTATIONS
+IN-DOMAIN SENTENCES
+REPRESENTED BY
+𝜀𝜀
+...
+w
+1
+...
+s
+1
+s
+2
+s
+3
+w
+2
+w
+3
+1) Pre-training word representations
+2) Building an LSTM network for neural sentence embedding
+3) Building an autoencoder for one-class classification
+SENTENCE
+EMBEDDING 
+𝜀𝜀
+ENCODER 
+𝜙𝜙
+DECODER 
+𝜓𝜓
+RAW TEXT
+IN-DOMAIN
+SENTENCES
+s
+1
+s
+2
+s
+3
+...
+Fig.
+1:
+Overall
+training process of our proposing method.
+Components and
+processes are described in the text.
+they are learned based on unsupervised objectives.
+In contrast,
+some researchers have worked on supervised sentence embed-
+ding particularly for natural language understanding using re-
+current
+neural
+networks (RNNs) [16,
+33,
+36] and long short-
+term memory (LSTM) networks [22, 35, 5].
+However, because
+we cannot define an objective function based on classification
+error between ID cases and OOD cases, these methods are not
+directly applicable to our problem in which only ID sentences
+are available as a training set. To solve this problem, we exploit
+the similarity between OOD sentence detection and domain-
+category analysis (Section 1).
+Another
+important
+part
+of
+OOD sentence
+detection
+is
+one-class classification that uses the training data about a tar-
+get class to distinguish between target items and uninteresting
+items. Nearest Neighbor Distances (NN-d) [29] classifies an in-
+put item as the target class when the local density
+1
+of the item
+is larger than the local density of its closest item.
+A one-class
+support
+vector machine (OSVM) [25] learn a decision func-
+tion about
+distinguishment.
+In this work,
+we propose to use
+an autoencoder to detect OOD sentences, and compare the re-
+sults to those obtained using other methods including NN-d and
+OSVM.
+3.
+The proposed OOD-sentence detection method
+We defined OOD sentence detection f (x) as a binary classifi-
+cation problem (Section 1).
+However, unlike most other binary
+1
+The local density of an item is the distance between the item and its closest
+item in the training data.
+3
+classification problems,
+we assume that only ID sentences are
+available as training data.
+With these ID sentences,
+domain-
+category analysis g(x)
+=
+d
+∈
+D can be built
+under another
+assumption that
+the domain category for each ID sentence is
+given.
+When we represent sentences in m-dimensional continuous
+vector space, we take sentence embedding
+ε
+(x)
+∈ R
+m
+from an
+LSTM network trained with g(x) as the supervised objective.
+Then,
+we build an autoencoder that consists of an encoder
+φ
+that takes sentences represented by
+ε
+(x) and maps them onto
+a di
+ff
+erent space, and a decoder
+ψ
+that reconstructs their orig-
+inal representations.
+Finally,
+we use the learned autoencoder
+(
+φ
+,
+ψ
+) to detect OOD sentences of which reconstruction errors
+are greater a threshold
+θ
+as:
+f (x)
+=
+
+
+
+
+
+
+
+ID
+,
+if
+kψ
+(
+φ
+(
+ε
+(x)))
+− ε
+(x)
+k
+2
+< θ
+,
+OOD
+,
+otherwise.
+(2)
+The details of the proposed method (Fig. 1) are presented in
+the remainder of this section.
+3.1.
+Pre-training of word representations
+Before training neural sentence embedding,
+words must be
+represented in a low-dimensional
+continuous vector space in
+which semantically-similar words are located near each other.
+For example, ‘London’ should be closer to ‘Paris’ than to ‘ap-
+ple’ in the vector space.
+The pre-trained word representations
+would be fine-tuned when sentence representations are learned
+using ID sentences (Section 3.2).
+However,
+the amount of ID
+sentences is smaller than the amount of unlabeled text such as
+Wikipedia articles, so pre-training increases both the accuracy
+and coverage of the word representations.
+We utilize the distributional hypothesis of words:
+the mean-
+ings of words can be found by their accompanying words [2].
+We first use a large set of unlabeled texts extracted from Ko-
+rean Wikipedia articles as the training set,
+then use it to train
+a skip-gram neural network [18] that predicts 10 surrounding
+words by using a v-dimensional hidden layer; we set v as 100.
+When the training set consists of k unique words in its vocab-
+ulary,
+the result of pre-training is a matrix E
+∈ R
+v
+×
+k
+in which
+the i
+th
+column is a v-dimensional vector that represents the i
+th
+word.
+3.2.
+Neural sentence embedding using an LSTM network
+Sentence embedding
+ε
+aims to represent
+given sentences
+in an m-dimensional
+continuous
+vector
+space.
+To process
+variable-length sentences,
+we use an LSTM network [7,
+3],
+which uses a recurrent
+architecture that
+learns by repeatedly
+computing given operations for every word in each sentence.
+We suppose that the features of domain-category analysis are
+also important in OOD sentence detection,
+so we use a set of
+ID sentences to train a network (Fig. 2) that classifies a given
+sentence into a domain category.
+The values in the last hidden
+layer of the trained network represent the given sentence, so
+ε
+can be taken from the trained network. This is a sort of transfer-
+learning approach [20] that learns knowledge from an auxiliary
+···
+w
+(1)
+v
+(1)
+w
+(n)
+v
+(n)
+y
+w
+(2)
+v
+(2)
+···
+···
+···
+h
+(n)
+h
+(2)
+h
+(1)
+h
+(1)
+h
+(2)
+h
+(n)
+One-hot vector of word
+Dense vector of word
+Forward LSTM
+Backward LSTM
+Domain category
+LSTM
+LSTM
+LSTM
+LSTM
+LSTM
+LSTM
+Fig.
+2:
+LSTM network with two-channel
+word representations for domain-
+category analysis. Components and processes are described in the text.
+c
+(t-1)
+f
+(t)
+i
+(t)
+h
+(t-1)
+C
+(t)
+v
+(t)
+c
+(t)
+o
+(t)
+h
+(t)
+�
+Fig. 3: LSTM unit. Components and processes are described in the text.
+task (i.e., domain-category analysis) and applies the knowledge
+to a target task (i.e., OOD sentence detection).
+The pre-trained word representations (Section 3.1) are fine-
+tuned based on back-propagation from the objective function of
+the LSTM network; fine-tuning finds task-specific word repre-
+sentations,
+whereas pre-trained word representations describe
+general
+word meaning.
+However,
+some words in OOD sen-
+tences appear rarely or never in ID sentences;
+this imbalance
+hinders the fine-tuning of the word representations, so the word
+representations cannot
+be fined-tuned accurately.
+To prevent
+this problem,
+we use a two-channel
+approach:
+a non-static
+channel
+is fine-tuned during training,
+whereas a static chan-
+nel is fixed.
+This multi-channel idea has been used earlier for
+sentiment analysis [9] but not for OOD sentence detection.
+In
+addition,
+we apply dropout [28] to the non-recurrent layers in
+our LSTM network.
+Dropout is a regularization technique that
+randomly drops some nodes in artificial neural networks during
+training. Especially, dropout prevents our LSTM network from
+becoming biased toward the non-static channel.
+Based on our design,
+our LSTM network is defined as fol-
+lows.
+Let w
+(t)
+∈ N
+k
+be the one-hot vector representation of the
+t
+th
+word in a given sentence.
+The dense vector representation
+v
+(t)
+∈ R
+2v
+of the t
+th
+word is defined as
+v
+(t)
+=
+[E
+s
+w
+(t)
+,
+E
+n
+w
+(t)
+]
+,
+(3)
+where E
+s
+∈ R
+v
+×
+k
+is the weight matrix for the static channel and
+E
+n
+∈ R
+v
+×
+k
+is the weight matrix for the non-static channel; both
+E
+s
+and E
+n
+are initialized to E that was pre-trained in Section 3.1,
+but only E
+n
+is fine-tuned during the training; a dropout rate of
+50% is applied to both E
+s
+w
+(t)
+and E
+n
+w
+(t)
+.
+In t
+th
+LSTM unit (Fig. 3), input gate i
+(t)
+, forget gate f
+(t)
+, mem-
+ory cell state c
+(t)
+, output gate o
+(t)
+, and hidden state h
+(t)
+are de-
+4
+Encoding
+Decoding
+r
+c
+r
+�
+Fig. 4: Autoencoder.
+fined as
+i
+(t)
+= σ
+(W
+i
+[h
+(t
+−
+1)
+,
+v
+(t)
+]
++
+b
+i
+)
+,
+(4)
+f
+(t)
+= σ
+(W
+f
+[h
+(t
+−
+1)
+,
+v
+(t)
+]
++
+b
+f
+)
+,
+(5)
+˜
+C
+(t)
+=
+tanh(W
+C
+[h
+(t
+−
+1)
+,
+v
+(t)
+]
++
+b
+C
+)
+,
+(6)
+c
+(t)
+=
+i
+(t)
+⊗
+˜
+C
+(t)
++
+f
+(t)
+⊗
+c
+(t
+−
+1)
+,
+(7)
+o
+(t)
+= σ
+(W
+o
+[h
+(t
+−
+1)
+,
+v
+(t)
+]
++
+b
+o
+)
+,
+(8)
+h
+(t)
+=
+o
+(t)
+⊗
+tanh(c
+(t)
+)
+,
+(9)
+where
+⊗
+denotes element-wise product,
+σ
+is the sigmoid acti-
+vation function, W
+i
+, W
+f
+, W
+C
+, and W
+o
+are weight matrices, and
+b
+i
+, b
+f
+, b
+C
+, and b
+o
+are bias vectors.
+We use bidirectional struc-
+ture [4, 26] of the LSTM network to prevent it from becoming
+biased toward the last few words, so those weights are defined
+independently for the forward LSTM and the backward LSTM.
+The output
+domain-category layer
+y
+∈ R
+|
+D
+|
+is computed
+based on [
+−
+→
+h
+(n)
+,
+←−
+h
+(n)
+], which is the concatenation of the last hid-
+den layers of both the forward LSTM and the backward LSTM,
+so that
+y
+=
+softmax(W
+y
+[
+−
+→
+h
+(n)
+,
+←−
+h
+(n)
+]
++
+b
+y
+)
+,
+(10)
+where W
+y
+is a weight matrix and b
+y
+is a bias vector; A dropout
+rate of 50% is applied to [
+−
+→
+h
+(n)
+,
+←−
+h
+(n)
+].
+The LSTM network is trained to minimize the categorical
+cross entropy between the gold standard domain category and
+the predicted output.
+As a result, given a sentence, [
+−
+→
+h
+(n)
+,
+←−
+h
+(n)
+]
+of the trained network represents the sentence in a vector space
+that emphasizes the distinguishing aspects among domain cate-
+gories.
+3.3.
+One-class classification using an autoencoder
+Autoencoders are feed-forward neural networks that encode
+and decode given inputs.
+When an autoencoder is trained on
+interesting data,
+the reconstruction error is low for interesting
+input data but high for uninteresting input data.
+Following the
+idea of one-class classification [17, 34] based on this character-
+istic,
+we use all ID sentences represented by
+ε
+in Section 3.2
+to train an autoencoder (Fig. 4) that aims to use reconstruction
+errors to detect OOD sentences.
+The autoencoder is the pair of an encoder
+φ
+and a decoder
+ψ
+.
+Let r
+∈ R
+m
+be a given sentence representation.
+Encoding layer
+c
+∈ R
+m
+/
+2
+and decoding layer
+ˆ
+r
+∈ R
+m
+are defined as
+c
+=
+tanh(W
+φ
+r
++
+b
+φ
+)
+,
+(11)
+ˆ
+r
+=
+tanh(W
+ψ
+c
++
+b
+ψ
+)
+,
+(12)
+where W
+φ
+and W
+ψ
+are weight matrices and b
+φ
+and b
+ψ
+are bias
+vectors. The autoencoder is trained to minimize the reconstruc-
+tion error
+k
+r
+−
+ˆ
+r
+k
+2
+.
+4.
+Experimental setup
+4.1.
+Implementation details
+To implement the pre-training of word representations (Sec-
+tion 3.1), we use Gensim library [23]; we chose initial learning
+rate 0.05 and decreased it
+linearly.
+To implement
+the LSTM
+network (Section 3.2) and the autoencoder (Section 3.3), we use
+Keras library [1]; we tried three optimization algorithms (adam
+[10],
+adadelta [37],
+rmsprop [30]) for the LSTM network and
+the autoencoder, and tried two hidden layer sizes (100 and 150)
+for the LSTM network. In Section 5, we present the result only
+with the best optimization algorithm and the best hidden layer
+size, instead of enumerating all results.
+4.2.
+Data set
+To demonstrate the e
+ff
+ectiveness of our proposed method,
+we experimented on a data set
+of
+7,975 Korean sentences.
+The data set was collected manually using a Wizard-of-Oz ap-
+proach by several
+groups of people from industries in Korea
+including LG Electronics and Mediazen.
+The data set consists
+of 5,755 ID sentences for eight
+domains:
+building guide
+,
+car navigation
+,
+diet advisor
+,
+general
+,
+restaurant
+information
+,
+music search
+,
+TV program guide
+,
+and
+weather information
+;
+and 2,200 OOD sentences for five
+domains:
+finance
+,
+occupation
+,
+small talk
+,
+stock
+,
+and
+study
+.
+Eighty percent of the ID sentences were used to train
+the models; the remaining ID sentences and all OOD sentences
+were used for testing.
+Although we used Korean sentences to
+implement
+our method,
+it
+does not
+rely on language-specific
+processes except
+for word tokenization,
+and can therefore be
+applied to other languages.
+4.3.
+Evaluation metrics
+We use equal error rate (EER) to represent the accuracy of
+OOD sentence detection [12].
+EER is the error rate at which
+false acceptance rate
+FAR
+=
+Number of accepted OOD sentences
+Number of OOD sentences
+(13)
+and false rejection rate
+FRR
+=
+Number of rejected ID sentences
+Number of ID sentences
+(14)
+are equal.
+4.4.
+Compared methods
+We evaluated all
+possible combinations
+of
+sentence rep-
+resentation method and classification method.
+First,
+we
+called our
+neural
+sentence embedding method (Section 3.2)
+DC-LSTM because it uses an LSTM trained for domain cate-
+gory (DC) analysis.
+We compare DC-LSTM to eight sentence-
+representation methods.
+5
+Table 1: Equal error rates (%) of OOD sentence detection using combinations of sentence representation methods (row) and classification methods (column).
+The
+best result in each sentence representation method (row) is underlined; the best result in each classification method (column) is in bold.
+Sentence representation
+Classification
+NN-d
+OSVM
+CBC
+IDV
+Autoencoder
+Best
+One-hot encoding:
+BoW
+26.05
+29.27
+11.24
+13.69
+21.41
+11.24
+TF-IDF
+27.62
+33.78
+11.00
+15.83
+14.00
+11.00
+Unsupervised neural sentence embedding:
+Neural BoW
+27.11
+28.77
+20.09
+26.67
+34.15
+20.09
+PV-DBOW
+34.02
+28.65
+26.58
+28.48
+24.59
+24.59
+PV-DM
+31.35
+38.10
+29.87
+32.21
+22.61
+22.61
+Supervised neural sentence embedding based on speech-act (SA) analysis:
+SA-RNN w
+/
+random
+28.92
+20.53
+25.61
+23.11
+9.18
+9.18
+SA-RNN w
+/
+static
+31.61
+45.54
+29.54
+34.90
+30.46
+29.54
+SA-RNN w
+/
+non-static
+27.02
+26.23
+29.51
+26.40
+18.28
+18.28
+SA-RNN w
+/
+two-channel
+27.11
+22.85
+35.50
+36.10
+14.90
+14.90
+SA-LSTM w
+/
+random
+27.29
+22.94
+38.10
+16.80
+9.78
+9.78
+SA-LSTM w
+/
+static
+27.79
+35.76
+25.72
+35.94
+12.89
+12.89
+SA-LSTM w
+/
+non-static
+23.97
+25.54
+31.93
+16.00
+8.50
+8.50
+SA-LSTM w
+/
+two-channel
+25.89
+20.44
+28.76
+17.16
+11.04
+11.04
+Supervised neural sentence embedding based on domain-category (DC) analysis:
+DC-RNN w
+/
+random
+25.81
+12.30
+11.79
+12.05
+11.50
+11.50
+DC-RNN w
+/
+static
+31.68
+29.69
+20.27
+22.25
+15.52
+15.52
+DC-RNN w
+/
+non-static
+26.84
+14.72
+11.77
+11.32
+9.16
+9.16
+DC-RNN w
+/
+two-channel
+25.63
+27.44
+16.36
+16.38
+10.75
+10.75
+DC-LSTM w
+/
+random
+19.82
+15.32
+10.73
+10.31
+7.44
+7.44
+DC-LSTM w
+/
+static
+23.36
+27.02
+16.18
+21.99
+10.99
+10.99
+DC-LSTM w
+/
+non-static
+21.21
+16.27
+11.77
+10.57
+7.11
+7.11
+DC-LSTM w
+/
+two-channel
+20.27
+14.11
+10.91
+10.91
+7.02
+7.02
+Best
+19.82
+14.11
+10.73
+10.31
+7.02
+7.02
+•
+BoW.
+Bag-of-words represents a sentence as a vector in
+which the i
+th
+element is the frequency of the i
+th
+keyword in
+the sentence.
+We use n-gram by increasing n from 1 to 3
+to capture local word order; only the result with the best n
+is presented in Section 5.
+•
+TF-IDF. A sentence is represented as a vector in which the
+i
+th
+element is the product of the term frequency (TF) and
+the inverted document frequency (IDF) of the i
+th
+keyword
+in the sentence. We use n-gram as in BoW.
+•
+Neural
+BoW [6].
+A sentence is
+represented as
+the
+element-wise average of its word representations obtained
+in Section 3.1.
+•
+PV-DBOW. This is the distributed BoW version of Para-
+graph Vector (Section 2).
+We use Doc2Vec implementa-
+tion in Gensim library [23], and set the dimension of sen-
+tence representation to 200.
+•
+PV-DM. This is the distributed memory version of Para-
+graph Vector (Section 2).
+The rest
+is the same as PV-
+DBOW
+•
+SA-RNN.
+A sentence is represented by the last
+hidden
+layer of the RNN trained for speech-act (SA) analysis in-
+stead of domain-category analysis.
+To do this, we manu-
+ally annotate speech acts on the same data set; our system
+includes five speech-act
+labels:
+question
+,
+statement
+,
+request
+,
+yn-response
+, and
+greetings
+.
+•
+SA-LSTM.
+This is the LSTM network version of
+SA-
+RNN.
+•
+DC-RNN. This is the RNN version of DC-LSTM.
+In the RNNs and the LSTM networks, we compare four varia-
+tions of word embedding: random, static, non-static, and two-
+channel;
+the first
+one initializes word embedding randomly,
+and the others were described in Section 3.2.
+Second,
+we compare the autoencoder to four classification
+methods.
+•
+NN-d (Section 2). We use the Jaccard distance of two sen-
+tences as the distance measure.
+•
+OSVM (Section 2).
+We use OneClassSVM implementa-
+tion in scikit-learn library [21],
+and apply three types of
+kernels to it: linear, polynomial, and radial basis function;
+only the result
+with the best
+kernel
+is presented in Sec-
+tion 5.
+•
+CBC.
+The combination of binary classifiers rejects input
+sentences that
+are rejected by all
+the domain-wise one-
+vs.-rest classifiers.
+We use SVC implementation in scikit-
+6
+0
+10
+20
+30
+40
+50
+60
+Short group
+Medium group
+Long group
+Equal error rate
+Neural BoW
+PV-DM
+DC-RNN w/ non-static
+DC-LSTM w/ two-channel
+Fig.
+5:
+Equal error rates (%) of OOD sentence detection using Neural BoW,
+PV-DM, DC-RNN with non-static word embedding, and DC-LSTM with two-
+channel word representations.
+The autoencoder is used for classification.
+Sen-
+tences in
+short
+(31.05% of sentences),
+medium
+(38.00%),
+and
+long
+group
+(30.96%) had 1-8, 9-11, and 12-22 words respectively.
+learn library [21], and apply kernels as in OSVM.
+•
+IDV (Section 2).
+In-domain verification (IDV) uses the
+individual
+classifiers as CBC does.
+However,
+IDV uses
+their confidence scores as the feature of classification.
+5.
+Results and discussion
+Our
+proposed
+method,
+autoencoder
++
+DC-LSTM
+w
+/
+two-channel,
+was
+the
+most
+accurate
+(EER
+=
+7.02%)
+in
+the
+OOD sentence
+detection
+experiment
+(Table
+1).
+IDV
++
+BoW (EER
+=
+13.69%)
+is
+a previous
+study [12]
+that
+used only ID sentences for
+training.
+One-class deep neu-
+ral
+network (OCDNN)
+2
+for
+opinion-relation detection [34]
+can be applied also to OOD sentence detection,
+and their
+method corresponds to autoencoder
++
+DC-RNN w
+/
+non-static
+(EER
+=
+9.16%).
+This result
+means that
+our proposed method
+decreased EER by 23.37% compared to the state-of-the-art
+method.
+In the remainder
+of
+this section,
+we present
+five
+detailed observations from the experiment.
+(1) The supervised embedding methods based on domain-
+category analysis
+were more accurate than the other
+sen-
+tence representation methods such as the supervised embed-
+ding methods based on speech-act
+analysis.
+This superiority
+means for neural sentence embedding in OOD sentence detec-
+tion, domain-category analysis is a more suitable auxiliary task
+than speech-act analysis. In contrast, the unsupervised sentence
+embedding methods cannot optimize the sentence representa-
+tions for OOD sentence detection, so those methods had higher
+error rates than even one-hot encoding methods.
+(2) DC-LSTMs were more accurate than DC-RNNs. To com-
+pare them in detail, we divided the test set into
+short
+,
+medium
+,
+and
+long
+groups based on the length of each sentence (Fig. 5);
+DC-LSTM w
+/
+two-channel greatly reduced the error rate of DC-
+RNN w
+/
+non-static in the
+long
+group (-7.08% points), although
+2
+OCDNN uses a recursive neural network instead of a recurrent neural net-
+work.
+Table 2: Accuracies (%) of domain-category analysis.
+Method
+Accuracy
+SVM
++
+BoW
+95.50
+SVM
++
+TF-IDF
+95.93
+RNN w
+/
+random
+96.19
+RNN w
+/
+static
+93.16
+RNN w
+/
+non-static
+96.28
+RNN w
+/
+two-channel
+96.28
+LSTM w
+/
+random
+96.02
+LSTM w
+/
+static
+96.45
+LSTM w
+/
+non-static
+96.80
+LSTM w
+/
+two-channel
+96.37
+0.0
+0.5
+1.0
+1.5
+2.0
+2.5
+3.0
+ID group
+OOD group
+Reconstruction error
+Fig. 6: Reconstruction errors by autoencoder
++
+DC-LSTM w
+/
+two-channel.
+the di
+ff
+erence was small
+in the
+short
+group (-1.43% points)
+and the
+medium
+group (
++
+1.33% points).
+This result
+means
+that,
+in OOD sentence detection,
+LSTM networks reduce the
+vanishing-gradient problem of standard RNNs.
+(3) DC-LSTM w
+/
+two-channel was more accurate than DC-
+LSTM w
+/
+random,
+w
+/
+static,
+or
+w
+/
+non-static.
+Neverthe-
+less,
+the best accuracy of domain-category analysis itself was
+achieved by LSTM w
+/
+non-static rather than by LSTM w
+/
+two-
+channel (Table 2);
+we think the reason is that the accuracy of
+domain-category analysis can be increased by fine-tuning the
+representations of only known words.
+To summarize, the two-
+channel approach is e
+ff
+ective in OOD sentence detection,
+but
+we cannot say that it is e
+ff
+ective in general.
+(4) The autoencoder was the best classification method for
+DC-LSTM w
+/
+two-channel.
+As expected,
+the reconstruction
+errors in the autoencoder were low for ID sentences but high
+for OOD sentences on average (Fig. 6 and Fig. 7).
+This result
+means that the reconstruction error by the autoencoder is reli-
+able evidence that a sentence is OOD.
+(5) The number of domains a
+ff
+ected the result.
+When we
+used subsets of the domains by varying the number of target
+domains from 2 to 7 to train and test
+OOD sentence detec-
+tion,
+the average EER was proportional to the number of do-
+mains (red circles in Fig 8) although the EER decreased when
+the number of domains was increased from 7 to 8 (green cross
+in Fig 8).
+However,
+the results were improved when all
+do-
+7
+-1
+-0.5
+0
+0.5
+1
+(a) Autoencoder input
+-1
+-0.5
+0
+0.5
+1
+(b) Autoencoder output
+Fig. 7: (a) the representation of an OOD sentence ”I think that investment can-
+not be learned in a day” by DC-LSTM w
+/
+two-channel and (b) its reconstruc-
+tion by the autoencoder.
+We plot
+300-dimensional
+representation vectors of
+which real-valued cells ranges from -1.0 to 1.0 as 25-by-12 matrices.
+The dif-
+ference (i.e., reconstruction error) between (a) and (b) was 1.57, although it is
+subtle to the naked eye.
+5.0
+5.5
+6.0
+6.5
+7.0
+7.5
+2
+3
+4
+5
+6
+7
+8
+Equal error rate
+Number of domains used for training and test
+Both embedding and autoencoders are trained from subsets of the domains
+Only autoencoders are trained from subsets of the domains
+All domains are used to train embedding and autoencoders
+Fig. 8:
+Equal error rates (%) of OOD sentence detection in which the number
+of domains ranges from 2 to 8.
+mains were used to train sentence embedding (blue squares in
+Fig 8).
+Therefore, we can conclude that increasing the number
+of domains can decrease the accuracy of autoencoders but can
+increase the accuracy of sentence embedding.
+6.
+Conclusion
+To detect
+OOD sentences,
+we developed a method that
+is
+trained using only ID sentences.
+We used an LSTM network
+trained for domain-category analysis as a neural sentence em-
+bedding system for OOD sentence detection because the fea-
+tures for domain-category analysis are also e
+ff
+ective for OOD
+sentence detection;
+the word representations were pre-trained
+using a large set of unlabeled text before domain-category anal-
+ysis was trained.
+We used the learned sentence representations
+to train an autoencoder that detects OOD sentences based on
+their reconstruction errors.
+In an experiment on a data set of
+an eight-domain dialog system, the proposed method achieved
+higher accuracy than the state-of-the-art methods. This method
+will help to improve user experience in dialog systems by en-
+abling them to detect OOD sentences accurately.
+Acknowledgments
+This research was supported by the MSIP,
+Korea,
+under
+the G-ITRC support program (IITP-2016-R6812-16-0001) su-
+pervised by the IITP.
+We thank the editor
+and two anony-
+mous reviewers for their insightful comments.
+We also thank
+Dr. Derek Jon Lactin for his careful proofreading.
+References
+[1]
+Chollet, F., 2015.
+keras.
+https://github.com/fchollet/keras
+.
+[2]
+Firth,
+J.,
+1957.
+A synopsis of linguistic theory 1930-1955.
+Studies in
+Linguistic Analysis , 1–32.
+[3]
+Gers, F.A., Schmidhuber, J., Cummins, F., 2000. Learning to forget: Con-
+tinual prediction with LSTM.
+Neural Comput. 12, 2451–2471.
+[4]
+Graves,
+A.,
+Schmidhuber,
+J.,
+2005.
+Framewise phoneme classification
+with bidirectional LSTM and other neural network architectures.
+Neural
+Networks 18, 602–610.
+[5]
+Hakkani-Tur,
+D.,
+Tur,
+G.,
+Celikyilmaz,
+A.,
+Chen,
+Y.N.,
+Gao,
+J.,
+Deng,
+L., Wang, Y.Y., 2016.
+Multi-domain joint semantic frame parsing using
+bi-directional rnn-lstm, in: Proc. Interspeech.
+[6]
+Hermann,
+K.M.,
+Blunsom,
+P.,
+2014.
+Multilingual models for composi-
+tional distributional semantics, in: Proc. ACL.
+[7]
+Hochreiter, S., Schmidhuber, J., 1997.
+Long short-term memory.
+Neural
+Comput. 9, 1735–1780.
+[8]
+Jiang,
+R.,
+Banchs,
+R.E.,
+Kim,
+S.,
+Yeo,
+K.H.,
+Niswar,
+A.,
+Li,
+H.,
+2014.
+Web-based multimodal multi-domain spoken dialogue system, in:
+Proc.
+IWSDS.
+[9]
+Kim, Y., 2014. Convolutional neural networks for sentence classification,
+in: Proc. EMNLP.
+[10]
+Kingma, D., Ba, J., 2015.
+Adam:
+A method for stochastic optimization,
+in: Proc. ICLR.
+[11]
+Komatani, K., Kanda, N., Nakano, M., Nakadai, K., Tsujino, H., Ogata,
+T., Okuno, H.G., 2009. Multi-domain spoken dialogue system with exten-
+sibility and robustness against speech recognition errors,
+in:
+Proc. SIG-
+DIAL, pp. 9–17.
+[12]
+Lane, I., Kawahara, T., Matsui, T., Nakamura, S., 2007.
+Out-of-domain
+utterance detection using classification confidences of multiple topics.
+IEEE
+/
+ACM Trans. Audio, Speech, Language Process. 15, 150–161.
+[13]
+Le,
+Q.,
+Mikolov,
+T.,
+2014.
+Distributed representations of sentences and
+documents, in: Proc. ICML, pp. 1188–1196.
+[14]
+Lee,
+D.,
+Jeong,
+M.,
+Kim,
+K.,
+Ryu,
+S.,
+Lee,
+G.G.,
+2013.
+Unsuper-
+vised spoken language understanding for a multi-domain dialog system.
+IEEE
+/
+ACM Trans. Audio, Speech, Language Process. 21, 2451–2464.
+[15]
+Li,
+Q.,
+Tur,
+G.,
+Hakkani-Tur,
+D.,
+Li,
+X.,
+Paek,
+T.,
+Gunawardana,
+A.,
+Quirk, C., 2014.
+Distributed open-domain conversational understanding
+framework with domain independent extractors, in: Proc. IEEE SLT.
+[16]
+Liu, B., Lane, I., 2015.
+Recurrent neural network structured output pre-
+diction for spoken language understanding, in: Proc. NIPS.
+[17]
+Manevitz,
+L.,
+Yousef,
+M.,
+2007.
+One-class document classification via
+neural networks.
+Neurocomputing 70, 1466–1481.
+[18]
+Mikolov, T., Chen, K., Corrado, G., Dean, J., 2013.
+E
+ffi
+cient estimation
+of word representations in vector space, in: Proc. ICLR.
+[19]
+Nakano,
+M.,
+Sato,
+S.,
+Komatani,
+K.,
+Matsuyama,
+K.,
+Funakoshi,
+K.,
+Okuno,
+H.G.,
+2011.
+A two-stage domain selection framework for ex-
+tensible multi-domain spoken dialogue systems, in: Proc. SIGDIAL.
+[20]
+Pan, S.J., Yang, Q., 2010.
+A survey on transfer learning.
+IEEE Trans. on
+Knowl. and Data Eng. 22, 1345–1359.
+[21]
+Pedregosa,
+F.,
+Varoquaux,
+G.,
+Gramfort,
+A.,
+Michel,
+V.,
+Thirion,
+B.,
+Grisel, O., Blondel, M., Prettenhofer, P., Weiss, R., Dubourg, V., Vander-
+plas, J., Passos, A., Cournapeau, D., Brucher, M., Perrot, M., Duchesnay,
+E., 2011.
+Scikit-learn: Machine learning in Python.
+J. Mach. Learn. Res.
+12, 2825–2830.
+[22]
+Ravuri, S., Stolcke, A., 2015.
+Recurrent neural network and LSTM mod-
+els for lexical utterance classification, in: Proc. Interspeech.
+8
+[23]
+ˇ
+Reh
+˚
+u
+ˇ
+rek,
+R.,
+Sojka,
+P.,
+2010.
+Software framework for topic modelling
+with large corpora, in: Proc. LREC, pp. 45–50.
+[24]
+Ryu, S., Song, J., Koo, S., Kwon, S., Lee, G.G., 2015. Detecting multiple
+domains from users utterance in spoken dialog system, in: Proc. IWSDS.
+[25]
+Sch
+¨
+olkopf,
+B.,
+Platt,
+J.C.,
+Shawe-Taylor,
+J.C.,
+Smola,
+A.J.,
+Williamson,
+R.C.,
+2001.
+Estimating the support of a high-dimensional distribution.
+Neural Comput. 13, 1443–1471.
+[26]
+Schuster,
+M.,
+Paliwal,
+K.K.,
+1997.
+Bidirectional
+recurrent
+neural
+net-
+works.
+IEEE Trans Sig. Process. 45, 2673–2681.
+[27]
+Seon,
+C.N.,
+Lee,
+H.,
+Kim,
+H.,
+Seo,
+J.,
+2014.
+Improving domain ac-
+tion classification in goal-oriented dialogues using a mutual
+retraining
+method.
+Pattern Recogn. Lett. 45, 154–160.
+[28]
+Srivastava, N., Hinton, G., Krizhevsky, A., Sutskever, I., Salakhutdinov,
+R., 2014.
+Dropout: A simple way to prevent neural networks from over-
+fitting.
+J. Mach. Learn. Res. 15, 1929–1958.
+[29]
+Tax, D.M.J., Duin, R.P.W., 2000.
+Data description in subspaces, in: Proc.
+ICPR.
+[30]
+Tieleman, T., Hinton, G., 2012.
+Lecture 6.5-rmsprop:
+Divide the gradi-
+ent by a running average of its recent magnitude.
+COURSERA: Neural
+Networks for Machine Learning 4.
+[31]
+Tur,
+G.,
+Deoras,
+A.,
+Hakkani-Tur,
+D.,
+2014.
+Detecting out-of-domain
+utterances addressed to a virtual personal assistant, in: Proc. Interspeech.
+[32]
+Tur,
+G.,
+Iyer,
+R.,
+Heck,
+L.,
+Hakkani-Tur,
+D.,
+2012.
+Translating natu-
+ral language utterances to search queries for slu domain detection using
+query click logs, in: Proc. ICASSP.
+[33]
+Vukotic,
+V.,
+Raymond,
+C.,
+Gravier,
+G.,
+2015.
+Is it
+time to switch to
+word embedding and recurrent neural networks for spoken language un-
+derstanding?, in: Proc. Interspeech.
+[34]
+Xu,
+L.,
+Liu,
+K.,
+Zhao,
+J.,
+2014.
+Joint opinion relation detection using
+one-class deep neural network, in: Proc. COLING.
+[35]
+Yao, K., Peng, B., Zhang, Y., Yu, D., Zweig, G., Shi, Y., 2014.
+Spoken
+language understanding using long short-term memory neural networks,
+in: Proc. IEEE SLT, pp. 189–194.
+[36]
+Yao, K., Zweig, G., Hwang, M.Y., Shi, Y., Yu, D., 2013. Recurrent neural
+networks for language understanding, in: Proc. Interspeech.
+[37]
+Zeiler, M.D., 2012. ADADELTA: an adaptive learning rate method. arXiv
+1212.5701 .

@@ -1,0 +1,1425 @@
+﻿© 2016 Tianxiao Zhang
+ENTITY-RELATION SEARCH: CONTEXT PATTERN DRIVEN RELATION RANKING 
+BY 
+TIANXIAO ZHANG 
+THESIS 
+Submitted in partial fulfillment of the requirements 
+for the degree of Master of Science in Computer Science 
+in the Graduate College of the 
+University of Illinois at Urbana-Champaign, 2016 
+Urbana, Illinois 
+Adviser: 
+Professor Kevin C. Chang 
+!
+ii 
+ABSTRACT 
+A traditional page link-based search system is not adequate for users intending to query data 
+efficiently. For instance, emergent phenomena reveal that some entity-based search engines, 
+such as 
+EntityRank
+, directly return answers (target entities) to users instead of web pages. 
+Most of the time, however, compared to searching for interested entities, users more 
+often focus on relationships among entities. To our knowledge, there is only one web search 
+system that automatically extracts relations from massive unstructured corpora. This system is 
+referred to as 
+OpenIE
+, which indeed brings us one step closer to an entity relation-based system. 
+Nevertheless, its system extracts only direct relations between a pair of entities and ranks 
+simply by occurrence frequency. The monotone pattern extraction, adopted in their relation 
+phrase extraction model, provides high quality entity relations but also fail to return many 
+potential true relations in the corpus, which has been explained in Section 4.2 and affects 
+recall
+significantly shown in 5.3. In addition, it is difficult for users to retrieve their interested and true 
+relations from massive relation candidate set without a qualified ranking model. Consequently, 
+there still exists a gap between the system and users for retrieving entity relations efficiently by 
+a simple query. 
+To assist users to find their interested relations efficiently, this thesis specifically focuses 
+on the core challenges of the ranking model. Naturally, the quality of each relation candidate is 
+largely relevant to its context. Thus, to evaluate various conditions, a novel idea of context 
+patterns driven ranking has been introduced. After evaluating our online prototype on millions 
+of 
+PubMed
+medical abstracts, we show that our system performs better than the 
+OpenIE
+system 
+on both 
+precision
+and 
+recall
+. 
+!
+iii 
+Note that this rich and novel system is the product of a collaborative team effort 
+comprised of the following members: Zequn Zhang, Jiarui Xu, and Varun Berry, and supervised 
+by Professor Kevin Chang. 
+!
+iv 
+To my parents and friends, for their love and support 
+!
+v 
+TABLE OF CONTENTS 
+!
+CHAPTER 1
+!
+INTRODUCTION ......................................................................... 1
+!
+1.1
+!
+Motivation/Challenges .................................................................................................................1
+!
+1.2
+!
+Problem Description ....................................................................................................................1
+!
+1.3
+!
+Entity-Relation Search Overview ................................................................................................3
+!
+1.4
+!
+Thesis Focus: Ranking Model .....................................................................................................5
+!
+1.5
+!
+Contributions ...............................................................................................................................5
+!
+CHAPTER 2
+!
+RELATED WORK ....................................................................... 7
+!
+2.1
+!
+Traditional Entity Relation Mining Systems in Medical Field ................................................7
+!
+2.2
+!
+Entity-Related Search Systems ...................................................................................................9
+!
+2.3
+!
+General Entity Relation Automatic Extraction Systems ..........................................................9
+!
+2.4
+!
+Entity Relation Ranking Task ..................................................................................................10
+!
+CHAPTER 3
+!
+CONTEXT PATTERN DESIGN .............................................. 11
+!
+3.1
+!
+Insights Related to Ranking ......................................................................................................11
+!
+3.2
+!
+Conceptual Model ......................................................................................................................12
+!
+3.3
+!
+Context Pattern Definition and Weight Mining ......................................................................12
+!
+CHAPTER 4
+!
+RANKING MODEL ................................................................... 16
+!
+4.1
+!
+Ranking Relations ......................................................................................................................16
+!
+4.2
+!
+Ranking in the System ...............................................................................................................18
+!
+CHAPTER 5
+!
+EXPERIMENTS ......................................................................... 20
+!
+5.1
+!
+Type Specific Pattern Distribution ...........................................................................................20
+!
+5.2
+!
+Context Pattern Weight Mining Result ...................................................................................21
+!
+5.3
+!
+Comparison with OpenIE ..........................................................................................................22
+!
+5.4
+!
+Case Study and Demo Interface ...............................................................................................25
+!
+CHAPTER 6
+!
+CONCLUSION AND FUTURE WORK .................................. 30
+!
+REFERENCES ...................................................................................................... 31
+!
+!
+1 
+CHAPTER 1 
+INTRODUCTION 
+1.1
+!
+Motivation/Challenges 
+In the real world, besides understanding a single entity, people are more likely to know about the 
+connections among things that they find particularly interesting. For instance, a student might 
+want to know the relation between his school and his favorite company, or a patient might need 
+to know if he could take two kinds of medicine simultaneously. Although the task’s needs are 
+very clear and necessary, finding the exact entity relations from rich unstructured data remains 
+challenging. 
+An existing solution, for instance 
+OpenIE, 
+indeed solved the relation phrase extraction 
+task efficiently, but a crucial problem remained. This problem was that the missing ranking 
+model makes the results less informative and of lower recall. Consequently, how to capture users’ 
+query intentions and how to evaluate the qualities of each relation candidate’s reasonability 
+becomes our major challenge. 
+1.2
+!
+Problem Description 
+We formally define our entire research problem in Figure 1.1. First, for input, as queries, our 
+relation search system lets users search for relation phrases by specifying subject and object, 
+both as entities, and a list of optional context constraints in the form of entities and keywords, 
+which indicate the user’s intention of where the relations should be found. By design, the relation 
+search 
+is 
+essentially 
+search 
+relations 
+by 
+context 
+over 
+the 
+document 
+collection. 
+Context 
+!
+2 
+constraints intend to shape the search space within which the desired relations occur. For 
+example, users could query the relationship between “diabetes” and “insulin” and specify the 
+context constraint to be “mice”, suggesting that only the relations with “mice” involved would be 
+interesting. 
+Relation-Search
+Query. 
+•
+!
+Given
+: Entity collection 
+ℰ = {$
+%
+, … , $
+(
+}
+and Relation Phrase collection 
+ℛ =
+{+,
+%
+, … , +,
+-
+}
+, over Document collection 
+. = {/
+%
+, … , /
+0
+}
+. 
+•
+!
+Input
+: Query 
+1 < $
+%
+, $
+3
+> = $
+%
+, $
+3
+, 5$
+%
+, … , 5$
+6
+, 7
+%
+, … , 7
+8
+, where entity 
+$
+9
+∈ ℰ
+, 
+context entity 
+5$
+;
+∈ ℰ
+, and 
+7
+is keyword. 
+Output
+: Ranked list of 
+< =< +, >
+, where 
++, ∈ ℛ
+, sorted by 
+=>?+@(1 < )
+, the query score 
+of 
+<
+.
+Figure 1.1The Relation Search Problem 
+Second, for output, the result is a ranked list of human-readable relation phrases. A 
+relation phrase will be ranked higher, if it matches the query better. We denote the measure of 
+how well 
+<
+matches the query 
+1
+as 
+=>?+@(1 < )
+, which should capture how 
++,
+describes the 
+relationship for the pair of query entities, in the specified search context. 
+We emphasize that, since the scoring function determines the ranking of relation phrases, 
+it is the central function of our relation search system. Thus, the objective of the relation search 
+is to find, from the space of 
+ℛ
+, the matching relation phrases in ranked order by how well they 
+match query 
+1
+(i.e., how well the relation phrase captures the relationship between the given pair 
+of query entities under the preferred contexts). 
+Before introducing our solution, we provide related terminologies definition in Table 1.1. 
+!
+3 
+Relation Phrase 
+Relation phrase is a verb phrase that denotes a binary relation in a 
+sentence 
+Context Vector 
+A text window convers query entity pairs and relation phrase 
+candidates; Will be sentences in our case 
+Context Entity 
+Entities co-occur with query entity pairs working as the context 
+Context Pattern 
+A pattern captures all context information needed for ranking. E.g. (E 
+VP E) means there is an <Entity, Verb Phrase, Entity> subsequence 
+in the sentence. 
+Table 1.1: Related terminologies and definitions used in this thesis 
+1.3
+!
+Entity-Relation Search
+Overview 
+Following the definition of our problem, we present our relation phrase-based web search system 
+according to three components: extraction model, indexing model, and ranking model. In this 
+thesis, I will only detail the ranking algorithm, and the former two parts can be found in Zequn’s 
+thesis. 
+An overview of our entire system’s architecture is presented in Figure 1.2. Sequentially, 
+offline, 
+we 
+first 
+perform 
+a 
+verb 
+phrases/context 
+patterns 
+candidate 
+set 
+extraction 
+in 
+the 
+preprocessing step, which we summarize as the extraction model. Then, there are two tasks 
+related to ranking that are conducted offline, including the span model and context pattern 
+mining. In particular, the span model is a trained probabilistic distribution model over the context 
+vector span size. Context pattern mining, is used to compute the relationship among various 
+context patterns and true relation phrases. Finally, we proposed an efficient indexing model to 
+index all relation phrases, patterns and context vectors. 
+Thus, as a query is arriving, we may extract additional query information, such as 
+!
+4 
+corresponding entity types by the Query Parser. Then, by extracting related context vectors via 
+indexing, and calculating the ranking score for each relation candidate (by combining the 
+precomputed the span model and context pattern weights), our system can return a ranked list of 
+relation phrases efficiently and effectively. 
+Figure 1.2: Entity Relation Search System Architecture Graph 
+!
+5 
+1.4
+!
+Thesis Focus: Ranking Model 
+On account of the fact that this entire system is the product of a group project, the division of 
+work may be assigned as follows: Jiarui Xu works on the empirical studies of data insights; 
+Varun Berry mostly focuses on the relation phrase clustering over context study; Zequn Zhang 
+works on the indexing and extraction model, and I design the ranking model. Also, we 
+implement the online prototype together. 
+Recall that there are three main components in our system. The indexing model, 
+extraction 
+model 
+and 
+some 
+other 
+offline 
+preprocessing 
+subtasks, 
+such 
+as 
+relation 
+phrase 
+clustering, can be viewed in Zequn’s thesis. 
+This thesis will mostly focus on explaining the context pattern based ranking model. The 
+organization of the rest of this thesis is as follows. Chapter 2 provides a discussion of extant 
+work related to our problem. Chapter 3 introduces the conceptual model of the system, the 
+context 
+pattern 
+weight-mining 
+sub-problem, 
+and 
+the 
+motivated 
+ranking 
+model. 
+To 
+better 
+understand the role of our ranking model, and to obtain a holistic view of the entire system, the 
+Entity-Relation Search
+algorithm will be explained in Chapter 4. Then, Chapter 5 presents 
+ranking-related 
+empirical 
+studies, 
+the 
+system 
+demo, 
+and 
+an 
+evaluation 
+of 
+its 
+searching 
+performance. 
+1.5
+!
+Contributions 
+In total, we summarize contributions of the entire system as follows: 
+1.
+!
+We discover and develop a pattern-driven ranking model that supports search by context. 
+2.
+!
+We introduce the novel ideas of the entity modifier, context entity, and a systematic way to 
+extract context patterns. 
+!
+6 
+3.
+!
+We 
+conduct 
+extensive 
+fundamental 
+studies 
+on 
+properties 
+and 
+distributions 
+of 
+verb 
+phrases/patterns on a professional medical corpus. 
+4.
+!
+We implement an online prototype on the 
+PubMed
+corpus, and it outperforms the most 
+popular recent work (
+OpenIE
+) effectively. 
+Individually, since my focus is on context pattern based ranking model, this thesis offers the 
+following contributions: 
+1.
+!
+I propose the innovative concept of context pattern that can summarize the context 
+information for each relation phrase occurrence actively. 
+2.
+!
+I introduce two approaches for context pattern weight mining and conduct relevant 
+experiments to compare its performance. 
+3.
+!
+I design and implement 
+Entity-Relation Search
+’s final ranking model and use the impression 
+model to thoroughly explain it. 
+!
+7 
+CHAPTER 2 
+RELATED WORK 
+Entity-Relation Search
+is a searching system that aims to automatically extract and rank relations 
+among medical entities. There are two fields of related studies, including the medical entity 
+relation mining and the entity-related search system, which will be elaborated in the first three 
+sections. In addition, since this thesis’s theme is the ranking model, the last section in this 
+chapter will focus on existing works that specifically address the relation-ranking problem. 
+2.1 
+Traditional Entity Relation Mining Systems in Medical Field 
+In the domain of bio-informatics, massive work exists on the entity relation-mining task. The 
+earliest 
+and 
+most 
+basic 
+approaches 
+is 
+to 
+manually 
+curate 
+relation 
+phrases 
+by 
+medical 
+professionals. The most popular one is the 
+Comparative Toxicgenomics Database 
+(
+CTD
+). Its data 
+includes relations among Chemical-Gene, Chemical-Disease and Gene-Disease. This method 
+provides good quality and clear relations of Chemical-Gene, given the relatively small size of the 
+true relation set. However, when considering further query, interesting pairs, such as Chemical-
+Disease, may be more flexible and obscure true relation phrases between them. Thus, this 
+database is capable only of presenting predefined relation types, such as “therapeutic” and 
+“mechanism”, but not phrases. 
+Another similar medical knowledge base is The 
+Pharmacogenomics Knowledgebase
+(
+PharmGKB
+), which focuses on the relationships between human genetic variation and drugs. 
+Regardless, heavily human-supervised methods can only adapt to clearer and less varied entity 
+!
+8 
+relations. We summarize that such approaches are characteristic of high time cost and, in fact, 
+fail to detect new relations. 
+Further, an increased amount of research was published that was based on these medical 
+databases, and such research proposed various systems to automatically detect medical entity 
+relations. However, their purpose was to describe entity relations via entity pairs instead of 
+semantic phrases. The closest work in this group is a system referred to as 
+OntoGene
+[3]. 
+Researchers from the University of Zurich implemented this related entity pair ranking system 
+for each curated 
+PubMed
+abstract. We stress that in the mining process, researchers indeed 
+automatically 
+extract 
+short 
+relation 
+phrases 
+which 
+were 
+denominated 
+as 
+the 
+action 
+term. 
+Nevertheless, the phrases were used merely as features for the related entity pair prediction task, 
+and the research’s final goal was to rank related entity pairs instead of ranking relations. 
+Moreover, the research limited the extraction text window to each single 
+PubMed
+abstract, which 
+failing to leverage corpus redundancy. 
+In [4], another research study also intended to profile entity relations by related entity 
+pairs. For this system, the researchers extract related entity pairs to depict related entity relations 
+via a network embedding technique. Specifically, users provide a seed entity pair and a query 
+entity. Then, the system returns another entity, which shares a similar relation, by integrating 
+phrase-mining techniques with the LINE system. 
+We notice that, in these works, although the result seems to be accurate (i.e. the system 
+can capture the latent relation between the query seed entity pair and return correct and similar 
+entity pairs), users still do not know the direct relations between their interested entities. 
+!
+9 
+2.2 
+Entity-Related Search Systems 
+In terms of the searching system side, the earliest research on the subject proposed an entity-
+related search instead of a traditional link-based search engine, such as 
+EntityRank
+[5,6]. Its 
+problem is that users query their interested entity type and insert a multitude of keywords; and, 
+the system will automatically extract and rank related entities. The idea of returning a ranked 
+entity list makes the assessment of an unstructured data-rich web more efficient and useful. In 
+particular, to motivate their ranking model, the researchers first designed a conceptual model. 
+This model provides an analog as the target entities ranking task to match an observer’s 
+impression. Then, following such an impression model, the researchers rank the target entities by 
+global aggregation and local assessment. For the local assessment, to better evaluate each 
+entity’s occurrence, they design a proximity span model. The span model, intuitively, is relying 
+that the quality of each entity occurrence can be determined based on its proximity. Considering 
+the sharing characteristic of the context searching with our problem and the effeteness of these 
+models, notably, we adapted them to our ranking model. 
+2.3 
+General Entity Relation Automatic Extraction Systems 
+In [7,8,9,10], recent research already proposed solutions regarding the relation phrase 
+automatically extraction task from an unstructured corpus. The research that is most related to 
+our method is that of Open Information Extraction (
+OpenIE
+) [9,10]. It discovers a powerful 
+pattern extraction method, which supports the automatic mining of high quality relation phrases 
+across domains. Specifically, it extracts and indexes the <entity pair, relation phrase> tuples 
+offline and returns relations that are ordered by frequency during the process online for each 
+given query. Although 
+OpenIE
+provides an effective solution for the automatic relation phrase 
+!
+10 
+extraction task, its system cannot search by context (i.e. query keywords besides a pair of entities) 
+and it does not contain a ranking model. In Section 5.3, we empirically compared our approach 
+with 
+OpenIE
+’s result. 
+2.4 
+Entity Relation Ranking Task 
+Particular to the relationship-ranking task, almost all prior literature uses 
+Resource Description 
+Framework (RDF)
+graph approaches [15,16]. This group of work firstly converted an RDF 
+document into a knowledge base graph, containing entities as node and relations as edge. 
+Secondly, the extract candidate association path was determined via three types of pattern 
+constraints. Then, ranking related association paths were performed on information gain from the 
+graph structure. Such kind of graph-based methods require extraordinary time to build a network 
+and return association paths with multiple phrases on each path. This remains difficult for users 
+to understand. To overcome these challenges, we propose an efficient and effective pattern-
+driven ranking system. In addition, to our knowledge, we are the first research to propose such a 
+context pattern based ranking system. 
+!
+11 
+CHAPTER 3 
+CONTEXT PATTERN DESIGN 
+3.1
+!
+Insights Related to Ranking 
+To illustrate the design process of our context pattern-driven ranking model, firstly we will 
+present some conclusions arrived at from our data insight experiments. 
+3.1.1
+!
+Necessity of searching into context 
+As mentioned in the related work section, a major difference between our approaches to the 
+OpenIE
+is the idea of searching into contexts. In the data exploring experiments, we noticed that, 
+in most cases, there are numerous and diverse types of context entities with a co-occurrence 
+between entity pairs and relation phrases. 
+From the perspective of users, they might be interested in relations under certain context entities 
+instead of general information. For instance, even if for the same query entity pair – “Diabetes” 
+and 
+“Insulin” 
+– 
+users 
+might 
+wonder 
+about 
+the 
+relation 
+existing 
+under 
+different 
+conditions/dimensions, such as Glucose or Patient, and thus, they would expect different results. 
+From the perspective of system design, besides a pair of interested entities, we should 
+allow users to put context entities as keywords in their query and handle those context entities 
+factor 
+during 
+ranking. 
+In 
+a 
+sense, 
+the 
+context 
+pattern 
+can 
+satisfy 
+this 
+requirement 
+since 
+considering context entity can cause different context patterns, and thus, it may affect the ranking 
+result. 
+!
+12 
+3.1.2
+!
+Type-pair-specific priors 
+Another observation is that the pattern distribution may be changed with regard to different 
+entity type pairs. We present the top most frequent context patterns under different entity type 
+pairs in the Section 5.1. Inspired by a similar idea, we should mine context pattern weight under 
+different entity type pairs. 
+3.2
+!
+Conceptual Model 
+Before describing the details of our algorithms, we would explain our ranking formula by a 
+conceptual model similar to the impression model in 
+EntityRank
+. To explain the solution to the 
+entity relation search task, we provide an analogy as a system to a human observer. When a 
+person wants to explore relations between a pair of entities, intuitively, he will examine all of the 
+documents and collect some relation candidates from each evidence/occurrence that matches his 
+judgment. He will stop when he captures a sufficient impression. To model such an impression 
+construction process, we propose a pattern-driven ranking model. Briefly, the access probability 
+of observing one document depends on how related such a document’s content is to his 
+interested entities, and the impression on each occurrence largely relates to its window size and 
+neighboring components/context. This kind of local assessment process for an observer can be 
+simulated by the span model and context pattern model shown in Figure 1.2. 
+3.3
+!
+Context Pattern Definition and Weight Mining 
+Naturally, similar to reading each relation candidate occurrence manually by an observer in our 
+conceptual model, we would also hope our system can “understand” the meaning of each relation 
+and rank based on its “impression”. However, considering the efficiency of our online search 
+!
+13 
+system, the time-costly NLP techniques, such as parse tree to deep learning semantic meaning, is 
+not applicable. Thus, we only select three essential components from the context vector to 
+represent such relation candidate’s context environment and form a pattern called context pattern. 
+Those three context pattern components are entity, relation phrase, and entity modifier (See two 
+examples in Figure 3.1). 
+Example 
+Context Pattern 
+Context Vector 
+1 
+Entity Modifier – Entity – 
+Relation Phrase – Entity Modifier 
+– Entity 
+Nocturnal(EM) asthma(E) uncontrolled 
+inhaled(RP) corticosteroids(EM) 
+theophylline(E). 
+2 
+Entity Modifier – Entity – Entity 
+Modifier – Relation Phrase – 
+Entity - Entity Modifier 
+Serum(EM) theophylline(E) 
+concentrations(EM) determined(RP) 
+theophylline(E) dosage(EM). 
+Figure 3.1: Two context vector with its context patterns 
+The new idea of an entity modifier is introduced to specify a sub-level of the entity or to 
+describe a relation under a certain condition. Note that the introduction of the entity modifier 
+concept produces two unique benefits to our system. One one hand, the more diverse pattern is 
+able to further distinguish entity relations in each context compared to the monotonic pattern (E 
+RP E) in 
+OpenIE
+. On the other hand, it assists users to better understand relation phrases. An 
+entity modifier could be used to explain the occurrence of opposite relation phrases for the same 
+query. For instance, when query “aspirin” and “headache”, besides popular relations such as 
+“treat”, our system might also return some opposite meaning phrases such as “cause”. Entity 
+modifier “alcohol” can be used to explain this rare and opposite relation since having “aspirin” 
+with “alcohol” can also lead to headache. 
+!
+14 
+We limit the entity modifier to be either an adjective or noun (not entity) that is directly 
+before or after an entity. Even though an entity modifier and entity is located close to each other, 
+verb phrase and entities do not need to be consecutive in the text. 
+For mining the weights of different pattern parts, we explored two techniques: (1) 
+average_NSC (2) and supervised learning on the average 
+NSC
+pattern score. Before introducing 
+the details of these two approaches, we first introduce a measure function on each context vector, 
+which is referred to as 
+normalized sentence count (NSC)
+. The definition is listed in Table 3.1, 
+and the idea is to capture the distribution between one pattern and pair of entities. Since the NSC 
+evaluation metric was proposed, intuitively, we could sum 
+NSC
+(P,E1,E2) by various pairs of 
+entities to find the weight for each pattern. According to the definition, the higher the value of 
+the average 
+NSC
+, the more the portion such a pattern has regarding context vector distribution. In 
+other words, it considers how likely it is to represent entities’ profile in the corpus. 
+NSC(P,E1,E2) = 
+3∗DE(F%,F3)
+DE(F%)GHGDE(F3)
+For each pattern P and one entity pair (E1,E2)
+SC(E1,E2): # of context vectors that contain such a pair of entities satisfying 
+pattern P 
+SC(E1): # of context vectors that have entity E1 satisfying pattern P 
+SC(E2): # of context vectors that include entity E2 satisfying pattern P
+Table 3.1: Mathematical definition of normalized sentence count under pattern P and 
+entity pair (E1, E2) 
+The second approach is developed and based on the same metric, but it employs a 
+supervised learning method. Unlike computing statistical distributions by average_NSC
+method, 
+we aim to evaluate the information power of each pattern by distinguishing the true relations 
+between an entity pair. We use numerous context vectors as the training instance and manually 
+label them based on their semantic correctness between the entity pair and relation phrase inside. 
+!
+15 
+After that, we train a logistic regression model to learn different patterns’ average_
+NSC
+as features of this prediction task. Finally, we obtain each pattern weight by computing the 
+corresponding Wald Test score in the classifier. In this case, the higher value of the Wald Test 
+score, the more statistical significance such a pattern holds for predicting true relations. 
+!
+16 
+CHAPTER 4 
+RANKING MODEL 
+4.1
+!
+Ranking Relations 
+Underlying a similar conceptual model to 
+EntityRank
+, we consider several factors for capturing 
+the unique characteristic of entity relations: 
+●
+!
+R-Contextual: The probability of an association (q(t)) between the given query and 
+relation candidates in various context vector might be different. Specifically, this value 
+was computed based on two metrics, including pattern and proximity. The pattern 
+information is to evaluate that, given a pair of entity types and one corresponding pattern, 
+how likely it is that such q(t) can be true. Moreover, the proximity information intends to 
+estimate the true relation phrase based on their context vector word distance.
+●
+!
+R-Holistic: Aggregate relation candidate (RP) occurrences in all the matching documents 
+to rank each RP.
+●
+!
+R-Uncertainty: The extraction confidence score of each relation phrase (conf(RP)).
+●
+!
+R-Discriminative: Similar idea to authority score of the HITS algorithm. We trust more a 
+relation candidate from a high quality document (P(d)). 
+Driven by the unique features discussed above, we summarize our ranking score function 
+in Figure 4.1. It integrates local assessment parts with global aggregation. Specifically, we 
+remark that instead of using the HITS, we recommend using document global content evaluation 
+!
+17 
+metrics. For example, the probability of the distribution on the number of entities in the 
+document could be one reasonable choice because, intuitively, the fewer the number of entities in 
+this document, the closer will be the document topic to the query entities. 
+Query: q (E1, E2, k1….kl) 
+q(t) = q (E1, E2, K*) + RP 
+Result: Ranked list of RPs and snippet evidences for each RP 
+Score(q(t)) = 
+I / ∗ I 1 <
+/
+J∈K
+G
+=
+I / ∗
+>?LM NI
+(
+9O%
+∗ I(5P
+9
+|GI, $L<R<SGTS,@) ∗ I(5P
+9
+|=,UL)
+J∈K
+I(/)
+: Document d’s authority score 
+>?LM(NI)
+: Confidence score of relation phrase(RP) extraction 
+I(5P
+9
+|GI, $L<R<SGTS,@)
+: Context pattern score for pattern P in the context vector i 
+I(5V
+9
+|=,UL)
+:Span Model Score for q(t) in the context vector i 
+Figure 4.1: The ranking score function of entity relation search system 
+Following the concept of pattern-driven ranking, we precompute each pattern weight 
+under every entity type pairs offline. Notably, the detailed process was stated in the Section 3.3. 
+Consequently, we can simply match each context vector to one pattern and extract pattern weight 
+while in progress. Then, to compute the proximity score, we borrow the idea of the span model, 
+which learns the distribution between the span length of q(t) and their context correctness from 
+the experiment corpus. While the model is simple and intuitive, our experimental results prove 
+that it is sufficient to distinguish various context associations on the proximity aspect. 
+!
+18 
+4.2
+!
+Ranking in the System 
+To present the role of our ranking model work in the entire system workflow, we demonstrate 
+Entity-Relation Search
+’s algorithm in Algorithm 4.1. We now use an example to work through 
+this algorithm and the system architecture (Figure 1.2). 
+Let us assume the relation query is “diabetes” and “insulin”. First, we load the inverted index 
+for “diabetes” and “insulin” (line 0). Then, we iterate the two lists in parallel, checking for any 
+intersecting documents in line 1. In this example, the algorithm will report the first intersecting 
+document to be 
+/
+W
+. After that, the algorithm will further check if a tuple forms by the pair of 
+entities “diabetes” and “insulin”. Any verb phrases (e.g. “treated with”) recovered from its 
+context vectors satisfy any context pattern (e.g. “
+E VP E
+”) in our pre-defined pattern set. 
+If a matching tuple is found, we will then calculate the matching score for it in line 4. As 
+explained in former section, to do that, the system will firstly acquire entity type information for 
+this given query entities by our query parser. In this example, it will be “disease” and “chemical”. 
+Then, compute the span model score and load corresponding entity type based context pattern 
+weight for such matching tuple. Finally, after we initiated all possible tuples, we aggregate the 
+scores for each tuple in line 6 and output it as its ranking score in line 7. 
+We note that the core of our 
+Entity-Relation Search 
+algorithm (lines 1-4) is essentially 
+performing sort-merge-join over parallel ordered lists. By design, our algorithm can be run very 
+efficiently. In addition, since this sort-merge-join works on a document basis, it can easily be 
+fully parallelized by partitioning the entire corpus into sub-corpora. This parallelism provides 
+superior possibilities to support real-time large-scale relation searches. 
+!
+19 
+T
+he Entity Relation Search Algorithm: 
+Given: 
+X $
+9
+,
+X Y
+;
+: RL[@+<@/G\R]<GM?+GU\\G<ℎ@G@L<R<R@]GUL/G7@S_?+/];
+=
+a
+: >?L<@b<G,U<<@+LG]@<.
+Input: 
+1 = $
+%
+, $
+3
+, 5$
+%
+, … , 5$
+6
+, 7
+%
+, … , 7
+8
+: entities, context entities and keywords. 
+0: Load inverted list: 
+X $
+%
+, X $
+3
+, X 5$
+%
+, … , X 5$
+6
+, X Y
+%
+G, … , X Y
+8
+; 
+GGGGGGG/G∗ RL<@+]@><RLeG\R]<]GfSG>?L<@b<GLghf@+
+1: 
+For
+each doc 
+/
+in the intersection of all lists: 
+2: Use context pattern 
+, ∈ =
+a
+to initiate tuples; 
+/∗ hU<>ℎRLeG
+3: 
+For
+each instantiated tuple 
+<
+: 
+4: Calculate 
+,(1(<)|/)
+; 
+5: 
+For
+each tuple 
+<
+initiated in the whole process: 
+6: calculate 
+I 1 <
+i =
+I 1 <
+/ ∗ I(/)
+J
+7: output 
+=>?+@ 1 <
+= I 1 <
+i
+Algorithm 4.1: Entire Entity-Relation Search algorithm 
+!
+20 
+CHAPTER 5 
+EXPERIMENTS 
+In this system, we use 
+PubMed
+medical professional paper abstracts as our underlying corpus. 
+We take advantage of the entity and type information obtained from 
+PubTator
+[14], an entity 
+detection and extraction tool in the 
+PubMed
+data set. Specifically, it provides five entity types 
+and its occurrences in the 
+PubMed
+– Disease, Chemical, Gene, Mutation, and Species. We will 
+present our implementation results, which are organized by data insight studies, the entire system 
+demo, and performance evaluation. Specifically, Section 5.1 will present some empirical studies 
+that support ranking based on entity type information. Section 5.2 will show context pattern 
+weight result used in the ranking model. The final two parts, 5.3 and 5.4, will reveal the 
+performance and interface of our online prototype. Note that the size of data used in different 
+experiments could be various, and the exact setting will be discussed in each separate section. 
+5.1 
+Type Specific Pattern Distribution 
+Recall that compared to the OpenIE, our problem works on the medical domain with entity type 
+information. To analyze the relationship between the entity type and probability of true relations 
+in the context pattern aspect, we performed an empirical study on 15,300 abstracts across four 
+common entity types. Figures 5.1 indicate that the top-k context patterns vary by different entity 
+type pairs. These results support our hypothesis that to add entity type information in the pattern-
+driven ranking model. 
+!
+21 
+Figure 5.1: Relationship among the top ten context patterns with their occurrence frequency
+5.2 
+Context Pattern Weight Mining Result 
+In this section, we tested our two pattern mining approaches, described in Section 3.3 on an 
+experimental corpus that contains around 17,000 
+PubMed
+abstracts. For the pattern extraction 
+step, we followed the longest pattern matching rule and kept only the valid patterns, which 
+means the one that includes a pair of entity and verb phrases. Table 5.1 shows the top 20 patterns 
+that we obtained on Disease-Chemical type pair from our experiment. For comparison purposes, 
+the AVG_NSC method provides more popular patterns pertaining to pattern distribution, while 
+the Wald Test Score method presents longer human-readable patterns because of the supervised 
+learning background. Since the latter design largely depends on the size of training instances, we 
+adapted AVG_NSC to our online prototype. 
+!
+22 
+Average_NSC (D-C) 
+Wald Test Score (D-C) 
+1.
+!
+EM E VP E EM 
+2.
+!
+EM E VP EM E 
+3.
+!
+EM E EM E VP 
+4.
+!
+EM E EM EM E VP 
+5.
+!
+EM E EM EM E EM VP 
+6.
+!
+E EM EM E VP 
+7.
+!
+E EM VP E EM 
+8.
+!
+EM E EM VP E EM 
+9.
+!
+EM E VP VP E EM 
+10.
+!
+EM E EM EM E VP VP 
+11.
+!
+EM E VP E 
+12.
+!
+EM E VP EM E EM 
+13.
+!
+EM E EM VP E VP 
+14.
+!
+EM E EM E EM VP 
+15.
+!
+E EM EM E VP E EM 
+16.
+!
+E EM VP EM E EM 
+17.
+!
+EM E EM EM E VP E 
+18.
+!
+E EM EM E EM VP VP 
+19.
+!
+E EM VP E VP 
+20.
+!
+EM E EM E VP EM E EM 
+1.0 
+0.952859938597 
+0.950568777623 
+0.887212802911 
+0.855187384078 
+0.829556959905 
+0.822412570023 
+0.813448726931 
+0.78844897451 
+0.781238810141 
+0.778443560989 
+0.774787834155 
+0.69263407178 
+0.691867390968 
+0.673246759391 
+0.656894563507 
+0.654997623822 
+0.650211691909 
+0.641904231435 
+0.639131203028 
+1.
+!
+EM E EM VP EM E EM 
+2.
+!
+EM E VP EM E VP 
+3.
+!
+EM E VP E EM 
+4.
+!
+EM E VP E EM VP 
+5.
+!
+EM E EM EM E EM VP 
+6.
+!
+EM E VP E EM EM E 
+7.
+!
+EM E VP E VP 
+8.
+!
+E VP VP E VP 
+9.
+!
+EM E EM EM E VP E 
+10.
+!
+E VP VP E EM 
+11.
+!
+E EM VP EM E EM 
+12.
+!
+E VP EM E 
+13.
+!
+E VP E EM EM E EM 
+14.
+!
+EM E VP VP E EM 
+15.
+!
+E VP EM E EM 
+16.
+!
+EM E EM VP E VP 
+17.
+!
+E EM EM E VP VP 
+18.
+!
+E VP VP E 
+19.
+!
+EM E EM E EM VP E EM 
+20.
+!
+EM E VP E VP VP 
+1.0 
+0.663950216927 
+0.589884347651 
+0.470477208327 
+0.427830882176 
+0.382665427617 
+0.363991599217 
+0.352933089138 
+0.279186811364 
+0.277674508806 
+0.248689340416 
+0.246334606817 
+0.244104278251 
+0.229647676034 
+0.228804975985 
+0.222359731184 
+0.222220484523 
+0.202083870086 
+0.198001166973 
+0.187640171715 
+Table 5.1: Top 20 patterns and its normalized weight regarding to Disease and Chemical pair 
+5.3 
+Comparison with 
+OpenIE
+To evaluate the effectiveness of our system, we compare our 
+Entity-Relation Search
+with 
+OpenIE
+via 
+precision
+and 
+recall
+on several testing queries. Since both systems are indexed on the 
+different corpus, we adopted the 
+OpenIE
+algorithm for our 
+PubMed
+data set. 
+Twenty pairs of testing queries are illustrated in Figure 5.2, covering some popular entity 
+types including diseases, species, chemicals, and genes. In Figure 5.3, we compare the ranking 
+precision
+qualities of 
+Entity-Relation Search
+and 
+OpenIE
+. This result is built by executing all of 
+the testing relation queries on both of the two systems, and by manually inspecting whether each 
+returned relation phrase holds true for its corresponding query entities. 
+!
+23 
+Query Entity Types 
+Query Entities 
+1 
+Disease - Chemical 
+Obesity - Glucose 
+2 
+Disease - Chemical 
+Asthma - Aminophylline 
+3 
+Disease - Gene 
+Diabetes - Insulin 
+4 
+Disease - Species 
+Obesity - Children 
+5 
+Disease - Species 
+Cancer - Children 
+6 
+Disease - Species 
+Breast Cancer - Children 
+7 
+Disease - Species 
+Cancer - Human 
+8 
+Disease - Species 
+Influenza- Children 
+9 
+Disease - Species 
+Tumor - Mice 
+10 
+Disease - Disease 
+Obesity - Diabetes 
+11 
+Disease - Disease 
+Tumor - Cancer 
+12 
+Chemical - Gene 
+Oxygen - BNP 
+13 
+Chemical - Species 
+Calcium - Children 
+14 
+Chemical - Species 
+Oxygen - Dog 
+15 
+Chemical - Chemical 
+Glucose - Serine 
+16 
+Chemical - Chemical 
+Cholesterol- Glucose 
+17 
+Species - Species 
+Human - Rats 
+18 
+Species - Gene 
+BNP - Patient 
+19 
+Species - Gene 
+Tau - Human 
+20 
+Species - Gene 
+PCNA - Human 
+Figure 5.2: Test Queries 
+In the graph, unsurprisingly, 
+OpenIE
+achieves higher precision at the top five ranked 
+results since it only focuses on the <
+E, V P,E
+> ground true pattern. However, we would like to 
+highlight that our system, 
+Entity-Relation Search,
+generally outperforms those extracted from 
+OpenIE
+, for the top twenty positions. 
+In this test, we notice that the introduction of context patterns might also add noisy (false 
+positive relations) into our top results. Considerations of how to avoid it will become one of our 
+future research directions. 
+!
+24 
+!
+Figure 5.3: Precision at K for test queries on 
+OpenIE
+and 
+Entity-Relation Search
+In a corpus as large as 
+PubMed
+, the ground truth of all relations is hard to determine. In 
+order to compare the 
+recall
+from both of the two systems, we manually examine the number of 
+correct relations that each system discovers and report the results in Figure 5.4, for the twenty 
+queries listed in Figure 5.2. Note that the results in Figure 5.4 are grouped by entity type pair in 
+queries (i.e. results under “Disease-Species” refer to query 4 - 9 in Figure 5.2.). This result 
+clearly demonstrates that the pattern-driven relation extraction method used in 
+Entity-Relation 
+Search
+is more capable of extracting correct relations than 
+OpenIE
+. As we can see, 
+Entity-
+Relation Search
+is able to find more correct relations for all six type pairs. For example, for 
+queries containing the “Disease-Species” pair, 
+Entity-Relation Search
+is able to find 
+24.3%
+more 
+correct relations than 
+OpenIE
+. This is because the context patterns set that we use to match 
+!
+25 
+relation tuples is much more flexible than 
+OpenIE
+’s strict “
+E VP E
+” pattern. 
+One significant difference between our system and 
+OpenIE
+is that we support searching 
+relations between entities with context constraints. Since it is not supported 
+OpenIE
+, we will only 
+test it on our system. Please refer to our case studies in Section 5.4. 
+Figure 5.4: Number of correct relations discovered by 
+Entity-Relation Search
+and 
+OpenIE
+for each query type pair 
+5.4 
+Case Study and Demo Interface 
+Case Study 1: 
+Suppose a user wants to know the relations between “diabetes” and “insulin.” She inputs these 
+two keywords at the top of our UI and clicks on the “search” button on the right side. The search 
+engine returns a list of relation phrases as shown in the screenshot below. These human-readable 
+text phrases are ranked by our ranking model to best describe the relationships between the pair 
+!
+26 
+of query entities. The first one is “are associated with” indicating that “diabetes” is associated 
+with “insulin.” 
+Immediately below the search boxes, we also provide a list of ranked sub-search contexts 
+represented by keywords. Users could click on “add” to add these keywords/entities to continue 
+query context-specific relation results. 
+Figure 5.5: Query result of the 
+Entity-Relation Search
+system for “Diabetes” and “Insulin” 
+If we click on a result, for instance, the second one “Need,” we will see a list of 
+evidences where we extract the relationship. In this view, query entities “diabetes” and “insulin” 
+are shown in BLUE, relation phrases are in RED and entity modifiers are in GREEN. They are 
+all part of our extraction patterns. In this example, the three relation phrases “need,” “requiring,” 
+and “require” are clustered together under the relation phrase “Need.” 
+!
+27 
+Figure 5.6: Pattern annotated snippet evidences for relation phrase “Need” 
+Case Study 2: 
+In this example, we want to find the relations between entities “diabetes” and “obesity.” The 
+results are below: 
+!
+28 
+Figure 5.7: Query result of the 
+Entity-Relation Search
+system for “Diabetes” and “Obesity” 
+If we click on the first result “Associated,” we will expend the interface and see three text 
+snippets (see the screenshot below). For each piece of snippet, there is a hyperlink to its original 
+source. Entities that appeared in the context but not in the query will be presented in PURPLE. In 
+this example, relation phrases “associated” “were also associated with” and “are often associated 
+with” are grouped together. 
+!
+29 
+Figure 5.8: Pattern annotated snippet evidences for relation phrase “Associated” 
+!
+30 
+CHAPTER 6 
+CONCLUSION AND FUTURE WORK 
+Overall, we designed and implemented a relation search system, 
+Entity-Relation Search
+, for 
+entity-based unstructured data. The system can return a list of high quality relation phrases, with 
+annotated context vectors as snippet evidence, by context pattern-driven ranking. In addition to 
+relation results under the current query, our system can also provide a list of suggested context 
+entities/keywords for users to narrow their potential answer space. 
+Specifically, this thesis mainly discusses the context pattern-based model and its related 
+subtasks. Through careful conceptual reflections and practical experiments, it has been proven 
+that such a method is reasonable and useful. 
+There are several extension points of our work that we wish to explore. One promising 
+direction is to organize and display relations in different dimensions, such as organizing by verb 
+phrases, contexts, or year. We believe that this will help our users to better understand relations. 
+Furthermore, in the performance comparison experiment, we noticed that the introduction of 
+context patterns not only provide more information to evaluate and expand our relation candidate 
+set, but it adds noises into the query result as well, especially for the top five positions. Therefore, 
+future work might aim to refine our pattern weight mining approach. 
+!
+31 
+REFERENCES 
+[1] Davis AP, Grondin CJ, Lennon-Hopkins K, Saraceni-Richards C, Sciaky D, King BL, 
+Wiegers TC, Mattingly CJ. The Comparative Toxicogenomics Database's 10th year anniversary: 
+update 2015. Nucleic Acids Res. 2014 Oct 17; pii: gku935. 
+[2] M. Whirl-Carrillo, E.M. McDonagh, J. M. Hebert, L. Gong, K. Sangkuhl, C.F. Thorn, R.B. 
+Altman and T.E. Klein. "Pharmacogenomics Knowledge for Personalized Medicine" Clinical 
+Pharmacology & Therapeutics (2012) 92(4): 414-417. 
+[3] Clematide, Simon, and Fabio Rinaldi. "Ranking relations between diseases, drugs and genes 
+for a curation task." Journal of biomedical semantics 3.3 (2012): 1. 
+[4] JianTang, Meng Qu, Mingzhe Wang, Ming Zhang, Jun Yan, and Qiaozhu Mei, “LINE: 
+Large-scale information network embedding,” in Proc. of 2015 Int. World-Wide Web Conf. 
+(WWW'15), Geneva, Switzerland, Apr. 2015. 
+[5] Cheng, Tao, and Kevin Chen-Chuan Chang. "Entity Search Engine: Towards Agile Best-
+Effort Information Integration over the Web." CIDR. Vol. 2007. 2007. 
+[6] Cheng, Tao, Xifeng Yan, and Kevin Chen-Chuan Chang. "EntityRank: searching entities 
+directly and holistically." Proceedings of the 33rd international conference on Very large data 
+bases. VLDB Endowment, 2007. 
+[7] Banko, Michele, Oren Etzioni, and Turing Center. "The Tradeoffs Between Open and 
+Traditional Relation Extraction." ACL. Vol. 8. 2008. 
+[8] Wu, Fei, and Daniel S. Weld. "Open information extraction using Wikipedia."Proceedings of 
+the 48th Annual Meeting of the Association for Computational Linguistics. Association for 
+Computational Linguistics, 2010. 
+[9] Fader, Anthony, Stephen Soderland, and Oren Etzioni. "Identifying relations for open 
+information 
+extraction." 
+Proceedings 
+of 
+the 
+Conference 
+on 
+Empirical 
+Methods 
+in 
+Natural 
+Language Processing. Association for Computational Linguistics, 2011. 
+[10] Etzioni, Oren, et al. "Open Information Extraction: The Second Generation." IJCAI. Vol. 11. 
+2011. 
+[11] Rajaraman, Anand, and Jeffrey D. Ullman. Mining of massive datasets. Vol. 1. Cambridge: 
+Cambridge University Press, 2012. 
+!
+32 
+[12] Radim Rehurek, and Sojka, Petr. "Software framework for topic modelling with large 
+corpora." InProceedings of the LREC 2010 Workshop on New Challenges for NLP Frameworks. 
+(2010): 45-50. 
+[13] Miller, George A. "WordNet: a lexical database for English." Communications of the ACM 
+38.11 (1995): 39-41. 
+[14] Wei, Chih-Hsuan, Hung-Yu Kao, and Zhiyong Lu. "PubTator: a web-based text mining tool 
+for assisting biocuration." Nucleic acids research (2013): gkt441. 
+[15] Anyanwu, Kemafor, Angela Maduko, and Amit Sheth. "SemRank: ranking complex 
+relationship search results on the semantic web." Proceedings of the 14th international 
+conference on World Wide Web. ACM, 2005. 
+[16] Halaschek, Chris, et al. "Discovering and ranking semantic associations over a large rdf 
+metabase." Proceedings of the Thirtieth international conference on Very large data bases-
+Volume 30. VLDB Endowment, 2004. 
+!

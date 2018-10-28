@@ -1,0 +1,1015 @@
+﻿T
+ITLE
+Gene2Vec: Distributed Representation of Genes Based on Co-Expression 
+A
+UTHORS
+Jingcheng Du
+*
+, BS, jingcheng.du@uth.tmc.edu 
+Peilin Jia
+*
+, Ph.D., peilin.jia@uth.tmc.edu 
+Yulin Dai, Ph.D., yulin.dai@uth.tmc.edu 
+Cui Tao, Ph.D., cui.tao@uth.tmc.edu 
+Zhongming Zhao
+#
+, Ph.D., zhongming.zhao@uth.tmc.edu 
+Degui Zhi
+#
+, Ph.D., degui.zhi@uth.tmc.edu
+The University of Texas School of Biomedical Informatics, Houston, TX 77030, United 
+States 
+*
+equal contribution 
+#
+equal contribution 
+C
+ORRESPONDING AUTHOR
+: 
+Degui Zhi, Ph.D., degui.zhi@uth.tmc.edu 
+K
+EYWORDS
+: 
+Distributed Representation, Gene2Vec, Gene co-expression, Embedding, Word2vec, Gene-
+gene interaction
+ABSTRACT
+1 
+Background
+: Existing functional description of genes are categorical, discrete, and mostly 
+2 
+through manual process. In this work, we explore the idea of gene embedding, distributed 
+3 
+representation of genes, in the spirit of word embedding. 
+4 
+Methods & Results
+: From a pure data-driven fashion, we trained a 200-dimension vector 
+5 
+representation of all human genes, using gene co-expression patterns in 984 data sets from the 
+6 
+GEO databases. These vectors capture functional relatedness of genes in terms of recovering 
+7 
+known pathways - the average inner product (similarity) of genes within a pathway is 1.52X 
+8 
+greater than that of random genes. Using t-SNE, we produced a gene co-expression map that 
+9 
+shows local concentrations of tissue specific genes. We also illustrated the usefulness of the 
+10 
+embedded gene vectors, laden with rich information on gene co-expression patterns, in tasks 
+11 
+such as gene-gene interaction prediction. 
+12 
+Conclusions
+: We proposed a machine learning method that utilizes transcriptome-wide gene 
+13 
+co-expression to generate a distributed representation of genes. We further demonstrated the 
+14 
+utility of our distribution by predicting gene-gene interaction based solely on gene names. 
+15 
+The distributed representation of genes could be useful for more bioinformatics applications.
+16 
+INTRODUCTION
+1 
+Genes, discrete segments of the genome that are transcribed, are basic building blocks of 
+2 
+molecular biological systems. Although almost all transcripts in the human genome have 
+3 
+been identified, functional annotation of genes is still a challenging task. Most existing 
+4 
+annotation efforts organize genes into functional categories, e.g., pathways, or represent their 
+5 
+relationship into networks. Pathways and networks crystallize biological knowledge and are 
+6 
+convenient qualitative conceptualization of gene functions. Yet the exact functions of a gene 
+7 
+are often more subtle and elusive to be expressed in qualitative terms. 
+8 
+The challenge of creating a quantitative semantic representation of discrete units of a 
+9 
+complex system is not unique to gene systems. For a long time, creating a quantitative 
+10 
+representation of words had been challenging for linguistic modeling. Hinton proposed the 
+11 
+pioneering idea of ‘learning distributed representations of words’ [1], i.e., representing the 
+12 
+semantics of a word by mapping them to vectors in a high-dimension space. However, 
+13 
+Hinton’s idea did not lead to real implementation in mainstream natural language processing 
+14 
+(NLP) research, until recently. The word2vec model achieved success in NLP modeling [2]. 
+15 
+This process of distributed representation is often called neural embedding because the 
+16 
+embedding function is often expressed by a neural network with a large number of 
+17 
+parameters. This success of word2vec inspires us to investigate the possibility to represent 
+18 
+gene functions via neural embedding. 
+19 
+In this study, we aim to represent genes as vectors in a high-dimension space, i.e., a gene 
+20 
+embedding. In the word2vec model [2], a word embedding is trained by maximizing the 
+21 
+probability of word co-occurrences in context, i.e., only a few words apart in a same 
+22 
+sentence. Analogously, we defined the context of a gene by the other genes that co-expressed 
+23 
+with it. We derive an embedding such that the probability of the context of a gene is 
+24 
+maximized. While it is possible to train a gene embedding using the standard NLP word 
+1 
+embedding by using a biomedical corpus, such as the PubMed abstracts, published literature 
+2 
+is incomplete and biased towards genes that are well-studied. Therefore, we intended to adopt 
+3 
+a purely data-driven fashion. 
+4 
+Using co-expression patterns of all human genes in 984 whole transcriptome human gene 
+5 
+expression data sets from Gene Expression Omnibus (GEO), we learned a gene embedding 
+6 
+using a neural network. We show that our embedding grouped related genes in clusters. 
+7 
+Moreover, we demonstrate the usefulness of the learned gene embedding to downstream 
+8 
+tasks in the problem of prediction of gene-gene interaction. 
+9 
+METHODS 
+10 
+D
+ATA COLLECTION
+11 
+Overview.
+We chose to use GEO data with rationale from both biological and technical 
+12 
+aspects. In cellular systems, the mRNA expression levels represent activities of genes with 
+13 
+fine resolutions. Over the past 10-20 years, GEO deposits the majority of microarray-based 
+14 
+gene expression data in various conditions. Although the recent development of RNA-
+15 
+sequencing has generated transcriptomic data with advantages in both accuracy and scales 
+16 
+than array-based data, the large cohort of GEO data provides features that are more suitable 
+17 
+for our work. GEO data have been curated for over ten years and hence, the measurement 
+18 
+covers a wide range of cell and tissue types, cellular conditions, disease status, and 
+19 
+developmental stages. As our ultimate goal is to build a gene co-expression map that could be 
+20 
+used for inferences in various conditions, we collected GEO data for our task. In addition, we 
+21 
+chose one single platform to reduce technical variability and required the organism to be 
+22 
+Homo sapiens. 
+23 
+Gene expression
+. We used the keywords “expression and human” to search in GEO on 
+1 
+12/24/2017 and retrieved all GSE sets that were conducted using the platform Affymetrix 
+2 
+Human Genome U133 Plus 2.0 Array (GPL570). We required each dataset to have ≥ 30 
+3 
+samples. The downloaded gene expression intensity data were log transformed and quantile-
+4 
+normalized. For genes with multiple probe sets, we chose the probe set with the largest 
+5 
+variance across all samples. Gene co-expression was measured using Pearson Correlation 
+6 
+Coefficient (PCC) for each data set. In each data set, gene pairs with the PCC ≥ 0.9 were 
+7 
+selected for following analysis. Selected gene pairs from all data sets were merged and serve 
+8 
+as training data. We did not distinguish biological conditions. 
+9 
+Gene types on chip
+. The U133 array is one of the most widely utilized platform to measure 
+10 
+human gene expression. The chip has 54,675 probe sets for 24,442 genes. The number of 
+11 
+probe sets per gene ranged between 1 and 15, with more than half of genes (52.08%) have 
+12 
+one probe sets. Among these genes, 21,960 (89.85%) genes could be mapped to the current 
+13 
+version of NCBI Entrez gene annotation. These mappable genes include 18,055 protein-
+14 
+coding genes, 2,660 ncRNA, 730 pseudo genes, 132 snoRNA, and 383 other types of genes. 
+15 
+Particularly for ncRNAs, there are 202 microRNA genes. Gene set enrichment analysis was 
+16 
+conducted using Fisher’s Exact Test. 
+17 
+18 
+Gene-gene interaction dataset
+. We followed previous work [3] to build datasets for gene-
+19 
+gene interaction based on shared Gene Ontology (GO) annotations. GO annotation was 
+20 
+obtained using the R (x64 3.4.3) package “org.Hs.eg.db” (version 3.5.0). GO structure file in 
+21 
+the obo format was downloaded from [4]. All genes were mapped to NCBI Entrez Gene [5] 
+22 
+(downloaded on 11/6/2017). We defined gene pairs that shared GO annotations as the 
+23 
+positive set of functional association. To this end, we chose the GO category “Biological 
+24 
+Process” with experimental evidence: IDA (inferred from direct assay), IMP (inferred from 
+1 
+mutant phenotype), IPI (inferred from protein interaction), IGI (inferred from genetic 
+2 
+interaction), and TAS (traceable author statement). To minimize generalized annotation, we 
+3 
+excluded the highly over-represented GO terms including (1) “signal transduction” 
+4 
+(GO:0007165); (2) three phosphorylation terms: “protein amino acid phosphorylation” 
+5 
+(GO:0006468), “protein amino acid autophosphorylation” (GO:0046777), and “protein 
+6 
+amino acid dephosphorylation” (GO:0006470); and (3) all terms at the first three levels of 
+7 
+GO hierarchy (assuming the root term of biological process, “GO:0008150”, is level 0). This 
+8 
+lead to a total of 270,704 pairs involving 5,369 genes. To build the negative data set, we 
+9 
+obtained all gene-pairs that did not share any GO term or their children GO terms. This 
+10 
+resulted a total of 40,879,714 gene pairs involved in 12,521 (64.85% of 19,307) human 
+11 
+genes, serving as the set in which pairs of genes are not functionally associated. 
+12 
+Tissue-specific genes
+. GTEx data (version 6) [6] was used to estimate the tissue-specific 
+13 
+expression pattern of genes in 27 tissues, each with ≥ 30 samples. For each gene, a z-score 
+14 
+was calculated to measure its tissue specificity by comparing the average gene expression of 
+15 
+the gene across all tissues [7]. 
+16 
+Functional gene sets
+. We use clusteredness of MSigDB pathways (v5.1) [8] as the target 
+17 
+function for hyper-parameter tuning for gene embedding training. Specifically, we used the 
+18 
+category c2 including curated pathways from various online resources such as KEGG [9], 
+19 
+Biocarta [10], and Reactome [11]. A total of 4,726 pathways were downloaded. 
+20 
+C
+ONCEPT EMBEDDING OF GENES
+21 
+Distributed representation of word, or neural word embedding, was a recent breakthrough in 
+22 
+NLP research based on deep learning. The goal of word embedding is to derive a linear 
+23 
+mapping, i.e., embedding, from the discrete space of individual words to a continuous 
+24 
+Euclidean space such that similar words will be mapped to points in close vicinity in the 
+1 
+embedding space. The direct benefit of word embedding is that such representation of 
+2 
+individual words, vectors in continuous space, becomes differentiable and thus amenable for 
+3 
+back-propagation-based neural network modeling. Meanwhile, a nice surprising result is that 
+4 
+embedded space admits basic geometry. E.g., the KING - QUEEN ≈ MAN - WOMAN. 
+5 
+Inspired by the success of word embedding, we intend to produce an embedding of genes, 
+6 
+also a discrete conceptual unit, such that similar genes are mapped to similar vectors. While 
+7 
+for genes we do not have a natural equivalent concept of sentence in natural languages, we 
+8 
+will use the notion of co-expression. This is analogy of the concept of co-occurrence in 
+9 
+natural languages. 
+10 
+For neural embedding, a neural network is designed that maximizes an objective function, 
+11 
+often in a form of likelihood, such as the probability of a word given its context. The most 
+12 
+commonly used architectures are skip-gram and continuous bag-of-words (CBOW) that 
+13 
+discussed in the word2vec approach [2]. In both architectures, a two-layer neural network is 
+14 
+constructed to predict word co-occurrence, or the co-occurrence of a word and its 
+15 
+surrounding words, or context. In CBOW, the input is the context and the output is the word; 
+16 
+in skip-gram, the input is the word and the output is the context. For both architectures, input 
+17 
+and output are connected through a middle projection layer. Note that neither neural network 
+18 
+would offer satisfactory predictions for most of the words. But the real goal of word 
+19 
+embedding is to learn a distributional representation, i.e., the parameters of the embedding 
+20 
+mapping from the input to the middle projection layer. A simple fully connected linear layer 
+21 
+was used for the embedding mapping. For CBOW, the embedded vectors of all words in the 
+22 
+context are averaged and thus provide a uniform size vector for the next layer. The second 
+23 
+layer for both architecture is a linear layer with a soft-max. A cross-entropy loss is 
+24 
+minimized. 
+25 
+In gene embedding, we are using the genes who are co-expressed with the gene of interest as 
+1 
+its context. Since the number of co-expressed genes may vary, the size of the context may 
+2 
+vary as well. For simplicity, in this work, we extract all pairs of co-expressed genes and 
+3 
+maximize the probability of one given the other for each pair. This is equivalent to the skip-
+4 
+gram model. Since we are optimizing the total probability of all edges in a co-expression 
+5 
+network, our approach can also be viewed as a graph embedding [12]. 
+6 
+More formally, the input of the training problem is a list of gene pairs that are highly co-
+7 
+expressed, 
+𝑇 = {(𝑔
+&'
+, 𝑔
+&)
+)}
+, we will train an embedding network. The input of the network is 
+8 
+a one-hot encoded vector for gene 
+𝑔
+&
+∈ 𝑅
+/
+, where 
+𝑑
+is the number of genes and the 
+9 
+elements of 
+𝑔
+&
+are all 0 expert 
+𝑔
+&
+[
+𝑥
+&
+]
+= 1
+, where 
+𝑥
+&
+is the dimension corresponds to the gene 
+10 
+𝑔
+&
+. The output of the network is a vector of dimension 
+𝑣
+&
+∈ 𝑅
+6
+, the embedding dimension. 
+11 
+The parameter of the network is a matrix 
+𝑊 ∈ 𝑅
+/×6
+such that 
+𝑣
+&
+= 𝑊𝑔
+&
+. If we define the 
+12 
+probability 
+13 
+𝑃𝑟
+;
+𝑔
+&
+<
+𝑔
+=
+>
+=
+𝑒𝑥𝑝 (𝑣
+&
+A
+𝑣
+=
+)
+∑
+𝑒𝑥𝑝 (𝑣
+&
+A
+𝑣
+=
+,
+)
+=
+′
+14 
+The loss function that is to be minimized is the negative likelihood 
+−
+∑
+𝑃𝑟
+;
+𝑔
+&
+<
+𝑔
+=
+>
+(
+E
+FG
+,E
+FH
+)
+∈ A
+. 
+15 
+It can be shown that this complex loss function for this single layer network is equivalent to a 
+16 
+two-layer network with shared weight matrices of 
+𝑊
+and 
+𝑊
+A
+, and the loss function as the 
+17 
+standard cross-entropy after softmax (see, 
+Figure 1
+). 
+18 
+T
+RAINING OF EMBEDDING 
+19 
+We took all the gene pairs that have a PCC equal to or larger than 0.9 as the input. This is a 
+20 
+choice due to limited computational resources. We shuffled the gene pairs in each dataset on 
+21 
+every iteration to avoid the impact caused by the order of gene pairs in the datasets. The 
+22 
+embedding was trained on all genes with a minimum frequency at 5. As number of iterations 
+1 
+and dimensionality of the embedding are considered as two major hyper-parameters 
+2 
+parameters for word embedding [13], in order to generate “best” gene embedding, we did a 
+3 
+preliminary parameters tuning and performed a grid search to find best parameters. The 
+4 
+search ranges for number of iterations and embedding dimension are set at 1 to 10 and 50, 
+5 
+100, 200, and 300 respectively. We used the word2vec function implemented in the gensim 
+6 
+library [14] to generate gene embedding. Other parameters were set as default. 
+7 
+8 
+Since our goal is to obtain a gene embedding that reflects the functional relationships among 
+9 
+genes, we selected the set of hyper-parameters that maximizes the clusteredness of genes 
+10 
+within functional pathways. We optimized the following target function: 
+11 
+𝑐𝑙𝑢𝑠𝑡𝑒𝑟𝑒𝑑𝑛𝑒𝑠𝑠 =
+G
+|
+P
+|
+∑
+G
+# RSTS UVFWX FT Y
+∑
+(Z
+F
+[
+Z
+\
+)
+R
+F
+,R
+\
+∈ Y
+Y ∈P
+G
+# RSTS UVFWX FT P
+′
+∑
+(Z
+F
+[
+Z
+\
+)
+R
+F
+,R
+\
+∈ P
+′
+, 
+12 
+where 
+𝑄
+is the set of pathways in MSigDB, and 
+𝑄
+,
+is a set of random gene pairs. Due to the 
+13 
+limitation of computation power, we selected all the pathways from the MSigDB with the 
+14 
+number of genes equal or fewer than 50. In total, 6,729 pathways were selected as 
+𝑄
+. We 
+15 
+randomly selected 1,000 genes from gene embedding and generated all possible unique gene 
+16 
+pairs (499,500 in total) as 
+𝑄
+′
+. 
+17 
+V
+ISUALIZATION BY T
+-SNE 
+18 
+A common way to visualize high-dimensional datasets is to map the datasets into 2D or 3D 
+19 
+array. 
+t
+-Distributed Stochastic Neighbor Embedding (t-SNE) is a machine learning algorithm 
+20 
+for dimensionality reduction, which optimizes for neighborhood preserving and thus 
+21 
+particularly well suited for the visualization of high-dimensional datasets [15]. Visualizations 
+22 
+produced by t-SNE have been found significantly better than those produced by the other 
+1 
+techniques [15]. 
+2 
+In order to speed up the t-SNE on the high-dimensional gene embedding, we first reduced the 
+3 
+dimension to 50 using PCA and then applied a multicore modification of Barnes-Hut t-SNE 
+4 
+by L. Van der Maaten [16,17]. The perplexity was set at 30 and the learning rate was set at 
+5 
+200. To get stable t-SNE results, we set the number of iterations at 100,000. 
+6 
+P
+REDICTION OF GENE
+-
+GENE INTERACTION
+7 
+To investigate the usefulness of the trained gene embedding for downstream tasks, we 
+8 
+applied the embedding to the problem of gene-gene interaction prediction. The goal is, given 
+9 
+a pair of genes, we design a gene-gene interaction predictor neural network (GGIPNN) to 
+10 
+predict if they will be together in any of the annotated pathway [3]. 
+11 
+The architecture of GGIPNN can be seen in 
+Figure 2
+. We first convert the genes in each 
+12 
+gene pair to one-hot vectors and then map the one-hot vectors to gene embedding vectors 
+13 
+using a shared embedding matrix. Then, the two gene embedding vectors will be 
+14 
+concatenated together and be fed to a fully connected layer with a dimension at 100. The 
+15 
+output will be fed to another fully connected layer with a dimension at 100. The output of the 
+16 
+second fully connected layer will then be fed to a second fully connected layer with a 
+17 
+dimension at 10. The output will be then fed to a softmax (same as sigmoid as this is a binary 
+18 
+classification) layer. We compute the cross entropy of the softmax function output and then 
+19 
+compute the mean of elements across results as the loss. We choose ReLU (Rectified Linear 
+20 
+Units) as the activation function. To avoid overfitting, we apply dropout on both the first and 
+21 
+second fully connected layers. The dropout out rates are set at 0.5. 
+22 
+Area Under Curve (AUC) is computed to measure the performance of the prediction. We 
+1 
+compared the AUC score of our pre-trained gene embedding and embedding which is 
+2 
+randomly initialized. We also investigated the impact of trainable embedding layer (fine-
+3 
+tuning during the training) versus non-trainable embedding layer (fixed during the training) 
+4 
+on the prediction. This model was implemented in TensorFlow. 
+5 
+We took all the pairs from HumanNet.v1.benchmark [3] as the positive pairs. This led to a 
+6 
+total of 270,704 pairs involving 5,369 genes. To build the negative data set, we obtained all 
+7 
+gene-pairs that did not share any GO term or their children GO terms. This resulted in a total 
+8 
+of 40,879,714 gene-pairs involved in 12,521 (64.85% of 19,307) human genes, serving as the 
+9 
+set in which pairs of genes are not functionally associated. To avoid the impact of the 
+10 
+imbalanced labels distribution, we randomly selected negative pairs with the equal number of 
+11 
+the positive pairs. We then split all the unique genes into training, validation and testing sets 
+12 
+with an proportion of 7 : 1 : 2. The pairs that the both two genes belong to training set are 
+13 
+used as training; the pairs that the both two genes belong to validation set are used as 
+14 
+validation; the pairs that the both two genes belong to testing set are used as testing. By doing 
+15 
+so, we avoid the possibility that the neural network “memorizes” the likelihood of genes to be 
+16 
+interacting with any other genes. In total, the training dataset has 263,016 pairs (involving 
+17 
+8,832 genes), while the validation and testing dataset have 5,568 pairs (1,173 genes) and 
+18 
+21,448 pairs (2,467 genes) respectively. 
+19 
+RESULTS 
+20 
+P
+ARAMETER TUNING RESULTS BY CLUSTEREDNESS 
+21 
+The parameter tuning results can be seen in Table 1. As we can observe, the dimension of 
+1 
+200 at iteration 9 produced best gene embedding using clusteredness as the target function 
+2 
+(1.521). As result, we chose this embedding for all following analyses. 
+3 
+Table 1.
+Hyperparameter tuning using clusteredness as target function
+. 
+Bold 
+number denotes the 
+4 
+largest number in that row. 
+5 
+Dimension 
+Number of Iterations 
+1 
+2 
+3 
+4 
+5 
+6 
+7 
+8 
+9 
+10 
+50 
+1.428 
+1.444 
+1.467 
+1.470 
+1.487 
+1.465 
+1.473 
+1.479 
+1.475 
+1.462 
+100 
+1.415 
+1.467 
+1.488 
+1.491 
+1.498 
+1.501 
+1.519 
+1.486 
+1.480 
+1.490 
+200 
+1.403 
+1.463 
+1.491 
+1.498 
+1.495 
+1.482 
+1.470 
+1.488 
+1.521 
+1.509 
+300 
+1.392 
+1.443 
+1.472 
+1.473 
+1.473 
+1.509 
+1.474 
+1.513 
+1.479 
+1.480 
+6 
+G
+ENE EMBEDDING GROUPS SIMILAR GENES INTO SPATIAL CLUSTERS
+7 
+Using the first and second components from the t-SNE representation, we produced a gene 
+8 
+co-expression map, based on which we explored the distribution of all human genes from our 
+9 
+results (
+Figure 3
+). A direct visualization of the gene distribution revealed that the majority of 
+10 
+genes formed one single cloud while several isolated groups of genes scattered around. We 
+11 
+extracted these gene islands and found they were mainly non-protein-coding genes. Island 2 
+12 
+was significantly populated with the snoRNA genes (pink dots, p=1.07×10
+-72
+, Fisher’s Exact 
+13 
+Test). Island 4, located to the very right of the plot, mainly contains human cDNA/PAC clone 
+14 
+genes. microRNA genes (cyan dots) were mainly distributed in island 2 (p=3.99×10
+-19
+), 
+15 
+island 4 (p=3.51×10
+-73
+), and island 5 (p=2.64×10
+-41
+). A group of ncRNAs which start with 
+16 
+“LOC” and are often uncharacterized split the whole distribution into the left panel and the 
+1 
+right panel (red dots, 
+Figure 3
+). In the left panel, we observed a cluster of open reading 
+2 
+frames (yellow dots, 
+Figure 3
+) in the human genome. 
+3 
+T
+ISSUE SPECIFIC GENES FORM SPATIAL PATTERNS IN GENE EMBEDDING 
+4 
+We mapped genes with z-scores representing their tissue-specific expression onto the gene 
+5 
+co-expression map. We observed clear clusters in several tissues such as blood, skin, spleen, 
+6 
+and lung (
+Figure 4
+and 
+supplementary figures
+). Genes with high tissue specificity in blood 
+7 
+highlighted two distant clusters. This is likely because that blood samples are relatively more 
+8 
+widely used in gene expression studies and blood-specific genes and their relationships are 
+9 
+thus better represented in our map. Tissues that are biologically relevant showed similar 
+10 
+patterns. For example, tissues of female reproductive systems presented graded and similar 
+11 
+patterns, including breast, ovary, and uterus. In these tissues, genes located in the bottom part 
+12 
+of the map in general showed increased tissue specificity, compared to genes located on the 
+13 
+top part of the map (
+Figure 4
+and 
+supplementary figures
+). Interestingly, we found a group 
+14 
+of ribosomal genes (~50) that were highly expressed in ovary and formed a small cluster in 
+15 
+our map. In addition, cognition and neurology related tissues, such as brain (
+Figure S5
+), 
+16 
+nerve (
+Figure S14
+), and pituitary (
+Figure S17
+), presented quite diverse patterns. Nerve and 
+17 
+pituitary are more similar to each other, with a wide range of genes showing moderate tissue-
+18 
+specificity distributed across the whole map. In contrast, active genes in brain, which are 
+19 
+mainly distributed on the top part of the map, are much smaller in numbers but showed much 
+20 
+stronger tissue-specificity (red dots, 
+Figure S5
+). Notably, all tissues except the blood are 
+21 
+expected to be under-represented in the GEO data we used because tissue samples are 
+22 
+difficult to obtain for human. 
+23 
+P
+REDICTION OF GENE
+-
+GENE INTERACTION USING EMBEDDED VECTORS
+24 
+The performances of GGIPNN with embedding matrix are presented in 
+Figure 5
+. Using gene 
+1 
+embedding matrix derived from GEO but do not make them trainable, we achieved an AUC 
+2 
+of 0.720 over the test set, in which there are no gene overlapping with the training set nor the 
+3 
+validation set. The AUC score is lower, 0.664, for the GGIPNN with gene embedding matrix 
+4 
+derived from GEO as initial weights but trainable. This is understandable as the gene 
+5 
+embedding matrix for the genes in the training set was updated and leaving the gene 
+6 
+embedding matrix in the test set “out of sync” with that for the training set, i.e., overfitting. 
+7 
+As expected, the GGIPNN with both untrainable and trainable random embedding matrix 
+8 
+have AUC scores (0.505 and 0.493) close to random (0.5). 
+9 
+DISCUSSION
+10 
+In this work, we explored the idea of distributed representation of genes using their co-
+11 
+expression. Purely trained from their co-expression patterns in GEO, except using MSigDB 
+12 
+as hyper-parameter tuning, the trained embedding matrix captures functional relationships 
+13 
+among genes. In the t-SNE generated gene co-expression map of the embedding matrix, tight 
+14 
+clusters of non-coding genes are formed, while broader clusters corresponding to tissue 
+15 
+specific genes are also visible. 
+16 
+The usefulness of gene embedding is beyond simply a nice visualization. Using the gene 
+17 
+embedding as the basic layer for a multi-layer neural network, we can predict the gene-gene 
+18 
+interaction with an AUC of 0.720. This is an intriguing result because the only input to the 
+19 
+predictor is the names of the two genes. Therefore, the distributed representation of the genes, 
+20 
+i.e., their embeddings, are laden with rich semantic information about their function. 
+21 
+The concept of concept embedding is not new to molecular biology. Works had been done to 
+22 
+geometrical embedding gene co-expression networks into 2-D planar networks [18]. 
+23 
+Recently, in the spirit of embedding everything, the work of bioVectors have been developed 
+24 
+to embedding kmers in biological sequences into distributed representation [19]. Yang et al 
+1 
+leveraged the Doc2vec model to learn embedded representations of protein sequences [20]. 
+2 
+Similarly, a project named ‘Gene2vec’ is available embedding gene sequences [21]. 
+3 
+However, to the best of our knowledge, our work is the first to directly embed genes into 
+4 
+distributed representations based on their natural context - their expression and co-
+5 
+expression. 
+6 
+In this work, we are using the gene co-expression as the definition of “context” for gene 
+7 
+embedding. However, it is possible to extend the current work to include other definitions of 
+8 
+context for genes. For example, co-occurrence of genes across species, gene-gene and 
+9 
+protein-protein interactions from experiments, and co-occurrences of genes in literature, all 
+10 
+can be a source of information to define context. 
+11 
+The distributed representation of genes can enable new applications. E.g., as illustrated in the 
+12 
+Results, with continuous representation of genes, it is possible to direct feed gene as inputs to 
+13 
+neural networks, and can be useful for any prediction tasks with gene names as input. 
+14 
+A limitation of current approach is the lack of higher order semantics. In word embedding a 
+15 
+surprising result was that the direction of the embedding space can be interpreted. For 
+16 
+example, the vector representations of the words King, Queen, Man, and Woman formed a 
+17 
+parallelogon. This higher order of semantics from NLP modeling may be due to that the 
+18 
+concepts between these words were connected by certain relationships, which is reflected by 
+19 
+the occurrences of these words being connected by certain verbs. To achieve this level of 
+20 
+semantic embedding of genes, future works modeling more information about genes are 
+21 
+warranted. 
+22 
+CONCLUSIONS 
+23 
+We proposed a machine learning method that utilizes transcriptome-wide gene co-expression 
+1 
+to generate a distributed representation of genes. We further demonstrated the utility of our 
+2 
+distribution by predicting gene-gene interaction based solely on gene names. We believe that 
+3 
+this distributed representation of genes could be useful for more bioinformatics applications.
+4 
+D
+ECLARATIONS
+E
+THICS APPROVAL AND CONSENT TO PARTICIPATE
+N/A. 
+C
+ONSENT FOR PUBLICATION
+Not applicable 
+A
+VAILABILITY OF DATA AND MATERIAL
+The codes for gene2vec training, visualization, and gene-gene interaction prediction are available on 
+GitHub (https://github.com/jingcheng-du/Gene2vec). We also released our pre-trained gene2vec on 
+GitHub (https://github.com/jingcheng-
+du/Gene2vec/blob/master/pre_trained_emb/gene2vec_dim_200_iter_9.txt). 
+C
+OMPETING INTERESTS
+The authors declare that there is no competing interest. 
+F
+UNDING
+Research was partially supported by the Cancer Prevention Research Institute of Texas (CPRIT) 
+Training Grant #RP160015. 
+D
+ISCLAIMER
+The content is solely the responsibility of the authors and does not necessarily represent the official 
+views of the Cancer Prevention and Research Institute of Texas.
+A
+UTHORS
+'
+CONTRIBUTIONS
+JD, PJ and DZ designed the study, performed the experiments and drafted the manuscript. YD, and 
+CT assisted to the study design. ZZ and DZ supervised the study. Everyone read and revised the 
+manuscript. 
+ACKNOWLEDGMENTS 
+We thank the anonymous reviewers for their careful reading of our manuscript and their many 
+insightful comments. 
+REFERENCES
+1. Hinton GE. Learning distributed representations of concepts. Proc. eighth Annu. Conf. Cogn. Sci. 
+Soc. 1986. p. 12. 
+2. Mikolov T, Chen K, Corrado G, Dean J. Efficient estimation of word representations in vector 
+space. arXiv Prepr. arXiv1301.3781. 2013; 
+3. Lee I, Blom UM, Wang PI, Shim JE, Marcotte EM. Prioritizing candidate disease genes by 
+network-based boosting of genome-wide association data. Genome Res. Cold Spring Harbor Lab; 
+2011;21:1109–21. 
+4. Gene Ontology [Internet]. [cited 2018 Feb 14]. Available from: 
+http://geneontology.org/ontology/go.obo 
+5. Maglott D, Ostell J, Pruitt KD, Tatusova T. Entrez Gene: gene-centered information at NCBI. 
+Nucleic Acids Res. Oxford University Press; 2005;33:D54--D58. 
+6. Lonsdale J, Thomas J, Salvatore M, Phillips R, Lo E, Shad S, et al. The genotype-tissue expression 
+(GTEx) project. Nat. Genet. Nature Publishing Group; 2013;45:580. 
+7. Zhao J, Cheng F, Jia P, Cox N, Denny JC, Zhao Z. An integrative functional genomics framework 
+for effective identification of novel regulatory variants in genome--phenome studies. Genome Med. 
+BioMed Central; 2018;10:7. 
+8. Subramanian A, Tamayo P, Mootha VK, Mukherjee S, Ebert BL, Gillette MA, et al. Gene set 
+enrichment analysis: a knowledge-based approach for interpreting genome-wide expression profiles. 
+Proc. Natl. Acad. Sci. National Acad Sciences; 2005;102:15545–50. 
+9. Kanehisa M, Goto S. KEGG: kyoto encyclopedia of genes and genomes. Nucleic Acids Res. 
+Oxford University Press; 2000;28:27–30. 
+10. BioCarta Pathways [Internet]. Available from: 
+http://cgap.nci.nih.gov/Pathways/BioCarta_Pathways 
+11. Reactome [Internet]. Available from: https://reactome.org/ 
+12. Cai H, Zheng VW, Chang K. A comprehensive survey of graph embedding: problems, techniques 
+and applications. IEEE Trans. Knowl. Data Eng. IEEE; 2018; 
+13. Lai S, Liu K, He S, Zhao J. How to generate a good word embedding. IEEE Intell. Syst. IEEE; 
+2016;31:5–14. 
+14. Rehurek R, Sojka P. Software framework for topic modelling with large corpora. Proc. Lr. 2010 
+Work. New Challenges NLP Fram. 2010. 
+15. Maaten L van der, Hinton G. Visualizing data using t-SNE. J. Mach. Learn. Res. 2008;9:2579–
+605. 
+16. Ulyanov D. Multicore-TSNE. GitHub Repos. GitHub; 2016. 
+17. Van Der Maaten L. Accelerating t-SNE using tree-based algorithms. J. Mach. Learn. Res. 
+2014;15:3221–45. 
+18. Song W-M, Zhang B. Multiscale embedded gene co-expression network analysis. PLoS Comput. 
+Biol. Public Library of Science; 2015;11:e1004574. 
+19. Asgari E, Mofrad MRK. Continuous distributed representation of biological sequences for deep 
+proteomics and genomics. PLoS One. Public Library of Science; 2015;10:e0141287. 
+20. Yang KK, Wu Z, Bedbrook CN, Arnold FH. Learned protein embeddings for machine learning. 
+Bioinformatics. Oxford University Press; 2018;1:7. 
+21. Vector space representation of genetic data [Internet]. Available from: 
+https://github.com/davidcox143/Gene2vec 
+22. Word2Vec Tutorial - The Skip-Gram Model [Internet]. Available from: 
+http://mccormickml.com/2016/04/19/word2vec-tutorial-the-skip-gram-model/s 
+Figures
+Figure 1
+. The Skip-Gram architecture was used for training for gene embedding. This is the 
+modified architecture which is equivalent to the original word2vec, adopted from this blog 
+[22] 
+Figure 2
+. The architecture of gene-gene interaction predictor neural network (GGIPNN) 
+Figure 3: 
+Gene co-expression map generated from embedding reveals clusters of 
+functionally related genes. F1 and F2 are the first and the second dimensions of t-SNE. Red: 
+LOC non-coding genes; cyan: microRNA; pink: small nucleolar RNA (snoRNA); yellow: 
+undercharacterized ORFs. 
+Figure 4: 
+Embedding reveals clusters of genes with tissue-specificity. Blood and spleen have 
+clear patterns of tissue-specific genes. Reproductive system (e.g., ovary) also showed 
+distinguished genes. Genes not available in GTEx data were colored grey. 
+Figure 5: 
+ROC curves for gene-gene interaction predictor neural nestworks. 

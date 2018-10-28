@@ -1,0 +1,2442 @@
+﻿Research Paper
+Journal of Information Science
+1–21
+Ó The Author(s) 2017
+Reprints and permissions:
+sagepub.co.uk/journalsPermissions.nav
+DOI: 10.1177/0165551517743644
+journals.sagepub.com/home/jis
+A discourse-aware neural network-based
+text model for document-level text
+classification
+Kangwook Lee
+School of Computing, KAIST, South Korea
+Sanggyu Han
+School of Computing, KAIST, South Korea
+Sung-Hyon Myaeng
+School of Computing, KAIST, South Korea
+Abstract
+Capturing semantics scattered across entire text is one of the important issues for Natural Language Processing (NLP) tasks. It would
+be particularly critical with long text embodying a flow of themes.
+This article proposes a new text modelling method that can handle
+thematic flows of text with Deep Neural Networks (DNNs) in such a way that discourse information and distributed representations
+of text are incorporate.
+Unlike previous DNN-based document models,
+the proposed model
+enables discourse-aware analysis of text
+and composition of sentence-level distributed representations guided by the discourse structure. More specifically, our method identi-
+fies Elementary Discourse Units (EDUs) and their discourse relations in a given document by applying Rhetorical
+Structure Theory
+(RST)-based discourse analysis. The result is fed into a tree-structured neural network that reflects the discourse information including
+the structure of the document and the discourse roles and relation types.
+We evaluate the document model
+for two document-level
+text classification tasks, sentiment analysis and sarcasm detection, with comparisons against the reference systems that also utilise dis-
+course information.
+In addition,
+we conduct additional
+experiments to evaluate the impact of neural
+network types and adopted dis-
+course factors on modelling documents vis-a
+`
+-vis the two classification tasks. Furthermore, we investigate the effects of various learning
+methods, input units on the quality of the proposed discourse-aware document model.
+Keywords
+Deep learning; discourse analysis; neural network; sarcasm detection; sentiment analysis; text classification; text model
+1. Introduction
+Document-level Natural Language Processing (NLP) tasks are often best handled by methods that require representations
+of documents.
+Previously,
+the ‘text-as-a-whole’ approach has been dominant,
+such as having bag-of-words representa-
+tions for retrieving and classifying text and using Latent Dirichlet Allocation (LDA) for capturing and representing latent
+semantics of documents.
+However,
+semantic information that comes from a sequence of smaller text chunks,
+which is
+crucial for identifying the main theme of text,
+has not been exploited much for NLP tasks.
+Take,
+for example,
+a short
+paragraph ‘The car looks nice, and even its price is reasonable. But I don’t like it’, which can be divided into three seg-
+ments (The car looks nice,) (and even its price is reasonable.) (But I don’t like it.). The first and second segments can be
+merged into a larger segment since both convey information of the car. Next, the merged segment and the third segment
+Corresponding author:
+Sung-Hyon Myaeng, School of Computing, KAIST, 291 Daehak-ro, Yuseong-gu, Daejeon, 34141, South Korea.
+Email: myaeng@kaist.ac.kr
+can then form a larger segment that embraces the entire paragraph and express the author’s contrasting sentiment on the
+car, changing the overall meaning and the sentiment polarity of the paragraph.
+Meanwhile,
+some NLP tasks have been successfully tackled with text representations using Deep Neural Networks
+(DNNs).
+Two major
+approaches
+to constructing document-level
+representations
+with a
+DNN are
+context-based
+learning and composition-based learning [1,2].
+A context-based learning trains a distributed representation with word
+co-occurrence information. This approach has been shown to perform well on various text classification tasks and hence
+deemed to adequately abstract meanings of words.
+Although its ability lies in computing the overall semantics of text
+just based on words, it is not clear whether its effectiveness can be extended to a situation where flows of themes in a
+document may be critical for understanding the semantics. The composition-based learning method, on the other hand,
+combines the representations of smaller segments (e.g. words and sentences) for making a representation of a larger text.
+This learning method in general is more amenable than context-based learning for modelling the thematic flow of the
+text.
+However,
+the past
+approaches have rarely incorporated thematic information explicitly that
+runs across multiple
+sentences, that is, discourse, although such information has played an important role in previous approaches, not based
+on DNN, for NLP tasks [3,4].
+In this article, we propose a new method for computing a distributed representation of a document using its discourse
+information as a way of constructing a document model that takes into account the thematic flow of the text. According
+to Rhetorical Structure Theory (RST) [5], the semantics of text is formed from smaller segments of the text and their dis-
+course relations.
+The discourse relations are paratactic or hypotactic relations that hold across two text spans,
+that
+is,
+Elementary Discourse Units (EDUs), each of which is considered as either a nucleus or a satellite for its discourse role
+in the relation. Each discourse relation has a discourse relation type which can be defined by its purpose in the discourse.
+Thus, we tackle the problem of incorporating discourse information, namely, discourse structure, discourse role and dis-
+course relation type,
+in modelling text
+with DNN.
+While this new DNN-based method has a potential
+to serve as an
+enhanced text modelling technique based on the RST, this article focuses on its application for text classification tasks
+that require an understanding of the underlying thematic flow of the text.
+Considering discourse information in modelling text with DNNs is challenging because most neural network models
+are not suitable for incorporating the discourse information; they do not have the capability of adopting linguistic infor-
+mation that
+can be acquired by an external
+source.
+Thus,
+a specialised neural
+network is necessary for
+learning a
+document-level distributed representation with RST-based discourse analysis results – discourse structure, discourse role
+and discourse relation type. For the purpose of integration, we design a discourse-aware tree-structured neural network
+that incorporates discourse information obtained from a discourse parser.
+The proposed tree-structured neural network
+has two variants depending on which neural network the model utilises Recursive Neural Network (RecNN) [6] and tree
+Long Short-Term Memory (tree LSTM) [7], an extended version of LSTM [8].
+Tree-structured neural networks can suffer from the inherent problem of vanishing gradients in the training process
+especially when the hierarchy of the tree-structured neural network grows deep for a long text. Such a long path in the
+backpropagation process may lead to a serious degradation of performance caused by a lack of annotations [9]. In order
+to alleviate the problem,
+we compute sentence embeddings with a separate context-based learning method and use the
+embeddings as the atomic inputs (i.e. EDU embeddings) for the proposed neural network. By doing so, we can shorten
+the hierarchy of the tree-structured network and avoid the need for annotations at many levels, such as words,
+phrases
+and clauses, which are usually essential to guarantee the performance. In detail, the proposed tree-structured neural net-
+works adopt discourse roles and discourse relation types in the composition process to build a distributed representation
+of a document. To incorporate the discourse role in the modelling process, the proposed network reorders children nodes
+(in the RecNN-based method) or assigns different weight matrices to children nodes (in the tree LSTM–based method)
+based on the discourse roles of the children. Moreover, to incorporate the discourse relation type information of a pair of
+discourse units, we adopt special embeddings, referred to as discourse relation type embeddings. We employ a discourse
+parser, Discourse Parsing from Linear Projection (DPLP) [10], which detects segmented text spans, that is, EDUs, in a
+document and classifies discourse relations among the EDUs. For the separate process of training EDU embeddings, we
+utilise Paragraph Vector [11], which is one of the most well-known methods for learning embeddings of text with arbi-
+trary lengths.
+The ability to represent the thematic structure of text is invaluable for various NLP applications that can benefit from
+understanding the flow of semantics in text. In order to demonstrate such a potential of the proposed method, we apply
+it to two practical document-level text classification tasks,
+sentiment analysis and sarcasm detection,
+for which under-
+standing semantic flows of documents is of utmost importance. The tasks have also been studied quite extensively with
+appropriate text collections [12–14], resulting in well-known state-of-the-art performance, which allows for meaningful
+comparisons with experiments. Note that we only assume that the target document can only have a single-class label in
+the classification tasks; extending the proposed method to the multi-label classification problem requires major changes
+Lee et al.
+2
+Journal of Information Science, 2017, pp. 1–21 Ó The Author(s), DOI: 10.1177/0165551517743644
+on the design of the loss function and the cell
+computation mechanism,
+which should be studied in a separate work.
+There are two objectives for our experiments.
+One is to demonstrate the potential of the proposed method for the two
+application tasks, comparing with reference systems that utilise discourse information. The other is to explore the effects
+of modelling factors,
+including types of neural
+networks,
+adopted discourse information,
+input
+units and composition
+methods, on the quality of the document model.
+The main contributions of this study can be summarised as follows:
+•
+We propose novel
+tree-structured neural
+networks for modelling a document
+with full
+discourse information,
+including discourse structure discourse role, and discourse relation types, of the document.
+•
+By applying a separate training process for EDU embeddings,
+we ease the vanishing gradient problem of the
+composition-based learning for long text while reducing necessary memory size in the training process of tree-
+structured neural networks.
+•
+Through a thorough comparison of the proposed method against baselines and reference systems, we cast light
+on the effectiveness of incorporating discourse information in DNN for text modelling.
+•
+We investigate effects of modelling aspects, such as types of neural networks and adopted discourse factors, in
+improving the quality of
+the distributed representation built
+with the discourse-aware tree-structured neural
+networks.
+We open all the implementations proposed in this article to the public via an online repository.
+1
+2. Related work
+DNN has been successfully applied to some NLP tasks such as classification by modelling texts of various granularities.
+We
+briefly review the
+characteristics
+of
+two major
+approaches
+to text
+modelling,
+context-based learning and
+composition-based learning, as they are both incorporated into our work.
+The context-based learning approach dates back to when the traditional learning algorithms for distributed representa-
+tions were proposed [15]. Often referred to as embeddings, they capture semantics of pieces of text in such a way that the
+text segments can be correctly predicted with their contexts. It has been widely adopted as a language model for words
+[16–18]. The distributed representations of words store the semantics in real-valued dense vectors that support tasks such
+as similarity-based word clustering and word sense disambiguation. In order to learn distributed representations of larger
+units of text, Le and Mikolov [11] proposed Paragraph Vector based on Word2Vec [17], one of the well-known methods
+for computing word embeddings. A follow-up study applies Paragraph Vector to document-level NLP tasks and analyses
+its effect [1].
+A drawback of these approaches, however, is that they need a relatively large amount of training data and well-tuned
+hyperparameters to avoid the overfitting problem. For example, the effectiveness of context-based learning can diminish
+rather rapidly with rare tokens for which securing enough examples for learning context would be difficult. Furthermore,
+it does not take into account the order of words nor thematic flow of text such as discourse. This may lead to a significant
+failure on some text analysis tasks since it cannot capture the semantic difference caused by the distinct compositions of
+the text; for example, the meanings of two sentences ‘I sing the song because I like it’ and ‘I like the song because I sing
+it’, which consist of exactly same words, are different because of the ways the words are composed.
+The other approach to modelling text with DNN draws on compositional semantics.
+Convolutional Neural Network
+(CNN), which can automatically capture semantics of text by weaving word embeddings via multiple convolution layers,
+has been widely used for modelling text [19–22]. In CNN, the vectors at the bottom layer pass through upper layers, and
+a single vector that represents the semantics of the text is approximated by a convolution operation.
+Stepwise methods
+such as recurrent neural networks and LSTM networks have been shown to be effective for semantic composition [23].
+Lin et al. [2] proposed a language model based on a hierarchical recurrent neural network, which gradually learns from
+word-level embeddings to a document-level embedding through sentence-level embeddings. Socher et al. [24] introduced
+several RecNNs for sentence-level semantic composition using the parse trees of the sentences.
+Adopting latest DNN
+techniques to composition-based learning, Zhu et al. [9] proposed an extension of LSTM for structural neural networks,
+in which a node can reflect the history memories of multiple child nodes and multiple descendant nodes in a recursive
+process at the sentence level. A similar approach, tree LSTM [7], was introduced to enable LSTM networks to adopt the
+structural information.
+Moreover,
+Chen et al. [25] proposed a gated RecNNs to model a sentence without any external
+structure. Instead, it employs a Full Binary Tree (FBT) structure to control the combinations in recursive structure.
+One limitation of these composition-based approaches is that they are supervised learning methods and therefore need
+annotations in the training process. The tree-structured neural networks such as RecNN and tree LSTM in particular need
+Lee et al.
+3
+Journal of Information Science, 2017, pp. 1–21 Ó The Author(s), DOI: 10.1177/0165551517743644
+annotations for every junction in the composition process. More importantly, none of the DNN-based approach has been
+able to accommodate inter-sentential semantics,
+perhaps because such a deep hierarchy from words to a document
+is
+prone to causing a vanishing gradient problem and ruinous memory in the training process of tree-structured neural net-
+works. Since the hierarchy of a tree-structured neural network can grow exponentially as the length of input text becomes
+longer, the length of the text that can be processed with tree-structured neural networks may be limited.
+3. Incorporating discourse information in a tree-structured neural network
+As a way to capture deeper semantics or a flow of themes of a document,
+we introduce a new DNN-based document
+modelling method that incorporates the result of discourse analysis. Figure 1 shows the overall scheme, where the dis-
+tributed representation of a document is computed based on the proposed tree-structured neural networks, in the form of
+either RecNN or tree LSTM, with the EDU embeddings and their discourse structures, roles and relation types.
+Computing EDU embeddings, as opposed to using a deep hierarchy from words to a document, is an important design
+decision.
+By training EDU embeddings separately and feeding them to the proposed tree-structured neural network,
+it
+became possible to minimise the vanishing gradient problem and necessary memory space in the training process. This
+two-step scheme also makes it possible to train document representations with only document-level annotations by resol-
+ving the long-term dependency problem.
+To minimise the vanishing gradient problem and necessary memory space for the training process, we propose a two-
+step approach that separately trains EDU embeddings and feeds them to the proposed tree-structured neural network that
+incorporates discourse information. In addition, this two-step scheme makes it possible to train document representations
+with only document-level annotations because the signals from documents do not have to propagate all the way down to
+words, thereby alleviating the long-term dependency problem.
+The most significant aspect of the proposed architectures lies in the way the full discourse information is incorporated
+into the tree-structured neural networks.
+While the structure of the neural network is congruent to the discourse parse
+tree, the discourse roles of the descendants determine the order by which the descendants’ distributed representations are
+concatenated in the RecNN. In the tree LSTM, on the other hand, separate weight matrices are assigned to the descen-
+dants so that the cell computations,
+that is,
+the computations in nodes,
+are determined by whether the descendant is a
+nucleus or satellite. In order to incorporate different discourse relation types, furthermore, we introduce relation embed-
+dings as parameters so that they take part in representing the semantics of EDU pairs. In short, the architectures of the
+RecNN and tree LSTM are chosen to reflect the discourse structure,
+whereas discourse roles and relation types enrich
+the semantic representations of the EDUs by reflecting their flows in terms of directionality and the nature of the con-
+nections. Technical details of the actual computations are found in Section 3.3.
+Figure 1.
+An overview of
+the proposed tree-structured neural
+networks for modelling a document.
+It utilises three discourse
+factors,
+that is,
+discourse structure,
+discourse roles and discourse relation types,
+while the atomic text segments for discourse,
+that
+is, EDUs, are separately trained by Paragraph Vector.
+Lee et al.
+4
+Journal of Information Science, 2017, pp. 1–21 Ó The Author(s), DOI: 10.1177/0165551517743644
+3.1.
+Discourse parsing
+Understanding the discourse structure of a document is analogous to parsing a sentence. Similar to a hierarchical struc-
+ture of a sentence constructed with the syntactic relations among the words, the thematic discourse relations among the
+text segments are represented. As an effort to discover hierarchical discourse relations in text, Mann and Thompson [5]
+proposed RST, a compositional model of discourse where EDUs are gradually combined into larger discourse units until
+covering the entire document. The discourse relation between a pair of EDUs can be categorised by the discourse rela-
+tion types such as Elaboration, Conjunction and Concession. At the same time, the EDUs are labelled as either a nucleus
+or a satellite to reflect their discourse roles in the relation. In the rest of this article, we particularly refer to the discourse
+unit formed by combining a pair of discourse units as Intermediate Discourse Unit (IDU) while EDU refers to only the
+atomic discourse unit. In addition, we will refer to the union of EDU and IDU as Discourse Unit (DU) for convenience.
+There are handful RST-based discourse parsers, and we employ the DPLP tool [10] because it shows the best perfor-
+mance in identifying discourse relations, one of the most difficult subtasks in discourse parsing. To boost the performance
+of discourse analysis, we remove markup tags, punctuations and unicode control characters from the text. Figure 2 shows
+an example of a discourse parsing result.
+When EDU 1A and EDU 1B are combined with an Elaboration relation, 1B
+plays a role as a satellite in the relation with its nucleus 1A. They form a larger discourse unit for a Background relation
+with another IDU made of 1C and 1D.
+The first
+work of discourse relations in the literature defined a set
+of 32 discourse relation types [5],
+which was
+extended to a set of 78 discourse relation types not only for improving granularity of discourse relation types but also
+for handling discourse roles and discourse relation types simultaneously [26].
+Several
+simplified versions of the dis-
+course relation types were proposed later [27,28]. Table 1 shows a discourse relation type hierarchy gleaned from previ-
+ous studies [26–28].
+In this study,
+we opt for the extended version containing 78 discourse relation types [26] because the DPLP parser
+analyses a document’s discourse with the extended version. The final set includes three special discourse relation types
+(i.e. Textual-Organisation, Span and Same-Unit) to impose the structure of the parse tree and another special discourse
+relation type, Sole-EDU, to represent a document consisting of single EDU.
+3.2.
+Training EDU embeddings
+After identifying EDUs of a document with the discourse parser,
+we compute distributed representations of the EDUs
+with the Paragraph Vector approach [11], which learns the distributed representations from unlabelled data. Note that,
+in this article, we set the smallest EDUs to sentences instead of smaller text units such as phrases and clauses. The main
+reason is to minimise the long-term dependencies caused by a deep parse tree that leads to degradation of composition-
+based learning [9]. Another reason is to alleviate the negative effect of the errors in segmenting text into EDUs (18.4%
+error rate [10]). Since the length of EDUs based on the definition of RST is always below sentences, the errors on EDU
+segmentation could be lightened via this simple procedure.
+EDU embeddings are trained by Paragraph Vector, which learns a distributed representation of a multi-word text seg-
+ment with a method similar to Word2Vec [17]. The training process of Word2Vec is designed to predict the next word’s
+embedding with embeddings of previous words in the context window (Continuous Bag-of-Words (CBOW)) and to pre-
+dict words in the context window with a given word’s embedding (skip-gram). Although the word embeddings are initia-
+lised randomly at the start of the training process, they can finally encode semantics as an indirect result of the prediction
+task. Similar to this intuition, an embedding of a text segment can be trained. Extending the CBOW and skip-gram meth-
+ods developed for Word2Vec,
+Paragraph Vector handles text of varying lengths with Distributed Memory (DM) and
+Distributed Bag-of-Words (DBOW) methods as explained below. Figure 3 shows the basic concepts of DM and DBOW.
+Figure 2.
+An example of discourse parsed text with Rhetorical
+Structure Theory (RST).
+Lee et al.
+5
+Journal of Information Science, 2017, pp. 1–21 Ó The Author(s), DOI: 10.1177/0165551517743644
+In DM, every EDU is mapped to a unique embedding, denoted as p, and every word is also mapped to a unique vec-
+tor, denoted as w. Given a sequence of training words in the target EDU w
+1
+, w
+2
+, . . . , w
+T
+and the size of the context win-
+dow k, the objective function of DM can be formulated as follows
+1
+T
+X
+Tk
+t = k
+log p(w
+t
+jp, w
+tk
+, . . . , w
+t + k
+)
+ð1Þ
+The EDU and word embeddings are averaged or concatenated to predict the next word in a context. Note that we use
+averaging in the current implementation. The context is sampled from a sliding window over the EDU. For the example
+of DM in Figure 3, the distributed representation of an EDU, p, is trained by setting the objective of minimising the error
+in predicting the embedding of the word, w
+3
+, with the embeddings of its context words’ embeddings, w
+1
+, w
+2
+, w
+4
+and w
+5
+,
+as well as p. In this manner, the distributed representation p acts as a memory that remembers what is missing from the
+current context. The EDU embeddings are shared across all contexts generated from the same EDU but not across other
+EDUs, while the word embeddings are shared across all the EDUs. Both the EDU embeddings and word embeddings are
+trained using stochastic gradient descent and the gradient is obtained via backpropagation.
+To compute embeddings of
+EDUs in the test process, the same process is adopted while parameters of the model are fixed.
+In DBOW, the EDU embedding is trained by predicting words randomly sampled from the EDU instead of predicting
+the next word with the context. At each iteration of stochastic gradient descent, random words in a text window sampled
+Table 1.
+Definitions of discourse relation types in previous studies [26–28]
+Definition by
+Zirn et al.
+[28]
+Definition by
+Carlson et al.
+[27]
+Definition by Carlson and Marcu [26]
+Contrastive
+Cause
+Cause, Consequence,
+Result
+Comparison
+Analogy, Comparison, Preference, Proportion
+Contrast
+Antithesis, Concession, Contrast
+Topic-Comment
+Comment-Topic, Topic-Comment, Problem-Solution, Question-Answer,
+Rhetorical-Question, Statement-Response
+Non-contrastive
+Attribution
+Attribution, Attribution-negative
+Background
+Background, Circumstance
+Condition
+Condition, Contingency,
+Hypothetical, Otherwise
+Elaboration
+Definition, Elaboration-Additional,
+Elaboration-General-Specific
+Elaboration-Object-Attribute,
+Elaboration-Part-Whole
+Elaboration-Process-Step, Elaboration-Set-Member, Example
+Enablement
+Enablement, Purpose
+Evaluation
+Comment, Conclusion, Evaluation, Interpretation
+Explanation
+Evidence,
+Explanation-Argumentative,
+Reason
+Joint
+Disjunction, List
+Manner-Means
+Manner, Means
+Summary
+Restatement, Summary
+Temporal
+Temporal-After, Temporal-Before, Temporal-Same-Time,
+Sequence,
+Inverted-
+Sequence
+Topic Change
+Topic-Drift,
+Topic-Shift
+Figure 3.
+Schematic diagrams comparing DM and DBOW. The size of the context window is set to 4.
+Lee et al.
+6
+Journal of Information Science, 2017, pp. 1–21 Ó The Author(s), DOI: 10.1177/0165551517743644
+from a given EDU are selected to form a classification task to predict the included words in the EDU. The objective func-
+tion of DBOW can be formulated as follows
+1
+T
+X
+Tk
+t = k
+log p(w
+tk
+, . . . , w
+t
+, . . . , w
+t + k
+jp)
+ð2Þ
+For the DBOW example in Figure 3, the EDU embedding, p, is trained to minimise the error in predicting the included
+words, w
+1
+, w
+2
+, w
+3
+, w
+4
+and w
+5
+. Like the DM method, DBOW method also computes embeddings of EDUs in the test pro-
+cess with fixed parameters. For evaluation, we pick the method, that is, DM or DBOW, and hyperparameters with prelim-
+inary experiments for each evaluation data set. The details of the preliminary experiments are described in Sections 4.1.2
+and 4.2.2.
+3.3.
+Document modelling with a discourse-aware neural
+network
+This section describes the core of the proposed tree-structured neural
+networks for modelling documents.
+The three
+discourse factors,
+that
+is,
+discourse structure,
+discourse roles and discourse relation types,
+in a given document
+are
+discovered by the discourse parser based on RST.
+To take account of the discourse structure,
+we employ two classic
+tree-structured neural networks, RecNN [6] and tree LSTM [7], which can naturally accommodate the structural infor-
+mation of text. They can easily incorporate the tree-like discourse structure where leaf nodes correspond to EDUs, while
+the root node is recursively constructed from the underlying DUs. In this manner, the root is supposed to represent the
+RST-based compositional semantics of the entire document.
+The tree-structured neural networks are extended with new ideas of incorporating discourse roles and discourse rela-
+tion types. By reordering children nodes or assigning separate weight matrices to children nodes based on the discourse
+roles of the children nodes, we enable the tree-structured neural networks to capture the discourse role information. At
+the same time, we employ special embeddings for denoting discourse relation types and attach them to DU embeddings
+to involve the discourse relation type information. With these ideas, the full discourse information is well integrated into
+tree-structured neural networks.
+3.3.1.
+Tree-structured neural
+networks for adopting discourse structure.
+We employ two types of tree-structured neural net-
+works, RecNN and tree LSTM, for adopting discourse structure. RecNN is the oldest approach for adopting an external
+structure in the composition process. Although a number of advanced models of RecNN have been introduced [24,29],
+we employ a basic one to keep the composition process simple so that the effect of adopting the discourse structure can
+be clearly shown. Tree LSTM is a way of incorporating the structural information to LSTM instead of using the sequen-
+tial order based on the appearance. We give detailed descriptions of the two below.
+RecNN calculates the hidden state of a parent node p, denoted as h
+p
+, with the hidden states of its two children c
+1
+and
+c
+2
+in the discourse structure, represented by the vectors h
+c
+1
+and h
+c
+2
+. This process can be formulated as follows
+h
+p
+= tanh W ·
+h
+c
+1
+, h
+c
+2
+½
+ + b
+ð
+Þ
+ð3Þ
+where W is a K × 2K weight matrix and b is a K × 1 bias vector with K being the dimension of DU embeddings. In a typ-
+ical RecNN, the order of concatenating children follows the order of appearance.
+Tree LSTM is a generalisation of the standard LSTM architecture and can easily represent tree-structured network
+topologies. While the standard LSTM composes its hidden state from the input at the current time step and the hidden
+state of the LSTM unit in the previous time step, the tree LSTM composes its state from an input embedding and the hid-
+den states of the child nodes. Figure 4 shows an example of the composition process of tree LSTM.
+Tree LSTM includes two variants distinguished by the way cells are computed: child-sum tree LSTM and N-ary tree
+LSTM. The major differences between these two variants are as follows: (1) child-sum tree LSTM is flexible to adopt
+any structural information (e.g. the number of children nodes can differ from their parents), while N-ary tree LSTM can
+take only a fixed number, N, of children nodes and (2) N-ary tree LSTM can treat children nodes differently in the cell
+computation, while child-sum tree LSTM considers that all the children are the same. Because of these differences, the
+variants have different abilities to adopt discourse information. For instance, although both variants can be built on the
+discourse structure, the child-sum tree LSTM totally ignores discourse roles in the cell computation and treats the des-
+cendants the same. The N-ary tree LSTM, on the other hand, treats the descendants differently so that the descendants
+can be emphasised (or minimised) according to their discourse roles in the composition process. The detailed effects of
+using different tree LSTM variants will be investigated in Section 4.3.1.
+Lee et al.
+7
+Journal of Information Science, 2017, pp. 1–21 Ó The Author(s), DOI: 10.1177/0165551517743644
+For details of two variants of tree LSTM, let us start with child-sum tree LSTM. In child-sum tree LSTM, each node
+has three gates,
+that
+is,
+input
+gate,
+forget
+gate and output
+gate,
+which control
+the flow of
+computation in a node.
+Especially, the forget gate is a little different from that of a typical LSTM so that it can adopt children nodes’ informa-
+tion selectively. When the collection of child nodes of node j is C(j), the equation of child-sum tree LSTM is expressed
+as follows
+~
+h
+p
+=
+P
+k ∈ C j
+ð Þ
+h
+k
+ð4Þ
+i
+j
+= σ W
+i
+ð Þ
+x
+j
++ U
+i
+ð Þ
+~
+h
+p
++ b
+i
+ð Þ
+
+
+ð5Þ
+f
+jk
+= σ W
+f
+ð
+Þ
+x
+j
++ U
+f
+ð
+Þ
+h
+k
++ b
+f
+ð
+Þ
+
+
+ð6Þ
+o
+j
+= σ W
+o
+ð
+Þ
+x
+j
++ U
+o
+ð
+Þ
+~
+h
+p
++ b
+o
+ð
+Þ
+
+
+ð7Þ
+u
+j
+= tanh W
+u
+ð
+Þ
+x
+j
++ U
+u
+ð
+Þ
+~
+h
+p
++ b
+u
+ð
+Þ
+
+
+ð8Þ
+c
+j
+= i
+j
+ u
+j
++
+P
+k ∈ C j
+ð Þ
+f
+jk
+ c
+k
+ð9Þ
+h
+p
+= o
+j
+ tanh c
+j
+
+
+ð10Þ
+where i
+j
+and o
+j
+denote the input gate and the output gate of node j, respectively,
+while f
+jk
+is the forget gate for a child
+node k of node j.
+~
+h
+p
+, u
+j
+and c
+j
+, respectively, represent the hidden output, the candidate value of cell state and the cell state
+of node j. Since the hidden output of child-sum tree LSTM depends on the sum of hidden states of child nodes, it is suit-
+able even when the number of children is flexible.
+N-ary tree LSTM can distinguish children nodes in the cell computation by assigning different weight matrices to chil-
+dren nodes, while the number of children nodes is fixed to N. In a typical N-ary tree LSTM, the children nodes can be
+ordered from 1 to N according to the appearance order. N-ary tree LSTM can be formulated as follows
+i
+j
+= σ
+W
+i
+ð Þ
+x
+j
++
+P
+N
+l = 1
+U
+i
+ð Þ
+l
+h
+jl
++ b
+i
+ð Þ
+
+
+ð11Þ
+Figure 4.
+An example of
+the composition process of
+a tree LSTM:
+the memory cell
+c and hidden state h of
+a parent node P are
+computed with its two children L and R.
+EDU is the input
+(i.e.
+EDU embedding)
+of
+the node and u is the intermediate state
+computed with the input.
+Labelled edges correspond to the gates of
+the tree LSTM:
+i
+denotes the input gate,
+while f and o denote
+the forget gate and the output gate, respectively.
+Lee et al.
+8
+Journal of Information Science, 2017, pp. 1–21 Ó The Author(s), DOI: 10.1177/0165551517743644
+f
+jk
+= σ
+W
+f
+ð
+Þ
+x
+j
++
+P
+N
+l = 1
+U
+f
+ð
+Þ
+kl
+h
+jl
++ b
+f
+ð
+Þ
+
+
+ð12Þ
+o
+j
+= σ
+W
+o
+ð
+Þ
+x
+j
++
+P
+N
+l = 1
+U
+o
+ð
+Þ
+l
+h
+jl
++ b
+o
+ð
+Þ
+
+
+ð13Þ
+u
+j
+= tanh
+W
+u
+ð
+Þ
+x
+j
++
+P
+N
+l = 1
+U
+u
+ð
+Þ
+l
+h
+jl
++ b
+u
+ð
+Þ
+
+
+ð14Þ
+c
+j
+= i
+j
+ u
+j
++
+P
+N
+l = 1
+f
+jl
+ c
+jl
+ð15Þ
+h
+p
+= o
+j
+ tanh c
+j
+
+
+ð16Þ
+where the hidden output and the memory cell value of the lth child of node j are denoted as h
+jl
+and c
+jl
+, respectively.
+3.3.2.
+Incorporating discourse roles in tree-structured neural
+networks.
+For most
+discourse relations,
+the participating DUs
+play the role of either a nucleus or a satellite. To take account of discourse roles in the cell computation of tree-structured
+neural networks, we design a way of specialising the neural networks so that they can assign separate weight matrices to
+the child nodes according to their discourse roles. Note that we only design and apply this specialisation on RecNN and
+N-ary tree LSTM since child-sum tree LSTM is not capable of distinguishing children nodes in the cell computation.
+In a RecNN, we rearrange the order of the concatenation of children nodes, which results in the fact that each child
+utilises the separate region of the weight matrix in the cell computation.
+For this,
+we modify the original equation of
+RecNN, equation (3), as follows
+h
+p
+= tanh W · Concat
+h
+c
+1
+, h
+c
+2
+ð
+Þ + b
+ð
+Þ
+ð17Þ
+where Concat(h
+c
+1
+, h
+c
+2
+) rearranges the order of the concatenation of the two child embeddings based on their discourse
+roles as defined below
+Concat
+h
+c
+1
+, h
+c
+2
+ð
+Þ =
+h
+c
+n
+, h
+c
+s
+½
+if
+children play roles as nucleus and satellite, respectively
+h
+c
+1
+, h
+c
+2
+½
+if
+both children play roles as nucleus
+
+ð18Þ
+where c
+n
+and c
+s
+are the child nodes playing the nucleus role and the satellite role, respectively. The number on the child
+nodes, such as c
+1
+and c
+2
+, means the appearance order: c
+1
+appears earlier than c
+2
+.
+Similarly,
+we propose a specialised N-ary tree LSTM designating weight
+matrices based on the discourse roles
+because all the discourse relations in RST formed with a pair of children nodes.
+The specialised N-ary tree LSTM for
+adopting discourse roles is expressed as follows
+i
+j
+= σ W
+i
+ð Þ
+x
+j
++ U
+i
+ð Þ
+N
+h
+jN
++ U
+i
+ð Þ
+S
+h
+jS
++ b
+i
+ð Þ
+
+
+ð19Þ
+f
+jk
+= σ W
+f
+ð
+Þ
+x
+j
++ U
+f
+ð
+Þ
+kN
+h
+jN
++ U
+f
+ð
+Þ
+kS
+h
+jS
++ b
+f
+ð
+Þ
+
+
+ð20Þ
+o
+j
+= σ W
+o
+ð
+Þ
+x
+j
++ U
+o
+ð
+Þ
+N
+h
+jN
++ U
+o
+ð
+Þ
+S
+h
+jS
++ b
+o
+ð
+Þ
+
+
+ð21Þ
+u
+j
+= tanh W
+u
+ð
+Þ
+x
+j
++ U
+u
+ð
+Þ
+N
+h
+jN
++ U
+u
+ð
+Þ
+S
+h
+jS
++ b
+u
+ð
+Þ
+
+
+ð22Þ
+c
+j
+= i
+j
+ u
+j
++ f
+jN
+ c
+jN
++ f
+jS
+ c
+jS
+ð23Þ
+h
+p
+= o
+j
+ tanh c
+j
+
+
+ð24Þ
+where subscripts N and S denote the child nodes that play nucleus and satellite roles, respectively. In contrast with the
+RecNN-based method, our proposed N-ary tree LSTM can treat the multi-nucleus relation, that is, there are only nucleus
+children in the discourse relation. Since the proposed N-ary tree LSTM has separate weight matrices for nucleus and sat-
+ellite, the matrix for nucleus is assigned to both children nodes when the discourse relation is a multi-nucleus relation.
+Lee et al.
+9
+Journal of Information Science, 2017, pp. 1–21 Ó The Author(s), DOI: 10.1177/0165551517743644
+3.3.3.
+Discourse relation type embeddings in tree-structured neural
+networks.
+As a way of incorporating the identified dis-
+course relation types in a parsing result into tree-structured neural networks, we devise a method of utilising new embed-
+dings in the composition process, separately from the DU embeddings. Once we utilise 82 discourse relation types (78
+discourse relation types
++ 4 special
+purpose relation types) as mentioned in Section 3.1,
+the discourse relation type
+embedding for a specific relation type is concatenated to the DU embedding, that is, EDU embedding or IDU embedding
+computed by composing the embeddings of the descendants.
+The resulting embedding finally reflects the semantics of
+the way two chunks of text are combined.
+Figure 5 shows the concatenation of the DU embedding and the discourse
+relation type embedding in a node.
+To adopt the concatenation in the cell computation, all the weight matrices of the proposed tree-structured neural net-
+works are extended to adopt the concatenated embedding. For example, the weight matrix of RecNN is extended from
+K × 2K to K × 2(K + L) and the weight
+matrices of tree LSTM,
+W and U,
+are extended from K × K to K × (K + L)
+where K and L denote the dimension of DU embeddings and the dimension of discourse relation type embeddings,
+respectively.
+These discourse relation type embeddings are initialised and trained with other parameters for the docu-
+ment model, such as W and b, via the backpropagation process of the proposed tree-structured neural networks.
+3.3.4.
+Training details.
+For the two classification tasks,
+which we use to evaluate our models,
+a simple softmax layer is
+added to predict
+the conditional
+probability for each class with the document
+embedding composed via the proposed
+tree-structured neural networks. The softmax layer is defined as follows
+p d
+ð
+Þ = softmax W
+softmax
+· h
+d
++ b
+softmax
+
+
+ð25Þ
+where p(d) is a probability distribution of class labels for document d. W
+softmax
+is a C × K weight matrix and b
+softmax
+is a
+C × 1 bias vector where C and K are the number of class labels in the target classification task and the dimension of DU
+embeddings, respectively. For a binary sentiment classification task, for example, C would be two since there are positive
+and negative classes.
+To train the parameters of the proposed tree-structured neural networks,
+we design a loss function using the cross-
+entropy error between the gold standard class distribution and the predicted class distribution of a document
+loss = 
+X
+d ∈ TS
+X
+C
+i = 1
+p
+g
+i
+d
+ð
+Þ · log p
+i
+d
+ð
+Þ
+ð
+Þ + λ θ
+k k
+2
+ð26Þ
+where TS and d represent a training set and a document, respectively. p
+g
+i
+(d) denotes the conditional probability that the
+gold standard class of the document d falls in the class label i, while p
+i
+(d) denotes the conditional probability that the pre-
+dicted class belongs to the class. λ is a coefficient for L2 regularisation.
+Through BackPropagation Through Structure (BPTS), we take the derivative of the loss function with respect to the
+whole set of parameters θ and update the parameters with Adaptive Moment Estimation (Adam) [30]. Adam computes
+adaptive learning rates with one datum at each backpropagation step and updates the parameters as follows
+θ
+t + 1
+= θ
+t
+
+η
+ﬃﬃﬃﬃ
+v
+t
+p
++ e
+m
+t
+ð27Þ
+Figure 5.
+An example to demonstrate how to utilise the discourse relation types
+in the proposed tree-structured neural
+networks.
+The vector of
+each node is acquired by concatenating two embeddings:
+the DU embedding and the discourse relation
+type embedding of the node.
+Lee et al.
+10
+Journal of Information Science, 2017, pp. 1–21 Ó The Author(s), DOI: 10.1177/0165551517743644
+where η is the learning rate and ε is a smoothing term that avoids division by zero. m
+t
+and v
+t
+are estimates of the first
+moment (the mean) and the second moment (the uncentered variance) of the gradients, respectively.
+4. Evaluation
+It is not straightforward to devise a general criterion for evaluating the quality of document models. Because of this rea-
+son, many studies on modelling documents were geared towards specific NLP tasks such as classification or text search
+and evaluated accordingly. As our motivation for this research is to model documents with their discourse information,
+we thought that any task that would benefit from analysing the argument structures could serve the purpose of evaluation.
+Another point to consider for designing the experiment for evaluation is the availability of a public data set that facilitates
+a direct comparison with previous approaches.
+Considering the aforementioned reasons,
+we chose two document-level
+text classification tasks: sentiment analysis and sarcasm detection, each of which calls for a sophisticated understanding
+about the document’s thematic flow. The classification performance is measured with accuracy [31]. Since the previous
+works on both of the classification tasks were measured only with accuracy [32–34], we have no choice but to measure
+the performance with accuracy
+Accuracy =
+#correct predictions
+#predictions
+ð28Þ
+For a further understanding of our approach internally, for example, relative difficulty of the classes, we also use pre-
+cision, recall and F
+1
+score [31]
+Precision =
+#true-positive instances
+#true-positive instances + #false-positive instances
+ð29Þ
+Recall =
+#true-positive instances
+#true-positive instances + #false-negative instances
+ð30Þ
+F
+1
+score = 2 ·
+Precision · Recall
+Precision + Recall
+ð31Þ
+Since our proposed method highlights on the use of full discourse information derived from RST, which includes dis-
+course structure, discourse roles and discourse relation types, our experiments should be designed in such a way that the
+results of the two tasks must shed light on the value of the discourse analyses in modelling documents. As such, our first
+experiment is to compare the proposed modelling method against the state-of-the-art reference systems for the two tasks.
+The reference system for sentiment analysis also utilises discourse information but with external resources, whereas the
+system for sarcasm detection achieves the best performance so far by even using human-created scores. The main pro-
+posed model being compared is referred to as Discourse-aware Neural Network (DaNN), which is an N-ary tree LSTM
+built on the discourse structure. It assigns different weight matrices to child nodes for their roles and includes additional
+embeddings for discourse relation types. Among the variations we introduced, it is the only one that can accommodate
+the full discourse information. Other proposed models, RecNN and child-sum tree LSTM, are unable to take discourse
+roles properly.
+The second part of our experiments, as in Section 4.3, is to investigate the effects of computation cells of neural net-
+works (RecNN, child-sum tree LSTM and N-ary tree LSTM) and discourse information (discourse structure,
+discourse
+role and discourse relation type). Furthermore, the effects of composition methods and input text units on the qualities of
+the document models are examined in Section 4.4. For this, we conduct a comparative experiment for various composi-
+tion methods (average, sequential LSTM, end-to-end tree LSTM and end-to-end Paragraph Vector) with different input
+text units (word, sentence and whole document).
+4.1.
+Sentiment analysis
+Sentiment analysis would need an understanding of a particular aspect of semantics in text, for example, positive or neg-
+ative sentiment.
+An intuitive way of determining the overall sentiment of a given document is to compute the sum of
+polarity values of the sentences constituting the document, and this method is suitable for ordinary sentiment analyses.
+However,
+we conjecture that the overall sentiment may vary depending on the way the sentences are intertwined,
+like
+the example in Section 1. If that is the case, the sentences would contribute unequally to the overall sentiment, depend-
+ing on their roles in the entire discourse.
+Lee et al.
+11
+Journal of Information Science, 2017, pp. 1–21 Ó The Author(s), DOI: 10.1177/0165551517743644
+4.1.1.
+Data and task explanations.
+We utilise two well-known data sets: the Cornell movie review data set [32] and the
+Stanford large movie review data set [33], for sentiment analysis. They are annotated with the binary sentiment labels,
+positive and negative. The statistics of the two data sets are shown in Table 2.
+The Cornell movie review data set consists of 1000 positive and 1000 negative reviews. Given the size of the data set,
+we use 10-fold cross-validation by splitting the data set at a ratio of 8:1:1 for train, development and test sets,
+respec-
+tively.
+The Stanford large movie review data set consists of 12,500 positive and 12,500 negative reviews as a train set
+and another 12,500 positive and 12,500 negative reviews as a test set. For the experiment, we divide 10% of the train set
+as a development set. Both data sets consist of movie reviews collected in IMDb.com.
+2
+4.1.2. Experimental
+settings.
+First, to obtain EDU embeddings, we use the Gensim [35] library to utilise Paragraph Vector
+[11] described in Section 3.2.
+At the start of learning,
+we initialise word embeddings with Glove embeddings [18] to
+reduce the limitations resulting from the small amount of training instances in an unsupervised manner. To find optimal
+hyperparameters of Paragraph Vector for each data set,
+we conducted a sentiment
+analysis task with support
+vector
+machine (SVM) in the scikit-learn library,
+3
+which receives document embeddings as input. In this step, we compute an
+embedding of a document by averaging its EDU embeddings,
+and all the hyperparameters are tuned with the develop-
+ment set. The hyperparameters of Paragraph Vector on learning EDU embeddings are tested within the values described
+in Table 3.
+Note that only one of the hierarchical sampling or negative sampling methods can be selected as the sampling method
+at a time. Based on the experiment results, we finally select the values shown in Table 4 as the settings in learning EDU
+embeddings for each data set.
+Table 2.
+Statistics of the Cornell movie review data set and the Stanford large movie review data set
+Data set
+Number of
+documents
+Number of
+EDUs
+Number of
+unique EDUs
+Number of
+words
+Number of unique
+words
+Cornell
+2000
+162,482
+142,422
+1,402,412
+48,018
+Stanford
+50,000
+600,920
+579,881
+13,229,985
+142,870
+EDUs: Elementary Discourse Units.
+Table 3.
+The tested values to find the optimum for each hyperparameter on learning EDU embeddings
+Hyperparameter
+Tested values
+Learning method
+[DM, DBOW]
+Dimension of EDU embedding
+[50, 100, 200, 300]
+Size of context window
+[0, 5, 10, 15, 20]
+Hierarchical sampling
+[Yes,
+no]
+Size of negative sampling
+[0 (no),
+5, 10, 15, 20]
+EDU: Elementary Discourse Unit; DM: Distributed Memory; DBOW: Distributed Bag-of-Words.
+Table 4.
+The selected values of hyperparameters in learning EDU embeddings for the Cornell and the Stanford data sets
+Hyperparameter
+Cornell
+Stanford
+Learning method
+DM
+DM
+Dimension of EDU embedding
+100
+300
+Size of context window
+20
+20
+Hierarchical sampling
+No
+No
+Size of negative sampling
+10
+5
+EDU: Elementary Discourse Unit; DM: Distributed Memory.
+Lee et al.
+12
+Journal of Information Science, 2017, pp. 1–21 Ó The Author(s), DOI: 10.1177/0165551517743644
+For the proposed tree-structured neural
+network,
+we randomly initialise all parameters from a uniform distribution
+U (0:01, 0:01).
+All the hyperparameters are heuristically chosen by the hyperparameter optimisation process with the
+development set. The tested values of hyperparameters of the proposed tree-structured neural networks are described in
+Table 5.
+After the hyperparameter tuning process, we finally set the values for the tree-structured neural networks as shown in
+Table 6. The maximum epoch of the training process is set to 25 for both data sets.
+4.1.3.
+Results.
+Although only few previous works exist for comparison,
+we provide a comparison with the state-of-the
+art technique by Bhatia et al. [34], which also utilises discourse information and borrows the propagation-based training
+process of RecNN.
+While their approach utilises the discourse structure as the structure for the backpropagation,
+the
+approach adopts discourse roles and discourse relation types by applying separate weight
+matrices depending on dis-
+course roles and discourse relation types of the DUs. The key significant difference of this approach from the proposed
+method is that
+it
+computes polarity scores of EDUs based on a pre-constructed sentiment
+lexicon (hence supervised)
+rather than using distributed representations constructed from free text (hence unsupervised). In other words, it borrows
+RecNN merely as a tool for combining polarity scores of EDUs, whereas the proposed method is an end-to-end approach
+using discourse information without
+requiring the availability of a pre-constructed sentiment
+lexicon that
+often deter-
+mines the performance of sentiment analysis. For the comparison, we cite the result from their paper. Table 7 shows the
+result.
+This result
+is encouraging and significant
+from several
+perspectives.
+First,
+it
+demonstrates the proposed document
+modelling method is effective for the sentiment analysis task even beyond the state-of-the-art performance. It is particu-
+larly meaningful because the approach by Bhatia et al. requires additional knowledge – sentiment scores (scalar values)
+of the EDUs, computed by a separate classifier as well as a sentiment lexicon, whereas the proposed approach is an end-
+to-end DNN-based method relying solely on the available text.
+Second,
+the proposed method adopting the two-step
+approach is much less costly in preparing annotated data for learning because it only requires polarity labels for docu-
+ments, whereas Bhatia et al.’s system needs not only annotations for documents but also predicted labels of the DUs to
+Table 5.
+The tested values to find the optimal value for each hyperparameter of the proposed neural networks
+Hyperparameter
+Tested values
+Learning rate
+½10
+4
+,5 * 10
+5
+,2 * 10
+5
+,10
+5
+,5 * 10
+6
+,2 * 10
+6
+,10
+7
+
+Dropout ratio
+[0,
+0.1, 0.2,
+0.3, 0.4, 0.5]
+Coefficient for L2 regularisation
+½0,10
+7
+,10
+8
+,10
+9
+,10
+10
+,10
+11
+
+Table 6.
+The selected values of hyperparameters of the proposed neural networks for the Cornell and the Stanford data sets
+Hyperparameter
+Cornell
+Stanford
+Learning rate
+5 * 10
+5
+10
+5
+Dropout ratio
+0.5
+0.5
+Coefficient for L2 regularisation
+10
+10
+10
+10
+Table 7.
+The accuracy with the reference system on the document-level sentiment analysis task
+Method
+Cornell
+Stanford
+Bhatia et al. [34]
+a
+0.841
+0.856
+DaNN
+0.8755
+0.8906
+DaNN: Discourse-aware Neural Network.
+a
+The results of Bhatia et al.’s approach are cited from their paper.
+Lee et al.
+13
+Journal of Information Science, 2017, pp. 1–21 Ó The Author(s), DOI: 10.1177/0165551517743644
+minimise the vanishing gradient and the long-term dependency problems caused by the deep network hierarchy. Finally,
+unlike Bhatia et al.’s work specifically developed for sentiment analysis, the proposed method is for computing a multi-
+purpose document model using discourse information but can be applied successfully to sentiment analysis as well as
+others.
+The dependency of the proposed method on the discourse parser is unavoidable unless we take the discourse parsing
+into an end-to-end-system for classification. It is worth noting that DaNN has a great potential for further improvement
+as the underlying techniques used in the current implementation are not sufficiently mature, leaving space for improve-
+ment. For instance, the performance of the DPLP parser is not ripe despite that is the best discourse parser in existence.
+They have relatively low F
+1
+scores: 81.6% on EDU segmentation,
+70.95% on discourse role classification and 61.75%
+on discourse relation type classification [10]. Moreover, DaNN’s capability of updating parameters at each node would
+help improving the performance if additional
+annotations at
+EDU-level
+labels and IDU-level
+labels are available.
+In
+sum,
+the experimental result shows that the proposed multipurpose document modelling method can be used success-
+fully for sentiment analysis to outperform the state-of-the-art sentiment analysis system that utilises discourse informa-
+tion.
+Its performance would become even better if we reduce the errors of the underlying techniques and/or provide
+finer level annotations.
+We also measure the performance of DaNN with precision, recall and F
+1
+score on each polarity. Table 8 shows the
+results.
+DaNN works well regardless of the sentiment class and shows a balanced performance between precision and recall
+scores. Thus, we can conclude that DaNN provides stable document embeddings without injustice to the sentiment class.
+4.2.
+Sarcasm detection
+We consider document-level sarcasm detection a useful task for evaluating the effect of the new document modelling
+method. Compared with sentiment analysis, sarcasm detection would require a more sophisticated understanding of the
+thematic flow since sarcasm is often recognised by the way sentences are linked and contrasted. Given that the proposed
+method is meant to capture a flow of themes with discourse information,
+sarcasm detection would be a natural choice
+for testing the new document modelling method.
+4.2.1. Data and task explanations.
+Although several data sets for sarcasm detection studies are available, the majority deals
+with short text, such as tweets, which lacks discourse information. Thus, we employ the Sarcasm data set introduced by
+Filatova [36] for our experiments. This data set consists of 437 sarcastic reviews and 817 regular reviews from Amazon.
+4
+Table 9 shows some statistics of the data set. Note that a document contains more than 30 EDUs on average.
+4.2.2. Experimental
+settings.
+Like the sentiment analysis task, the relatively small size of the data set makes it necessary to
+adopt
+10-fold cross-validation for
+the evaluation.
+Similarly,
+we ran a preliminary experiment
+for
+finding optimal
+Table 8.
+The precision, recall and F
+1
+score for each class on the document-level sentiment analysis task
+Method
+Cornell
+Stanford
+Precision
+Recall
+F
+1
+score
+Precision
+Recall
+F
+1
+score
+DaNN (positive)
+0.8653
+0.8871
+0.8761
+0.8823
+0.9013
+0.8917
+DaNN (negative)
+0.8861
+0.8641
+0.8749
+0.8993
+0.8800
+0.8895
+DaNN: Discourse-aware Neural Network.
+Table 9.
+Statistics of the Sarcasm data set used in the experiment
+Number of documents
+Number of EDUs
+Number of unique EDUs
+Number of words
+Number of unique words
+1254
+42,036
+38,160
+322,378
+21,023
+EDU: Elementary Discourse Units.
+Lee et al.
+14
+Journal of Information Science, 2017, pp. 1–21 Ó The Author(s), DOI: 10.1177/0165551517743644
+hyperparameters of Paragraph Vector with the tested values described in Table 3.
+According to the results,
+the values
+shown in Table 10 are selected for the hyperparameters in learning EDU embeddings.
+We also conducted an experiment for tuning hyperparameters of the proposed tree-structured neural networks with the
+same tested values in the sentiment analysis experiment, as described in Table 5 and set the hyperparameters with the val-
+ues shown in Table 11.
+4.2.3.
+Results.
+We quote the performance of the state-of-art sarcasm detection method by Buschmeier et al. [37], which
+does not use any discourse information, because we were not able to identify a reference system that utilises discourse
+information. It attempts to take a mixture of various features for detecting sarcastic documents, including nine text fea-
+tures, for example, punctuation and emoticon, and two human-created scores. One of human-created scores is the star rat-
+ing of the product review, while the other is the difference between the star rating and the computed sentiment score of
+the document. That is, this method makes an explicit use of meta-features unavailable in the text as well as various tex-
+tual features. In order to demonstrate that the proposed document modelling method indeed helps in the sarcasm detec-
+tion task and tease out the value of using discourse information extracted from the text, we show two cases in Table 12:
+one with textual features only and the other with both textural features and the human-created scores. We obtained the
+values with the provided source code.
+The result shows that when without the human-created scores, the proposed method outperforms the state-of-the-art
+method (the first line in Table 12), which uses nine separately extracted textual features [37]. This is an indication that
+the distributed representations of the documents as proposed in our work capture the clues for sarcasm, including those
+originated from discourse information (see Section 4.3.2 for more details of the effect).
+The result also shows that the
+proposed method does not beat the score of Buschmeier et al.’s best method (second line in Table 12), which relies on
+two human-created scores as well as the textual features. This comparison confirms that indirect human supervision in
+the form of the star ratings provides invaluable information that could not be captured with only word-level or discourse-
+level text analysis. However, it does not disqualify the proposed method as a new approach to sarcasm detection. Note
+Table 10.
+The selected values of hyperparameters in learning EDU embeddings for the Sarcasm data set
+Hyperparameter
+Sarcasm
+Learning method
+DM
+Dimension of EDU embedding
+50
+Size of context window
+15
+Hierarchical sampling
+No
+Size of negative sampling
+20
+EDU: Elementary Discourse Unit; DM: Distributed Memory.
+Table 11.
+The selected values of hyperparameters of the proposed neural networks for the Sarcasm data set
+Hyperparameter
+Sarcasm
+Learning rate
+10
+4
+Dropout ratio
+0.4
+Coefficient for L2 regularisation
+10
+10
+Table 12.
+The accuracy with the reference system on the document-level sarcasm detection task
+Method
+Sarcasm
+Buschmeier et al.
+[37] (binary classifier with text features only)
+0.7900
+Buschmeier et al.
+[37] (binary classifier with text features + human-created scores)
+0.8370
+DaNN
+0.8101
+DaNN: Discourse-aware Neural Network.
+Lee et al.
+15
+Journal of Information Science, 2017, pp. 1–21 Ó The Author(s), DOI: 10.1177/0165551517743644
+that the human-created scores are neither always available in reality nor can be created easily based on the reviews. From
+this perspective, the result is still very encouraging because the proposed method simply attempts to capture the seman-
+tics of a document as faithfully as possible, including discourse information, without an effort to customise it for the task
+at hand and yet achieves a remarkable performance.
+We also measure the performance of DaNN with precision,
+recall and F
+1
+score on each class.
+Table 13 shows the
+results.
+From the result, DaNN is weighted in favour of the regular documents. One possible reason for this result is the biased
+ratio between sarcasm and regular documents; the regular documents are nearly twice more than the sarcasm documents.
+Under this circumstance, the parameters of DaNN are naturally trained with a bias to support the major class, that is, reg-
+ular. To avoid this bias problem caused by the imbalanced data set, a special training technique, such as transfer learning,
+may be needed, which would be considered in a separate study.
+4.3.
+Effects of modelling factors of DaNN variants
+4.3.1.
+Effects of types of neural
+networks.
+We conduct an experiment to explore how the computation cells of neural net-
+works influence on the document modelling performance. For this, we build three variants of DaNN with different com-
+putation cells: RecNN, child-sum tree LSTM and N-ary tree LSTM. The variants described in Section 3.3 are designed to
+consider only the discourse structure information for a simple and fair comparison. Since the child-sum tree LSTM even
+does not have capability of distinguishing children nodes according to their discourse roles, for example, it would not be
+possible to compare them for accommodating discourse roles. Table 14 shows the experimental result.
+The two tree LSTM–based variants clearly outperform the RecNN-based variant in all the data sets, probably due to
+the function of the selective memory in the tree LSTM. The tree LSTM–based variants can adopt an input, keep an inter-
+mediate memory and activate an output
+selectively in the training process.
+It
+appears that
+this general
+advantage of
+LSTM over RecNN is proven to work well with the EDU embeddings. The two tree LSTM–based variants are similar
+in their performance with a slight superiority of the N-ary tree LSTM–based variant on the Cornell and the Sarcasm data
+sets.
+We prefer N-ary tree LSTM to the child-sum tree LSTM,
+not because of the slight difference but because of the
+inability of the child-sum tree LSTM in distinguishing children nodes in the cell computation and thus reflecting dis-
+course roles.
+4.3.2. Effects of discourse factors.
+To see the contributions of discourse roles and relation types in addition to the availabil-
+ity of discourse structure, we run an ablation experiment with the two DNNs: RecNN and N-ary tree LSTM. As shown in
+Table 15, we first eliminate the effect of discourse roles (with ‘- discourse roles’ on the second row) or the performance
+of taking both discourse structure and discourse relation types. We also eliminate the effect of discourse relation types
+(with ‘- discourse relation types’ on the third row) and then eliminate both (with ‘- discourse roles and discourse relation
+types’ on the fourth row) so that we see the result of just considering discourse structure only.
+Table 13.
+The precision, recall and F
+1
+score for each class on the document-level sarcasm detection task
+Method
+Sarcasm
+Precision
+Recall
+F
+1
+score
+DaNN (sarcasm)
+0.7558
+0.6728
+0.7119
+DaNN (regular)
+0.8347
+0.8837
+0.8585
+DaNN: Discourse-aware Neural Network.
+Table 14.
+The accuracies of three variants of the proposed DaNN on the development set
+Method
+Cornell
+Stanford
+Sarcasm
+RecNN
+0.8290
+0.8500
+0.7982
+Child-sum tree LSTM
+0.8845
+0.8932
+0.8206
+N-ary tree LSTM
+0.8880
+0.8884
+0.8254
+DaNN: Discourse-aware Neural Network; RecNN: Recursive Neural Network; LSTM: Long Short-Term Memory.
+In this experiment, all the methods consider only the discourse structure for a fair comparison.
+Lee et al.
+16
+Journal of Information Science, 2017, pp. 1–21 Ó The Author(s), DOI: 10.1177/0165551517743644
+As a way of validating the way discourse roles are incorporated in the N-ary tree LSTM, we adopt the method used in
+Hogenboom et al. [4] as a variant. They proposed a way of using discourse roles for the purpose of selecting text inputs
+for sentiment analysis.
+Since the method is based on a typical lexicon-based approach,
+we just borrow and apply their
+idea to the N-ary tree LSTM. In their approach, all the satellite nodes at the leaf level, that is, EDU level, are ignored so
+that an N-ary tree LSTM is built only with nucleus EDU nodes. Note that discourse roles are not considered at all for
+intermediate levels,
+that is,
+IDU levels,
+because the lost information from this process would become too large if we
+ignore all the satellite nodes and their descendants in the training process. Table 15 shows the results under the two archi-
+tectures: RecNN and N-ary tree LSTM.
+It is clear that the discourse information has stronger positive effects with RecNN. Given the performance drop was
+the largest with ‘- discourse roles and discourse relation types’,
+both discourse roles and discourse relation types have
+their shares in improving the classification tasks with an exception of discourse relation types for the sarcasm detection
+task (adding discourse relation types while eliminating discourse roles was the worst).
+For the sentiment analysis task,
+discourse relation types are more important than discourse roles in improving the result.
+On the other hand, the differences resulting from eliminating the discourse information are relatively small with the
+N-ary tree LSTM. Although small, the discourse relation types have a positive impact for the sentiment analysis task but
+a negative one for the sarcasm detection task. The discourse roles have an opposite impact; they are positive in the sar-
+casm detection task but negative in the sentiment analysis task. It appears that the discourse structure is so well incorpo-
+rated with the N-ary tree LSTM that the additional information, that is, the discourse roles and discourse relation types
+may have an adversary effect, and more accurate extraction would be more beneficial to the tasks.
+An interesting point
+is that Hogenboom et
+al.’s approach of incorporating discourse roles in modelling documents
+shows poor performance.
+We suspect
+that
+this poor result
+comes from the information loss caused by their policy of
+ignoring satellite nodes at
+leaf levels.
+While this approach of using just
+nucleus parts may work for a lexicon-based
+approach, it fails in a composition-based DNN approach.
+In conclusion, which adopted full discourse, including discourse structure, discourse role and discourse relation type,
+shows the best performance among the results, adopting discourse role and discourse relation type information simultane-
+ously may help to improve the discourse-aware tree-structured neural network’s performance. The progressive improve-
+ments between the variants confirm the value of differentiating the nucleus and satellite roles and utilising the discourse
+relation types in integrating text semantics with tree-structured neural networks. Left as future research is a detailed anal-
+ysis and investigation on the types of documents that would benefit most by discourse roles and discourse relation types
+in each of the tasks.
+4.4.
+Effects of input text units and composition methods
+4.4.1.
+Experimental
+settings.
+The main goal of this experiment is to understand the effects of different composition meth-
+ods and different
+ways distributed representations are computed.
+As such,
+we compare DaNN against
+other various
+DNN-based baselines. In a way, this shows how we arrived at DaNN in retrospect or what alternatives we have exam-
+ined. The baselines vary in both their input text units and composition methods, and the results help understanding the
+internal workings of the proposed model. The comparison results are summarised in Table 16.
+Table 15.
+The accuracies of variants of the RecNN and the N-ary tree LSTM on the development set
+Method
+Cornell
+Stanford
+Sarcasm
+RecNN
+0.8495
+0.8748
+0.8006
+- discourse roles
+0.8450
+0.8640
+0.7910
+- discourse relation types
+0.8360
+0.8560
+0.8001
+- discourse roles and discourse relation types
+0.8290
+0.8500
+0.7982
+N-ary tree LSTM
+0.8915
+0.9036
+0.8260
+- discourse roles
+0.8880
+0.8896
+0.8262
+- discourse relation types
+0.8895
+0.8908
+0.8230
+- discourse relation types (Hogenboom et al. [4])
+0.8765
+0.8740
+0.8053
+- discourse roles and discourse relation types
+0.8880
+0.8884
+0.8254
+RecNN: Recursive Neural Network; LSTM: Long Short-Term Memory.
+The variants utilises different discourse factors while one baseline adopts Hogenboom et al.’s [4] way to consider the discourse role.
+Lee et al.
+17
+Journal of Information Science, 2017, pp. 1–21 Ó The Author(s), DOI: 10.1177/0165551517743644
+AvgWordVec computes a document’s embedding with an average of embeddings of the words included in the docu-
+ment. Given that a document embedding can be considered as its features, the SVM classifier in the scikit-learn library
+(see Note 3) is employed for the classification tasks. Note that the word embeddings are acquired as by-products in the
+process of learning EDU embeddings.
+More specifically,
+the word embeddings are trained with the CBOW method of
+Word2Vec [17] when the embeddings of EDUs are trained with the DM method of Paragraph Vector [11]. As such, all
+the hyperparameters used for the word embeddings are the same as those of EDU embeddings.
+LSTMWordVec uses a single-layer sequential LSTM as its composition method, implemented with Theano [38] and
+Keras.
+5
+The dimension of the hidden layer is set to 200 and a softmax layer is attached at the top for the classification
+tasks. The LSTM is trained with a loss function based on the binary-cross-entropy error between the gold standard and
+the predicted labels, and the learning process is optimised via Adam optimiser [30]. It serves as a baseline for an end-to-
+end classifier for the tasks, with a potential to capture the sequence of word semantics. However, it is not clear whether
+EDU- (or sentence-) level sequence information can be captured appropriately.
+End-to-EndTreeLSTM utilises full structural information of the document. At first, it constructs an EDU embedding
+by composing word embeddings with a tree LSTM built on the constituency parse tree of the EDU. After that, it makes a
+document embedding with the same approach of DaNN. We employ a special relation type ‘CONSTITUENT’ to denote
+the relation among the constituents resulting from the constituency parsing. Note that no discourse roles are assigned to
+the nodes in the constituency parse tree since the atomic unit of discourse analysis is EDU. In the course of computing
+EDU embeddings, the nodes of the constituency parse tree inherit the weight matrices from the original EDU’s discourse
+role. In effect, this baseline allows for examining the role of the Paragraph Vector method by replacing the EDU embed-
+dings trained with Paragraph Vector to the constituency parsing–based tree LSTM substitutes.
+AvgEDUVec and LSTMEDUVec take the same settings of AvgWordVec and LSTMWordVec, respectively, except they
+utilise EDU embeddings instead of word embeddings. The same EDU embeddings used for the evaluation of DaNN in
+Sections 4.1 and 4.2 are used for these baselines.
+The last
+baseline,
+Paragraph Vector,
+learns a document
+embedding directly from the text
+without
+any structure
+imposed on it.
+It is employed to compare the former does not need a composition method for weaving embeddings of
+smaller text segments.
+We train document embeddings according to the same experimental settings used for learning
+EDU embeddings and employ an SVM classifier for the classification tasks, similar to the evaluation method proposed
+in the original paper [11].
+Table 16.
+Summarisation between DaNN and the baseline methods using different input text units and composition methods
+Method
+Input text unit
+Composition method
+AvgWordVec
+Word
+Average
+LSTMWordVec
+Word
+Sequential LSTM
+End-to-EndTreeLSTM
+Word
+Tree-structured LSTM
+AvgEDUVec
+EDU
+Average
+LSTMEDUVec
+EDU
+Sequential LSTM
+DaNN
+EDU
+Tree-structured LSTM
+Paragraph Vector
+Document
+–
+DaNN: Discourse-aware Neural Network; EDU: Elementary Discourse Unit; LSTM: Long Short-Term Memory.
+Table 17.
+The accuracies of the baselines with different input text units and composition methods on the test set
+Method
+Cornell
+Stanford
+Sarcasm
+AvgWordVec
+0.7005
+0.7281
+0.6515
+LSTMWordVec
+0.7910
+0.8861
+0.7498
+End-to-EndTreeLSTM
+0.8700
+0.8743
+0.7957
+AvgEDUVec
+0.8560
+0.8778
+0.8055
+LSTMEDUVec
+0.5050
+0.5888
+0.6595
+Paragraph Vector
+0.7530
+0.8248
+0.7392
+DaNN
+0.8755
+0.8906
+0.8101
+DaNN: Discourse-aware Neural Network.
+Lee et al.
+18
+Journal of Information Science, 2017, pp. 1–21 Ó The Author(s), DOI: 10.1177/0165551517743644
+4.4.2.
+Results.
+The first lesson to learn from the result in Table 17 is that considering the structural information for the
+composition process
+leads
+to a better
+modelling of
+documents
+as
+in the comparison between AvgEDUVec and
+AvgWordVec. The big performance margins between the two approaches on all data sets make it clear that learning with
+EDUs first is more effective than learning with plain words. Put differently, words are not as good a unit as sentences in
+modelling a document.
+Modelling entire documents at once may be too coarse to handle the sophisticated changes of
+thematic flows in the text. The same conclusion can be drawn from the fact that DaNN shows better performance than
+End-to-EndTreeLSTM and Paragraph Vector baselines.
+Nonetheless,
+End-to-EndTreeLSTM gives the strongest
+result
+among those without
+using EDUs when all
+the three
+data sets are considered. The great performance of End-to-EndTreeLSTM and DaNN strongly suggests that utilising dis-
+course structure on composition-based learning is an effective approach.
+While End-to-EndTreeLSTM seems to have a
+capability of learning the structure of a document, it suffers from the vanishing gradient problem in the backpropagation
+of the training stage because its hierarchy becomes very deep as it learns from the word level to a document level. We
+believe that this resulted in the performance worse than DaNN.
+The second observation is that LSTMWordVec, the word composition-based method using LSTM, as well as End-to-
+EndTreeLSTM, has an advantage over AvgWordVec and Paragraph Vector that are both context-based methods. In other
+words,
+computing document
+embeddings with a thoughtful
+composition of embeddings of smaller text
+units has an
+advantage over learning an abstraction of document at once. It appears that the averaging method discards the character-
+istics of the individual units and the way they are laid out in a document.
+It is interesting to note that LSTMEDUVec results in a very poor performance, although it seems to be an ideal combina-
+tion of LSTM and EDU. A deeper analysis shown that since sentences are more unique than words in the training data, a typ-
+ical LSTM is expected to work poorly with sentences. The training set is overly sparse without repetitions of sentences. It
+would be difficult to capture the patterns among sentences with such a sparse data, unlike the way LSTM works with words.
+An advantage of the proposed two-stage approach lies in computational efficiency in addition to the capability of avoiding
+the vanishing gradient problem.
+While the performance of End-to-EndTreeLSTM is close to the ones using EDUs (DaNN
+and AvgEDUVec), it suffers from a space problem. In our experiment, it was not possible to train End-to-EndTreeLSTM via
+general-purpose computing on graphics processing unit (GPGPU),
+which usually improves the training speed of a DNN-
+based model dramatically. For example, we received the result of End-to-EndTreeLSTM on the Cornell data set in 15 days
+with a 128G RAM computer, which was a solution to the failure of training the model with GeForce GTX Titan X (VRAM
+size:
+12G).
+In addition,
+the End-to-EndTreeLSTM result
+had to be obtained after two epochs using the Stanford data set
+because it always produced a memory error afterward even on the high-memory machine. From these experiences, it is safe
+to conclude that End-to-EndTreeLSTM is not practical enough to be used in applications.
+5. Conclusion and future work
+We introduced a new method for modelling documents based on discourse-aware tree-structured neural networks, where
+a distributed representation of a document is built with its discourse information, including discourse structure, discourse
+role and discourse relation type. The main motivation is to make a document representation reflect upon its thematic struc-
+ture and hence become more amenable to text classification tasks such as sentiment analysis and sarcasm detection.
+As
+such, we conducted experiments on the tasks to validate the proposed method.
+The results show that the proposed tree-
+structured method effectively incorporates the discourse information into an effective distributed representation to give
+substantial
+improvements for the tasks.
+The classification accuracy using the document model trained by the proposed
+method is better than that of the state-of-the-art sentiment analysis using discourse information,
+which even requires a
+pre-constructed sentiment lexicon. The proposed method also outperforms the state-of-the-art sarcasm detection approach
+that utilises textual features. It is worth noting that the proposed DaNN has a potential for even more improvements with
+the progress of the underlying techniques, for example, discourse parsing and embedding learning of arbitrary length text.
+An important take-away message from this work is that the discourse information is an important contributor to mod-
+elling documents, especially on tasks that need high-level understanding of the thematic flow of the text, such as senti-
+ment
+analysis and sarcasm detection.
+The detailed analysis of various alternatives in modelling text
+reveals that
+it
+is
+critical to set up a hierarchical structure for both the data and the learning mechanism and yet control the depths of the
+hierarchy, not to lose the benefit and the computational viability. Most importantly, this work suggested a novel way of
+incorporating discourse information into DNN-based text modelling and opens up a new research direction.
+While the current work shows the great potential of the proposed approach,
+its validation can be extended to new
+application tasks,
+other than just sentiment analysis and sarcasm detection,
+in such a way that the fine-level discourse
+information can play a more distinctive and better understood role. For such a novel analysis with new functionality, we
+plan to design experiments for a more suitable task, construct our own data set for evaluation and show the availability
+Lee et al.
+19
+Journal of Information Science, 2017, pp. 1–21 Ó The Author(s), DOI: 10.1177/0165551517743644
+of the proposed method as an immediate future work.
+Concurrently,
+we will
+extend the proposed method to support
+multi-label
+classification for added generalisability.
+On the other hand,
+for a more sophisticated use of the proposed
+method, we also need to ensure that the underlying discourse analysis technique is better tuned with less errors, in addi-
+tion to more rigorous analysis of the nature of the errors and their impact on the test results,
+which require non-trivial
+linguistic knowledge.
+Declaration of conflicting interests
+The author(s) declared no potential conflicts of interest with respect to the research, authorship and/or publication of this article.
+Funding
+This work was supported by ICT R&D program of MSICT/IITP. [2013-0-00179, Development of Core Technology for Context-aware
+Deep-Symbolic Hybrid Learning and Construction of Language Resources].
+Notes
+1.
+https://github.com/TheEmancipator/DaNN
+2.
+http://www.imdb.com/
+3.
+http://scikit-learn.org/
+4.
+https://www.amazon.com/
+5.
+https://keras.io/
+References
+[1]
+Dai
+AM,
+Olah C and Le QV.
+Document
+embedding with paragraph vectors.
+Computing Research Repository (CoRR),
+abs/
+1507.07998, 2015.
+[2]
+Lin R, Liu S, Yang M et al. Hierarchical recurrent neural network for document modeling. In: Proceedings of the conference on
+empirical methods in natural language processing (EMNLP), Lisbon, 17–21 September 2015, pp. 899–907. Stroudsburg, PA:
+Association for Computational Linguistics.
+[3]
+Taboada M and Mann WC. Applications of rhetorical structure theory. Discourse Stud 2006; 8: 567–588.
+[4]
+Hogenboom A, Fransincar F, Jong FD et al. Using rhetorical structure in sentiment analysis. Commun ACM 2015; 58: 69–77.
+[5]
+Mann WC and Thompson SA.
+Rhetorical structure theory: toward a functional theory of text organization.
+Text-Interdiscip J
+Study Discourse 1988; 8: 243–281.
+[6]
+Goller
+C and Kuchler
+A.
+Learning task-dependent
+distributed representations
+by backpropagation through structure.
+In:
+Proceedings of the international conference on neural networks,
+Washington,
+DC,
+3–6 June 1996,
+pp.
+347–352.
+New York:
+IEEE.
+[7]
+Tai KS, Socher R and Manning CD. Improved semantic representations from treestructured long short-term memory networks.
+In:
+Proceedings of
+the annual
+meeting of
+the Association for Computational
+Linguistics (ACL),
+Beijing,
+China,
+26–31 July
+2015, pp. 1556–1566. Stroudsburg, PA: Association for Computational Linguistics.
+[8]
+Hochreiter S and Schmidhuber J. Long short-term memory. Neural Comput 1997; 9: 1735–1780.
+[9]
+Zhu X,
+Sobhani
+P and Guo H.
+Long short-term memory over
+recursive structures.
+In:
+Proceedings of
+the International
+Conference on Machine Learning (ICML), Lille, France, 6–11 July 2015, pp. 1604–1612. PMLR.
+[10]
+Ji Y and Eisenstein J.
+Representation learning for text-level discourse parsing.
+In: Proceedings of the annual meeting of the
+Association for Computational Linguistics (ACL), Baltimore, MD, 23–25 June 2014, pp. 13–24. Stroudsburg, PA: Association
+for Computational Linguistics.
+[11]
+Le QV and Mikolov T.
+Distributed representations
+of
+sentences
+and documents.
+In:
+Proceedings
+of
+the International
+Conference on Machine Learning (ICML), Beijing, China, 21–26 June 2014, pp. 1188–1196. PMLR.
+[12]
+Thet TT, Na J-C and Khoo CSG. Aspect-based sentiment analysis of movie reviews on discussion boards. J Inf Sci 2010; 36:
+823–848.
+[13]
+Ma B, Yuan H and Wu Y. Exploring performance of clustering methods on document sentiment analysis. J Inf Sci 2017; 43:
+54–74.
+[14]
+Joshi A,
+Bhattacharyya P and Carman MJ.
+Automatic sarcasm detection: a survey.
+Computing Research Repository (CoRR),
+abs/1602.03426, 2016.
+[15]
+Bengio Y, Ducharme R, Vincent P et al. A neural probabilistic language model. J Mach Learn Res 2003; 3: 1137–1155.
+[16]
+Collobert R, Weston J, Bottou L et al. Natural language processing (almost) from scratch. J Mach Learn Res 2011; 12: 2493–
+2537.
+[17]
+Mikolov T,
+Chen K,
+Corrado G et
+al.
+Efficient
+estimation of
+word representations in vector
+space.
+Computing Research
+Repository (CoRR), abs/1301.3781, 2013.
+Lee et al.
+20
+Journal of Information Science, 2017, pp. 1–21 Ó The Author(s), DOI: 10.1177/0165551517743644
+[18]
+Pennington J, Socher R and Manning CD. Glove: global vectors for word representation. In: Proceedings of the conference on
+empirical methods in natural language processing (EMNLP), Doha, Qatar, 25–29 October 2014, pp. 1532–1543. Stroudsburg,
+PA: Association for Computational Linguistics.
+[19]
+Kim Y. Convolutional neural networks for sentence classification. In: Proceedings of the conference on empirical methods in
+natural language processing (EMNLP),
+Doha,
+Qatar,
+25–29 October 2014,
+pp. 1746–1751.
+Stroudsburg,
+PA: Association for
+Computational Linguistics.
+[20]
+Kalchbrenner N,
+Grefenstette E and Blunsom P.
+A convolutional neural network for modelling sentences.
+In: Proceedings of
+the annual meeting of the Association for Computational Linguistics (ACL),
+Baltimore,
+MD,
+23–25 June 2014,
+pp.
+655–665.
+Stroudsburg, PA: Association for Computational Linguistics.
+[21]
+Denil
+M,
+Demiraj
+A,
+Kalchbrenner N et
+al.
+Modelling,
+visualising and summarising documents with a single convolutional
+neural network. Computing Research Repository (CoRR), abs/1406.3830, 2014.
+[22]
+Johnson R and Zhang T.
+Effective use of
+word order
+for
+text
+categorization with convolutional
+neural
+networks.
+In:
+Proceedings of
+the conference of
+the North American chapter of
+the Association for Computational
+Linguistics:
+Human
+Language Technologies (NAACL-HLT),
+Denver,
+CO,
+31 May–5 June 2015,
+pp.
+103–112.
+Stroudsburg,
+PA:
+Association for
+Computational Linguistics.
+[23]
+Li J, Luong T, Jurafsky D et al. When are tree structures necessary for deep learning of representations? In: Proceedings of the
+conference on empirical methods in natural language processing (EMNLP),
+Lisbon,
+17–21 September 2015,
+pp.
+2304–2314.
+Stroudsburg, PA: Association for Computational Linguistics.
+[24]
+Socher R,
+Perelygin A,
+Wu JY et
+al.
+Recursive deep models for semantic compositionality over a sentiment
+treebank.
+In:
+Proceedings of the conference on empirical methods in natural language processing (EMNLP),
+Seattle,
+WA,
+18–21 October
+2013, pp. 1631–1642. Stroudsburg, PA: Association for Computational Linguistics.
+[25]
+Chen X,
+Qiu X,
+Zhu C et al.
+Sentence modeling with gated recursive neural network.
+In: Proceedings of the conference on
+empirical methods in natural language processing (EMNLP), Lisbon, 17–21 September 2015, pp. 793–798. Stroudsburg, PA:
+Association for Computational Linguistics.
+[26]
+Carlson L and Marcu D.
+Discourse tagging reference manual.
+ISI technical
+report
+ISI-TR-545,
+2001,
+https://www.isi.edu/
+~marcu/discourse/tagging-ref-manual.pdf (accessed 22 November 2017).
+[27]
+Carlson L,
+Marcu D and Okurowski ME.
+Building a discourse-tagged corpus in the framework of rhetorical structure theory.
+In:van Kuppevelt JCJ and Smith RW (eds) Current and new directions in discourse and dialogue. Dordrecht: Springer, 2003,
+pp. 85–112.
+[28]
+Zirn C,
+Niepert
+M,
+Stuckenschmidt
+H et
+al.
+Fine-grained sentiment
+analysis with structural
+features.
+In:
+Proceedings of
+the
+International Joint Conference on Natural Language Processing (IJCNLP), Chiang Mai, Thailand, 8–13 November 2011, pp.
+336–344. Stroudsburg, PA: Association for Computational Linguistics.
+[29]
+Irsoy O and Cardie C. Deep recursive neural networks for compositionality in language. In: Proceedings of the annual confer-
+ence on Neural Information Processing Systems (NIPS),
+Montreal,
+QC,
+Canada,
+8–13 December 2014,
+pp.
+2096–2104.
+Red
+Hook, NY: Curran Associates, Inc.
+[30]
+Kingma D and Ba J.
+Adam:
+a method for stochastic optimization.
+Computing Research Repository (CoRR),
+abs/412.6980,
+2014.
+[31]
+Manning CD and Schu¨tze H. Foundations of statistical natural language processing. Cambridge, MA: MIT Press, 1999.
+[32]
+Pang B and Lee L. A sentimental education: sentiment analysis using subjectivity summarization based on minimum cuts. In:
+Proceedings of the annual meeting of the Association for Computational Linguistics (ACL),
+Barcelona,
+21–26 July 2004,
+pp.
+271–278. Stroudsburg, PA: Association for Computational Linguistics.
+[33]
+Maas AL, Daly RE, Pham PT et al. Learning word vectors for sentiment analysis. In: Proceedings of the annual meeting of the
+Association for Computational Linguistics: Human Language Technologies (ACL-HLT),
+Portland,
+OR,
+19–24 June 2011,
+pp.
+142–150. Stroudsburg, PA: Association for Computational Linguistics.
+[34]
+Bhatia P, Ji Y and Eisenstein J. Better document-level sentiment analysis from RST discourse parsing. In: Proceedings of the
+conference on empirical methods in natural language processing (EMNLP),
+Lisbon,
+17–21 September 2015,
+pp.
+2212–2218.
+Stroudsburg, PA: Association for Computational Linguistics.
+[35]
+R
+ˇ
+ehu
+˚
+r
+ˇ
+ek R and Sojka P.
+Software framework for topic modelling with large corpora. In: Proceedings of the LREC workshop
+on new challenges for NLP frameworks,
+Valletta,
+Malta,
+22 May 2010,
+pp.
+45–50.
+Paris:
+European Language Resources
+Association.
+[36]
+Filatova E. Irony and sarcasm: corpus generation and analysis using crowdsourcing. In: Proceedings of the international con-
+ference on language resources and evaluation (LREC),
+Istanbul,
+23–25 May 2012,
+pp.
+392–398.
+Paris: European Language
+Resources Association.
+[37]
+Buschmeier K, Cimiano P and Klinger R. An impact analysis of features in a classification approach to irony detection in prod-
+uct reviews. In: Proceedings of the workshop on computational approaches to subjectivity, sentiment and social media analysis,
+Baltimore, MD, 27 June 2014, pp. 42–49. Stroudsburg, PA: Association for Computational Linguistics.
+[38]
+Theano Development
+Team.
+Theano:
+a Python framework for
+fast
+computation of
+mathematical
+expressions.
+Computing
+Research Repository (CoRR), abs/1605.02688, 2016.
+Lee et al.
+21
+Journal of Information Science, 2017, pp. 1–21 Ó The Author(s), DOI: 10.1177/0165551517743644

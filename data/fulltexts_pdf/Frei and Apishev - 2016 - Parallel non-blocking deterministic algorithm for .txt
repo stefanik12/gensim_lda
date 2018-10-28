@@ -1,0 +1,1485 @@
+﻿Parallel Non-blocking Deterministic Algorithm
+for Online Topic Modeling
+Oleksandr Frei
+1
+and Murat Apishev
+2
+1
+Moscow Institute of Physics and Technology, Moscow, Russia,
+oleksandr.frei@gmail.com
+2
+National Research University Higher School of Economics, Moscow, Russia,
+great-mel@yandex.ru
+Abstract.
+In this paper we present a new asynchronous algorithm for
+learning additively regularized topic models and discuss the main ar-
+chitectural
+details of our implementation.
+The key property of the new
+algorithm is that it behaves in a fully deterministic fashion,
+which is
+typically hard to achieve in a non-blocking parallel
+implementation.
+The algorithm had been recently implemented in the BigARTM library
+(http://bigartm.org).
+Our new algorithm is compatible with all
+fea-
+tures previously introduced in BigARTM library, including multimodal-
+ity,
+regularizers and scores calculation.
+While the existing BigARTM
+implementation compares favorably with alternative packages such as
+Vowpal
+Wabbit or Gensim,
+the new algorithm brings further improve-
+ments in CPU utilization,
+memory usage,
+and spends even less time to
+achieve the same perplexity.
+Keywords: probabilistic topic modeling, additive regularization of topic
+models,
+stochastic matrix factorization,
+EM-algorithm,
+online learning,
+asynchronous and parallel computing, BigARTM.
+1
+Introduction
+Topic modeling [1] is a powerful machine learning tool for statistical text analysis
+that has been widely used in text mining, information retrieval, network analysis
+and other areas [2]. Today a lot of research efforts around topic models are de-
+voted to distributed implementations of Latent Dirichlet Allocation (LDA) [3],
+a specific Bayesian topic model that uses Dirichlet conjugate prior. This lead to
+numerous implementations such as AD-LDA [7], PLDA [8] and PLDA+ [9], all
+designed to run on a big cluster.
+Topic models of web scale can reach millions
+of topics and words,
+yielding Big Data models with trillions of parameters [4].
+Yet not all researchers and applications are dealing with so large web-scale col-
+lections.
+Some of
+them require an efficient implementation that can run on a
+powerful workstation or even a laptop. Such implementations are very useful, as
+shown by the popular open-source packages Vowpal Wabbit [13], Gensim [12] and
+Mallet [14], which are neither distributed nor sometimes even multi-threaded.
+A similar optimization problem and its distributed implementations exist in
+the Deep Neural Network area, as DNN and Topic modeling both use Stochastic
+Gradient Descent (SGD) optimization.
+The asynchronous SGD [11]
+does not
+directly apply to Topic modeling because it is computationally less efficient to
+partition a topic model
+across nodes.
+Limited parallelizability [10]
+of
+speech
+DNNs across nodes justify our focus on single-node optimizations.
+However,
+scaling down a distributed algorithm can be challenging. LightLDA [4] is a major
+step in this direction, however it focuses only on the LDA model. Our goal is to
+develop a flexible framework that can learn a wide variety of topic models.
+BigARTM [18]
+is an open-source library for regularized multimodal
+topic
+modeling of large collections. BigARTM is based on a novel technique of additive
+regularized topic models (ARTM) [16,17,19], which gives a flexible multi-criteria
+approach to probabilistic topic modeling.
+ARTM includes all
+popular models
+such as LDA [3],
+PLSA [5],
+and many others.
+Key feature of
+ARTM is that
+it provides a cohesive framework that allows users to combine different topic
+models that previously did not fit together.
+BigARTM is proven to be very fast compared to the alternative packages. Ac-
+cording to [18], BigARTM runs approx. 10 times faster compared to Gensim [12]
+and twice as fast as Vowpal Wabbit [13] in a single thread. With multiple threads
+BigARTM wins even more as it scales linearly up to at least 16 threads. In this
+paper we address the remaining limitations of the library, including performance
+bottlenecks and non-deterministic behavior of the Online algorithm.
+The rest of the paper is organized as follows. Section 2 introduces basic no-
+tation.
+Sections 3 and 4 summarize offline and online algorithms for learning
+ARTM models. Sections 5 and 6 discuss asynchronous modifications of the on-
+line algorithm. Section 7 compares BigARTM architecture between versions 0.6
+and 0.7. Section 8 reports the results of our experiments on large datasets. Sec-
+tion 9 discusses advantages, limitations and open problems of BigARTM.
+2
+Notation
+Let 𝐷 denote a finite set (collection) of texts and 𝑊 denote a finite set (vocab-
+ulary) of all words from these texts. Let 𝑛
+𝑑𝑤
+denote the number of occurrences
+of
+a word 𝑤 ∈ 𝑊 in a document 𝑑 ∈ 𝐷;
+𝑛
+𝑑𝑤
+values form a sparse matrix of
+size |𝑊 | × |𝐷|, known as bag-of-words representation of the collection.
+Given an (𝑛
+𝑑𝑤
+)
+matrix,
+a probabilistic topic model
+finds
+two matrices:
+𝛷 = (𝜑
+𝑤𝑡
+) and 𝛩 = (𝜃
+𝑡𝑑
+), of sizes |𝑊 | × |𝑇 | and |𝑇 | × |𝐷| respectively, where
+|𝑇 |
+is a user-defined number of
+topics
+in the model
+(typically |𝑇 |
+<< |𝑊 |).
+Matrices 𝛷 and 𝛩 provide a compressed representation of the (𝑛
+𝑑𝑤
+) matrix:
+𝑛
+𝑑𝑤
+≈ 𝑛
+𝑑
+∑︁
+𝑡∈𝑇
+𝜑
+𝑤𝑡
+𝜃
+𝑡𝑑
+,
+for all 𝑑 ∈ 𝐷, 𝑤 ∈ 𝑊,
+where 𝑛
+𝑑
+=
+∑︀
+𝑤∈𝑊
+𝑛
+𝑑𝑤
+denotes the total number of words in a document 𝑑.
+To learn 𝛷 and 𝛩 from (𝑛
+𝑑𝑤
+) an additively-regularized topic model (ARTM)
+maximizes the log-likelihood, regularized via an additional penalty term 𝑅(𝛷, 𝛩):
+𝐹 (𝛷, 𝛩) =
+∑︁
+𝑑∈𝐷
+∑︁
+𝑤∈𝑊
+𝑛
+𝑑𝑤
+ln
+∑︁
+𝑡∈𝑇
+𝜑
+𝑤𝑡
+𝜃
+𝑡𝑑
++ 𝑅(𝛷, 𝛩)
+→ max
+𝛷,𝛩
+.
+(1)
+Regularization penalty 𝑅(𝛷, 𝛩) may incorporate external
+knowledge of the ex-
+pert
+about
+the collection.
+With no regularization (𝑅 = 0)
+it
+corresponds
+to
+PLSA [5].
+Many Bayesian topic models,
+including LDA [3],
+can be represented
+as special cases of ARTM with different regularizers 𝑅, as shown in [17].
+In [16] it is shown that the local maximum (𝛷, 𝛩) of problem (1) satisfies the
+following system of equations:
+𝑝
+𝑡𝑑𝑤
+= norm
+𝑡∈𝑇
+(︀
+𝜑
+𝑤𝑡
+𝜃
+𝑡𝑑
+)︀
+;
+(2)
+𝜑
+𝑤𝑡
+= norm
+𝑤∈𝑊
+(︂
+𝑛
+𝑤𝑡
++ 𝜑
+𝑤𝑡
+𝜕𝑅
+𝜕𝜑
+𝑤𝑡
+)︂
+;
+𝑛
+𝑤𝑡
+=
+∑︁
+𝑑∈𝐷
+𝑛
+𝑑𝑤
+𝑝
+𝑡𝑑𝑤
+;
+(3)
+𝜃
+𝑡𝑑
+= norm
+𝑡∈𝑇
+(︂
+𝑛
+𝑡𝑑
++ 𝜃
+𝑡𝑑
+𝜕𝑅
+𝜕𝜃
+𝑡𝑑
+)︂
+;
+𝑛
+𝑡𝑑
+=
+∑︁
+𝑤∈𝑑
+𝑛
+𝑑𝑤
+𝑝
+𝑡𝑑𝑤
+;
+(4)
+where operator norm
+𝑖∈𝐼
+𝑥
+𝑖
+=
+max{𝑥
+𝑖
+,0}
+∑︀
+𝑗∈𝐼
+max{𝑥
+𝑗
+,0}
+transforms a vector (𝑥
+𝑖
+)
+𝑖∈𝐼
+to a discrete
+distribution, 𝑛
+𝑤𝑡
+counters represent term frequency of word 𝑤 in topic 𝑡.
+Learning of 𝛷 and 𝛩 from (2)–(4) can be done by EM-algorithm, which starts
+from random values in 𝛷 and 𝛩, and iterates E-step (2) and M-steps (3),(4) until
+convergence.
+In the sequel
+we discuss several
+variations of such EM-algorithm,
+which are all based on the above formulas but differ in the way how operations
+are ordered and grouped together.
+In addition to plain text,
+many collections have other metadata,
+such as
+authors,
+class
+or
+category labels,
+date-time stamps,
+or
+even associated im-
+ages,
+audio or video clips,
+usage data,
+etc.
+In [19]
+this data was represented
+as modalities,
+where the overall
+vocabulary 𝑊 is partitioned into 𝑀 subsets
+𝑊 = 𝑊
+1
+⊔ · · · ⊔ 𝑊
+𝑀
+, one subset per modality, and in (3) matrix 𝛷 is normal-
+ized independently within each modality.
+Incorporating modalities into a topic
+model improves its quality and makes it applicable for classification, cross-modal
+retrieval,
+or making recommendations.
+In the sequel
+we list all
+algorithms for
+one modality, but our implementation in BigARTM supports the general case.
+3
+Offline Algorithm
+Offline ARTM (Alg.
+2) relies on subroutine ProcessDocument
+(Alg.
+1),
+which
+corresponds to equations (2) and (4) from the solution of the ARTM optimization
+problem (1).
+ProcessDocument requires a fixed 𝛷 matrix and a vector 𝑛
+𝑑𝑤
+of
+term frequencies for a given document 𝑑 ∈ 𝐷, and as a result it returns a topical
+distribution (𝜃
+𝑡𝑑
+) for the document, and a matrix (ˆ
+𝑛
+𝑤𝑡
+) of size |𝑑| × |𝑇 |, where |𝑑|
+denotes the number of distinct words in the document. ProcessDocument might
+also be useful
+as a separate routine which finds (𝜃
+𝑡𝑑
+) distribution for a new
+document, but in the Offline algorithm it is instead used as a building block in
+an iterative EM-algorithm that finds the 𝛷 matrix.
+Offline algorithm performs scans over the collection, calling ProcessDocument
+for each document 𝑑 ∈ 𝐷 from the collection,
+and then aggregating the result-
+Algorithm 1: ProcessDocument(𝑑, 𝛷)
+Input: document 𝑑 ∈ 𝐷, matrix 𝛷 = (𝜑
+𝑤𝑡
+);
+Output: matrix (˜
+𝑛
+𝑤𝑡
+), vector (𝜃
+𝑡𝑑
+) for the document 𝑑;
+1
+initialize 𝜃
+𝑡𝑑
+:=
+1
+|𝑇 |
+for all 𝑡 ∈ 𝑇 ;
+2
+repeat
+3
+𝑝
+𝑡𝑑𝑤
+:= norm
+𝑡∈𝑇
+(︀
+𝜑
+𝑤𝑡
+𝜃
+𝑡𝑑
+)︀
+for all 𝑤 ∈ 𝑑 and 𝑡 ∈ 𝑇 ;
+4
+𝜃
+𝑡𝑑
+:= norm
+𝑡∈𝑇
+(︀
+∑︀
+𝑤∈𝑑
+𝑛
+𝑑𝑤
+𝑝
+𝑡𝑑𝑤
++ 𝜃
+𝑡𝑑
+𝜕𝑅
+𝜕𝜃
+𝑡𝑑
+)︀
+for all 𝑡 ∈ 𝑇 ;
+5
+until 𝜃
+𝑑
+converges;
+6
+˜
+𝑛
+𝑤𝑡
+:= 𝑛
+𝑑𝑤
+𝑝
+𝑡𝑑𝑤
+for all 𝑤 ∈ 𝑑 and 𝑡 ∈ 𝑇 ;
+Algorithm 2: Offline ARTM
+Input: collection 𝐷;
+Output: matrix 𝛷 = (𝜑
+𝑤𝑡
+);
+1
+initialize (𝜑
+𝑤𝑡
+);
+2
+create batches 𝐷 := 𝐷
+1
+⊔ 𝐷
+2
+⊔ · · · ⊔ 𝐷
+𝐵
+;
+3
+repeat
+4
+(𝑛
+𝑤𝑡
+) :=
+∑︁
+𝑏=1,...,𝐵
+∑︁
+𝑑∈𝐷
+𝑏
+ProcessDocument(𝑑, 𝛷);
+5
+(𝜑
+𝑤𝑡
+) := norm
+𝑤∈𝑊
+(𝑛
+𝑤𝑡
++ 𝜑
+𝑤𝑡
+𝜕𝑅
+𝜕𝜑
+𝑤𝑡
+);
+6
+until (𝜑
+𝑤𝑡
+) converges;
+ing (ˆ
+𝑛
+𝑤𝑡
+) matrices into the final (𝑛
+𝑤𝑡
+) matrix of size |𝑊 | × |𝑇 |. After each scan
+it recalculates 𝛷 matrix according to the equation (3).
+At step 2 we partition collection 𝐷 into batches (𝐷
+𝑏
+). This step is not strictly
+necessary for Offline algorithm, but it rather reflects an internal implementation
+detail.
+For performance reasons the outer loop over batches 𝑏 = 1, . . . , 𝐵 is
+parallelized across multiple threads,
+and within each batch the inner loop over
+documents 𝑑 ∈ 𝐷
+𝑏
+is executed in a single thread.
+Each batch is stored in a
+separate file on disk to allow out-of-core streaming of the collection. For typical
+collections it is reasonable to have around 1000 documents per batch,
+however
+for ultimate performance we encourage users to experiment with this parameter.
+Too small batches can cause disk IO overhead due to lots of small reads, while
+too large batches will
+result in bigger tasks that will
+not be distributed evenly
+across computation threads.
+Note that 𝜃
+𝑡𝑑
+values appear only within ProcessDocument subroutine.
+This
+leads to efficient memory usage because the implementation never stores the
+entire theta matrix 𝛩 at any given time.
+Instead,
+𝜃
+𝑡𝑑
+values are recalculated
+from scratch on every pass through the collection.
+Fig.
+1 shows a Gantt chart of the Offline algorithm.
+Here and in the sequel
+Gantt charts are built for a single EM-iteration on NYTimes dataset
+3
+(|𝐷|
+=
+300K, |𝑊 | = 102K) with |𝑇 | = 16 topics. ProcessBatch boxes corresponds to the
+3
+https://archive.ics.uci.edu/ml/datasets/Bag+of+Words
+0s
+4s
+8s
+12s
+16s
+20s
+24s
+28s
+32s
+36s
+Main
+Proc-1
+Proc-2
+Proc-3
+Proc-4
+Proc-5
+Proc-6
+Batch processing
+Norm
+Fig. 1. Gantt chart for Offline ARTM (Alg. 2)
+time spent in processing an individual
+batch.
+The final
+box Norm,
+executed on
+the main thread, correspond to the time spent in the step 4 in Alg. 2 where 𝑛
+𝑤𝑡
+counters are normalized to produce a new 𝛷 matrix.
+4
+Online Algorithm
+Online ARTM (Alg.
+3) generalizes the Online variational
+Bayes algorithm,
+sug-
+gested in [6] for the LDA model. Online ARTM improves the convergence rate of
+the Offline ARTM by re-calculating matrix 𝛷 each time after processing a certain
+number of batches. To simplify the notation we introduce a trivial subroutine
+ProcessBatches({𝐷
+𝑏
+}, 𝛷) =
+∑︁
+𝐷
+𝑏
+∑︁
+𝑑∈𝐷
+𝑏
+ProcessDocument(𝑑, 𝛷)
+that aggregates the output of ProcessDocument across a given set of batches at
+a constant 𝛷 matrix. Here the partition of the collection 𝐷 := 𝐷
+1
+⊔ 𝐷
+2
+⊔ · · · ⊔
+𝐷
+𝐵
+into batches plays a far more significant role than in the Offline algorithm,
+because different partitioning algorithmically affects the result.
+At step 6 the
+new 𝑛
+𝑖+1
+𝑤𝑡
+values are calculated as a convex combination of
+the old values 𝑛
+𝑖
+𝑤𝑡
+and the value ˆ
+𝑛
+𝑖
+𝑤𝑡
+produced on the recent batches. Old counters 𝑛
+𝑖
+𝑤𝑡
+are scaled
+by a factor (1 − 𝜌
+𝑖
+), which depends on the iteration number. A common strategy
+is to use 𝜌
+𝑖
+= (𝜏
+0
++ 𝑖)
+−𝜅
+,
+where typical
+values for 𝜏
+0
+are between 64 and 1024,
+for 𝜅 — between 0.5 and 0.7.
+As in the Offline algorithm, the outer loop over batches 𝐷
+𝜂(𝑖−1)+1
+, . . . , 𝐷
+𝜂𝑖
+is
+executed concurrently across multiple threads. The problem with this approach
+is that none of the threads have any useful
+work to do during steps 5-7 of the
+Online algorithm. The threads can not start processing the next batches because
+a new version of 𝛷 matrix is not ready yet. As a result the CPU utilization stays
+low, and the run-time Gantt chart of the Online algorithm typically looks like in
+Fig. 2. Boxes Even batch and Odd batch both correspond to step 4, and indicate
+Algorithm 3: Online ARTM
+Input: collection 𝐷, parameters 𝜂, 𝜏
+0
+, 𝜅;
+Output: matrix 𝛷 = (𝜑
+𝑤𝑡
+);
+1
+create batches 𝐷 := 𝐷
+1
+⊔ 𝐷
+2
+⊔ · · · ⊔ 𝐷
+𝐵
+;
+2
+initialize (𝜑
+0
+𝑤𝑡
+);
+3
+for 𝑖 = 1, . . . , ⌊𝐵/𝜂⌋ do
+4
+(^
+𝑛
+𝑖
+𝑤𝑡
+) := ProcessBatches({𝐷
+𝜂(𝑖−1)+1
+, . . . , 𝐷
+𝜂𝑖
+}, 𝛷
+𝑖−1
+);
+5
+𝜌
+𝑖
+:= (𝜏
+0
++ 𝑖)
+−𝜅
+;
+6
+(𝑛
+𝑖
+𝑤𝑡
+) := (1 − 𝜌
+𝑖
+) · (𝑛
+𝑖−1
+𝑤𝑡
+) + 𝜌
+𝑖
+· (^
+𝑛
+𝑖
+𝑤𝑡
+);
+7
+(𝜑
+𝑖
+𝑤𝑡
+) := norm
+𝑤∈𝑊
+(𝑛
+𝑖
+𝑤𝑡
++ 𝜑
+𝑖−1
+𝑤𝑡
+𝜕𝑅
+𝜕𝜑
+𝑤𝑡
+);
+0 s.
+4 s.
+8 s.
+12 s.
+16 s.
+20 s.
+24 s.
+28 s.
+32 s.
+36 s.
+Main
+Proc-1
+Proc-2
+Proc-3
+Proc-4
+Proc-5
+Proc-6
+Odd batch
+Even batch
+Norm
+Merge
+Fig. 2. Gantt chart for Online ARTM (Alg. 3)
+the version of
+the 𝛷
+𝑖
+matrix (even 𝑖 or odd 𝑖).
+Merge correspond to the time
+spent merging 𝑛
+𝑤𝑡
+with ˆ
+𝑛
+𝑤𝑡
+. Norm is, as before, the time spent normalizing 𝑛
+𝑤𝑡
+counters into the new 𝛷 matrix.
+In the next two sections we present asynchronous modifications of the online
+algorithm that result in better CPU utilization. The first of them (Async ARTM)
+has non-deterministic behavior and few performance bottlenecks.
+The second
+algorithm (DetAsync ARTM) addresses these problems.
+5
+Async: Asynchronous Online Algorithm
+Async algorithm was implemented in BigARTM v0.6 as described in [18].
+The
+idea is to trigger asynchronous execution of the Offline algorithm and store the
+resulting ˆ
+𝑛
+𝑤𝑡
+matrices into a queue. Then, whenever the number of elements in
+the queue becomes equal
+to 𝜂,
+the Async algorithm performs steps 5-7 of
+the
+Online ARTM (Alg.
+3).
+For performance reasons merging of
+the ˆ
+𝑛
+𝑤𝑡
+counters
+happens in a background by a dedicated Merger thread.
+First problem of the Async algorithm is that it does not define the order in
+which ˆ
+𝑛
+𝑤𝑡
+are merged. This order is usually different from the original order of
+0s
+4s
+8s
+12s
+16s
+20s
+24s
+28s
+32s
+36s
+Merger
+Proc-1
+Proc-2
+Proc-3
+Proc-4
+Proc-5
+Proc-6
+Odd batch
+Even batch
+Norm
+Merge matrix
+Merge increments
+Fig. 3. Gantt chart for Async ARTM from BigARTM v0.6 — normal execution
+0s
+4s
+8s
+12s
+16s
+20s
+24s
+28s
+32s
+36s
+Merger
+Proc-1
+Proc-2
+Proc-3
+Proc-4
+Proc-5
+Proc-6
+Odd batch
+Even batch
+Norm
+Merge matrix
+Merge increments
+Fig. 4. Gantt chart for Async ARTM from BigARTM v0.6 — performance issues
+the batches,
+and typically it changes from run to run.
+This affects the final
+𝛷
+matrix which also changes from run to run.
+Another issue with Async algorithm is that queuing ˆ
+𝑛
+𝑤𝑡
+counters may con-
+siderably increase the memory usage, and also lead to performance bottlenecks
+in the Merger
+thread.
+In some cases the execution of
+the Async algorithm is
+as efficient as for the Offline algorithm,
+as shown on Fig.
+3.
+However,
+certain
+combination of the parameters (particularly,
+small
+batch size or small
+number
+of
+iterations in ProcessDocument’s inner loop 2-5) might overload the merger
+thread.
+Then the Gantt chart may look as on Fig.
+4,
+where most threads are
+waiting because there is no space left in the queue to place 𝑛
+𝑤𝑡
+counters.
+In the next section we resolve the aforementioned problems by introducing
+a new DetAsync algorithm,
+which has an entirely deterministic behavior and
+achieves high CPU utilization without requiring user to tweak the parameters.
+Algorithm 4: DetAsync ARTM
+Input: collection 𝐷, parameters 𝜂, 𝜏
+0
+, 𝜅;
+Output: matrix 𝛷 = (𝜑
+𝑤𝑡
+);
+1
+create batches 𝐷 := 𝐷
+1
+⊔ 𝐷
+2
+⊔ · · · ⊔ 𝐷
+𝐵
+;
+2
+initialize (𝜑
+0
+𝑤𝑡
+);
+3
+𝐹
+1
+:= AsyncProcessBatches({𝐷
+1
+, . . . , 𝐷
+𝜂
+}, 𝛷
+0
+);
+4
+for 𝑖 = 1, . . . , ⌊𝐵/𝜂⌋ do
+5
+if 𝑖 ̸= ⌊𝐵/𝜂⌋ then
+6
+𝐹
+𝑖+1
+:= AsyncProcessBatches({𝐷
+𝜂𝑖+1
+, . . . , 𝐷
+𝜂𝑖+𝜂
+}, 𝛷
+𝑖−1
+);
+7
+(^
+𝑛
+𝑖
+𝑤𝑡
+) := Await(𝐹
+𝑖
+);
+8
+𝜌
+𝑖
+:= (𝜏
+0
++ 𝑖)
+−𝜅
+;
+9
+(𝑛
+𝑖
+𝑤𝑡
+) := (1 − 𝜌
+𝑖
+) · (𝑛
+𝑖−1
+𝑤𝑡
+) + 𝜌
+𝑖
+· (^
+𝑛
+𝑖
+𝑤𝑡
+);
+10
+(𝜑
+𝑖
+𝑤𝑡
+) := norm
+𝑤∈𝑊
+(𝑛
+𝑖
+𝑤𝑡
++ 𝜑
+𝑖−1
+𝑤𝑡
+𝜕𝑅
+𝜕𝜑
+𝑤𝑡
+);
+0s
+4s
+8s
+12s
+16s
+20s
+24s
+28s
+32s
+36s
+Main
+Proc-1
+Proc-2
+Proc-3
+Proc-4
+Proc-5
+Proc-6
+Odd batch
+Even batch
+Norm
+Merge
+Fig. 5. Gantt chart for DetAsync ARTM (Alg. 4)
+6
+DetAsync: Deterministic Async Online Algorithm
+DetAsync ARTM (Alg. 4) is based on two new routines, AsyncProcessBatches and
+Await. The former is equivalent to ProcessBatches, except that it just queues the
+task for an asynchronous execution and returns immediately.
+Its output is a
+future object (for example, an std::future from C++11 standard), which can be
+later passed to Await in order to get the actual
+result,
+e.g.
+in our case the ˆ
+𝑛
+𝑤𝑡
+values.
+In between calls to AsyncProcessBatches and Await the algorithm can
+perform some other useful
+work,
+while the background threads are calculating
+the (ˆ
+𝑛
+𝑤𝑡
+) matrix.
+To calculate ˆ
+𝑛
+𝑖+1
+𝑤𝑡
+it uses 𝛷
+𝑖−1
+matrix, which is one generation older than 𝛷
+𝑖
+matrix used by the Online algorithm.
+This adds an extra “offset”
+between the
+moment when 𝛷 matrix is calculated and the moment when it is used,
+and as
+a result gives the algorithm additional
+flexibility to distribute more payload to
+computation threads. Steps 3 and 5 of the algorithm are just technical tricks to
+implement the “offset” idea.
+Processor threads:
+ProcessBatch(
+D
+b
+,
+
+wt
+)
+D
+b
+ñ
+wt
+Merger thread:
+Accumulate ñ
+wt
+Recalculate 
+
+wt 
+Queue
+{D
+b
+}
+Queue
+{ñ
+wt
+}
+
+wt
+Sync()
+D
+b
+Fig. 6. Diagram of BigARTM components (old architecture)
+MasterModel
+Processor threads:
+D
+b
+= LoadBatch(
+b
+)
+ProcessBatch(
+D
+b
+,
+
+wt
+)
+Main thread:
+Recalculate 
+
+wt 
+n
+wt
+
+wt
+Transform({D
+b
+})
+FitOffline({D
+b
+})
+FitOnline({D
+b
+})
+Fig. 7. Diagram of BigARTM components (new architecture)
+Adding an “offset” should negatively impact the convergence of the DetAsync
+algorithm compared to the Online algorithm. For example, in AsyncProcessBatches
+the initial matrix 𝛷
+0
+is used twice, and the two last matrices 𝛷
+⌊𝐵/𝜂⌋−1
+and 𝛷
+⌊𝐵/𝜂⌋
+will not be used at all. On the other hand the asynchronous algorithm gives better
+CPU utilization, as clearly shown by the Gantt chart from Fig. 5. This tradeoff
+between convergence and CPU utilization will be evaluated in section 8.
+7
+Implementation
+The challenging part for the implementation is to aggregate the ˆ
+𝑛
+𝑤𝑡
+matrices
+across multiple batches, given that they are processed in different threads. The
+way BigARTM solves this challenge was changed between versions v0.6 (Fig. 6)
+and v0.7 (Fig. 7).
+In the old architecture the ˆ
+𝑛
+𝑤𝑡
+matrices were stored in a queue,
+and then
+aggregated by a dedicated Merger thread.
+In the new architecture we removed
+Merger thread,
+and ˆ
+𝑛
+𝑤𝑡
+are written directly into the final
+𝑛
+𝑤𝑡
+matrix concur-
+rently from all
+processor threads.
+To synchronize the write access we require
+that no threads simultaneously update the same row in ˆ
+𝑛
+𝑤𝑡
+matrix, yet the data
+0
+5
+10
+15
+20
+25
+30
+2,000
+2,200
+2,400
+Time (min)
+Perplexity
+Offline
+Online
+Async
+DetAsync
+10
+15
+20
+25
+30
+35
+3,800
+4,000
+4,200
+4,400
+4,600
+4,800
+5,000
+Time (min)
+Perplexity
+Offline
+Online
+Async
+DetAsync
+Fig. 8. Perplexity versus time for Pubmed (left) and Wikipedia (right), |𝑇 | = 100 topics
+Table 1. BigARTM peak memory usage, GB
+|𝑇 |
+Offline
+Online
+DetAsync
+Async (v0.6)
+Pubmed
+1000
+5.17
+4.68
+8.18
+13.4
+Pubmed
+100
+1.86
+1.62
+2.17
+3.71
+Wiki
+1000
+1.74
+2.44
+3.93
+7.9
+Wiki
+100
+0.54
+0.53
+0.83
+1.28
+for distinct words can be written in parallel.
+This is enforced by spin locks 𝑙
+𝑤
+,
+one per each word in the vocabulary 𝑊 . At the end of ProcessDocument we loop
+through all
+𝑤 ∈ 𝑑,
+acquire the corresponding lock 𝑙
+𝑤
+,
+append ˆ
+𝑛
+𝑤𝑡
+to 𝑛
+𝑤𝑡
+and
+release the lock. This approach is similar to [15], where the same pattern is used
+to update a shared stated in a distributed topic modeling architecture.
+In our new architecture we also removed DataLoader thread, which previously
+was loading batches from disk. Now this happens directly from processor thread,
+which simplified the architecture without sacrificing performance.
+In addition,
+we provided a cleaner API so now the users may use simple
+FitOffline,
+FitOnline methods to learn the model,
+and Transform to apply the
+model to the data. Previously the users had to interact with low-level building
+blocks, such as ProcessBatches routine.
+8
+Experiments
+In this section we compare the effectiveness of Offline (Alg. 2),
+Online (Alg. 3),
+Async [18] and DetAsync (Alg. 4) algorithms. According to [18] Async algorithm
+runs approx.
+10 times faster compared to Gensim [12],
+and twice as fast com-
+pared to Vowpal Wabbit (VW) [13] in a single thread; and with multiple threads
+BigARTM wins even more.
+In the experiments we use Wikipedia dataset (|𝐷|
+= 3.7M articles,
+|𝑊 |
+=
+100K words) and Pubmed dataset (|𝐷| = 8.2M abstracts,
+|𝑊 | = 141K words).
+The experiments were run on Intel
+Xeon CPU E5-2650 v2 system with 2 pro-
+cessors, 16 physical cores in total (32 with hyper-threading).
+Fig.
+8 show the perplexity as a function of the time spent by the four algo-
+rithms listed above. The perplexity measure is defined as
+P
+(𝐷, 𝑝) = exp
+(︂
+−
+1
+𝑛
+∑︁
+𝑑∈𝐷
+∑︁
+𝑤∈𝑑
+𝑛
+𝑑𝑤
+ln
+∑︁
+𝑡∈𝑇
+𝜑
+𝑤𝑡
+𝜃
+𝑡𝑑
+)︂
+,
+(5)
+where 𝑛 =
+∑︀
+𝑑
+𝑛
+𝑑
+.
+Lower perplexity means better result.
+Each point on the
+figures corresponds to a moment when the algorithm finishes a complete scan of
+the collection. Each algorithm was time-boxed to run for 30 minutes.
+Table 1 gives peak memory usage for |𝑇 | = 1000 and |𝑇 | = 100 topics model
+on Wikipedia and Pubmed datasets.
+9
+Conclusions
+We presented a deterministic asynchronous
+(DetAsync)
+online algorithm for
+learning additively regularized topic models (ARTM).
+The algorithm supports
+all
+features of
+ARTM models,
+including multi-modality,
+ability to add custom
+regularizers and ability to combine regularizers.
+As a result,
+the algorithm al-
+lows the user to produce topic models with a rich set of desired properties. This
+differentiates ARTM from the existing models,
+such as LDA or PLSA,
+which
+give almost no control over the resulting topic model.
+We provided an efficient implementation of the algorithm in BigARTM open-
+source library,
+and our solution runs an order of magnitude faster than the al-
+ternative open-source packages.
+Compared to the previous implementation we
+eliminated certain performance bottlenecks,
+achieving optimal
+CPU utilization
+without requiring the user to tweak batch size and the number of
+inner loops
+per document. In addition, DetAsync algorithm guarantees deterministic behav-
+ior,
+which makes it easier for us to unit-test our implementation and makes
+BigARTM ready for production use-cases.
+In the future we will focus on memory efficiency to benefit from sparsity of
+word-topic (𝛷) and topic-document (𝛩) matrices,
+and extend our implementa-
+tion to run on a cluster.
+Acknowledgements.
+The work was supported by Russian Science Foundation
+(grant 15-18-00091).
+Also we would like to thank Prof.
+K.
+V.
+Vorontsov for
+constant attention to our research and detailed feedback to this paper.
+References
+1.
+D. M. Blei.
+Probabilistic topic models.
+Communications of the ACM, 55(4):77–84,
+2012.
+2.
+Daud, A., Li, J., Zhou, L., Muhammad, F.: Knowledge discovery through directed
+probabilistic topic models: a survey. Frontiers of Computer Science in China 4(2),
+280–301 (2010)
+3.
+D.
+M.
+Blei,
+A.
+Y.
+Ng,
+and M.
+I.
+Jordan.
+Latent Dirichlet allocation.
+J.
+Mach.
+Learn. Res., 3:993–1022, 2003.
+4.
+J. Yuan, F. Gao, Q. Ho, W. Dai, J. Wei, X. Zheng, E. P. Xing, T.Y. Liu, and W. Y.
+Ma.
+LightLDA: Big Topic Models on Modest Computer Clusters.
+In Proceedings
+of the 24th International
+Conference on World Wide Web, pp. 1351-1361, 2015.
+5.
+T.
+Hofmann.
+Probabilistic latent semantic indexing.
+In Proceedings of
+the 22nd
+annual
+international
+ACM SIGIR conference on Research and development in in-
+formation retrieval, pages 50–57, 1999.
+6.
+M.
+D.
+Hoffman,
+D.
+M.
+Blei,
+and F.
+R.
+Bach.
+Online learning for latent dirichlet
+allocation.
+In NIPS, pages 856–864. Curran Associates, Inc., 2010.
+7.
+D. Newman, A. Asuncion, P. Smyth, and M. Welling.
+Distributed algorithms for
+topic models.
+J. Mach. Learn. Res., 10:1801–1828, Dec. 2009.
+8.
+Y.
+Wang,
+H.
+Bai,
+M.
+Stanton,
+W.-Y.
+Chen,
+and E.
+Y.
+Chang.
+PLDA:
+Parallel
+latent Dirichlet allocation for large-scale applications.
+In Proceedings of
+the 5th
+International Conference on Algorithmic Aspects in Information and Management,
+pp. 301–314, 2009.
+9.
+Z.
+Liu,
+Y.
+Zhang,
+E.
+Y.
+Chang,
+and M.
+Sun.
+PLDA+:
+parallel
+latent Dirichlet
+allocation with data placement and pipeline processing.
+ACM Trans. Intell. Syst.
+Technol., 2(3):26:1–26:18, May 2011.
+10.
+F. Seide, H. Fu, J. Droppo, G. Li, and D. Yu. On parallelizability of stochastic gra-
+dient descent for speech dnns.
+Acoustics, Speech and Signal Processing (ICASSP),
+2014 IEEE International
+Conference on. IEEE, pp. 235–239, 2014
+11.
+J.
+Dean,
+G.
+S.
+Corrado,
+R.
+Monga,
+K.
+Chen,
+M.
+Devin,
+Q.
+V.
+Le,
+M.
+Z.
+Mao,
+M.-A. Ranzato, A. Senior, P. Tucker, K. Yang, A. Y. Ng.
+Large Scale Distributed
+Deep Networks.
+NIPS, pp. 1223-1231, 2012.
+12.
+R.
+ˇ
+Reh˚uˇrek and P.
+Sojka.
+Software framework for topic modelling with large
+corpora.
+In Proceedings of the LREC 2010 Workshop on New Challenges for NLP
+Frameworks, pp. 45–50, Valletta, Malta, May 2010.
+13.
+J.
+Langford,
+L.
+Li,
+and A.
+Strehl.
+Vowpal
+wabbit open source project.
+Technical
+report, Yahoo!, 2007.
+14.
+A.
+K.
+McCallum,
+A
+Machine
+Learning
+for
+Language
+Toolkit.
+http://mallet.cs.umass.edu, 2002.
+15.
+A. Smola and S. Narayanamurthy.
+An architecture for parallel topic models.
+Proc.
+VLDB Endow., 3(1-2):703–710, Sept. 2010.
+16.
+K. V. Vorontsov.
+Additive regularization for topic models of text collections.
+Dok-
+lady Mathematics, 89(3):301–304, 2014.
+17.
+K.
+V.
+Vorontsov and A.
+A.
+Potapenko.
+Additive regularization of
+topic models.
+Machine Learning,
+Special
+Issue on Data Analysis and Intelligent
+Optimization,
+volume 101(1), pp. 303–323, 2015.
+18.
+K. Vorontsov, O. Frei, M. Apishev, P. Romov and M. Dudarenko. BigARTM: Open
+Source Library for Regularized Multimodal
+Topic Modeling of Large Collections.
+In AIST’2015, volume 542, pp. 370–381, 2015.
+19.
+K.
+Vorontsov,
+O.
+Frei,
+M.
+Apishev,
+P.
+Romov,
+M.
+Suvorova,
+A.
+Yanina.
+Non-
+bayesian additive regularization for multimodal topic modeling of large collections.
+In Proceedings of the 2015 Workshop on Topic Models: Post-Processing and Appli-
+cations, pp. 29–37. ACM, New York, USA, 2015.

@@ -1,0 +1,1153 @@
+﻿Modeling Sub-Document Attention Using Viewport Time
+Max Grusky
+1
+, Jeiran Jahani
+3
+, Josh Schwartz
+3
+, Dan Valente
+3
+, Yoav Artzi
+1
+,
+2
+, and Mor Naaman
+2
+{
+grusky, yoav
+}
+@cs.cornell.edu,
+{
+jeiran, josh, dan
+}
+@chartbeat.com, mor@jacobs.cornell.edu
+1
+Computer Science, Cornell University
+2
+Cornell Tech
+3
+Chartbeat, Inc.
+ABSTRACT
+Website measures of engagement captured from millions of
+users,
+such as in-page scrolling and viewport position,
+can
+provide deeper understanding of attention than possible with
+simpler measures, such as dwell time. Using data from 1.2M
+news reading sessions,
+we examine and evaluate three in-
+creasingly sophisticated models of sub-document attention
+computed from viewport time, the time a page component is
+visible on the user display.
+Our modeling incorporates prior
+eye-tracking knowledge about onscreen reading, and we vali-
+date it by showing how, when used to estimate user reading
+rate, it aligns with known empirical measures. We then show
+how our models reveal an interaction between article topic
+and attention to page elements.
+Our approach supports re-
+fined large-scale measurement of user engagement at a level
+previously available only from lab-based eye-tracking studies.
+ACM Classification Keywords
+H.5.m.
+Information Interfaces and Presentation:
+Miscella-
+neous
+Author Keywords
+attention; reading; news articles; web analytics; user modeling
+INTRODUCTION
+The shift to digital media creates a growing need for methods
+of modeling, visualizing, and more broadly understanding the
+experiences readers have with text online. Recently, analytic
+tools have been used to capture user activity at increasing
+scale and granularity [13]. In this paper, we show how in-page
+measurements can generate better understanding of reading
+behavior online, and provide a more accurate picture of reader
+interests and attention at a scale previously unavailable.
+We study methods of measuring sub-document user attention
+in long-form news articles using viewport time, the amount
+of time a user spends with a certain part of a page visible on
+their screen.
+Viewport time strikes a balance between two
+common measurement techniques:
+lab-based eye tracking,
+and standard web analytics such as dwell time and page views.
+In eye tracking studies, researchers are able to capture detailed
+information on attention and focus [4,
+15].
+However,
+such
+Permission to make digital or hard copies of all or part of this work for personal or
+classroom use is granted without fee provided that copies are not made or distributed
+for profit or commercial advantage and that copies bear this notice and the full citation
+on the first page. Copyrights for components of this work owned by others than ACM
+must be honored. Abstracting with credit is permitted. To copy otherwise, or republish,
+to post on servers or to redistribute to lists, requires prior specific permission and/or a
+fee. Request permissions from permissions@acm.org.
+CHI 2017, May 6-11, 2017, Denver, CO, USA.
+Copyright is held by the owner/author(s). Publication rights licensed to ACM.
+ACM ISBN 978-1-4503-4655-9/17/05 ...$15.00.
+http://dx.doi.org/10.1145/3025453.3025916
+studies require expensive equipment and are hard to scale to
+large populations. In contrast, metrics such as dwell time and
+page views are easy to scale, but cannot capture detailed user
+behavior [13].
+We use scalable, detailed viewport time data,
+and design models to understand user attention to individual
+HTML elements that make up an article.
+Our model design
+emphasizes scalability and incorporates prior results from
+small-scale studies of onscreen reading behavior [3, 18].
+We compare and validate our models using a large dataset of
+over 1.2M reading sessions on a popular news site publish-
+ing long-form articles.
+Validating models at such scale is a
+challenging problem.
+Unlike lab studies,
+we are unable to
+rely on careful instrumentation of the environment, such as
+in eye tracking studies, and web-scale measurements, where
+users read and interact in different contexts and with different
+goals, are noisy. We validate our models by comparing them
+to existing measurements of reading behavior, and focus on
+measuring reading rates in multiple languages.
+We also demonstrate how models using viewport time can help
+understand user attention online with an exploratory large-
+scale study of the amount of attention users give to text versus
+images in articles of different topics.
+We measure attention
+using the time spent by the user on individual page elements
+as estimated by the different models.
+Our results highlight
+specific topics where people spend more time with images,
+and demonstrate the different qualities of our models.
+RELATED WORK
+A wide set of methods has been used to model user attention
+on the Web. Dwell time, while simple, enables to model over-
+all user engagement for various tasks, including scoring pages
+for recommendation systems [21] and estimating user satisfac-
+tion with search results [10, 11].
+However, dwell time does
+not account for sub-document within-page user interactions,
+among other limitations [13]. Eye tracking has been used to
+compare website designs [2], to investigate the within-page
+behavior of different user groups [7], and to understand how
+users interact with search engines [8].
+Most related to our
+work, eye tracking has also been used to determine whether
+users are reading a document or if they are only skimming [5].
+Other measures of sub-page engagement had been proposed.
+For example, cursor position has been shown to correlate with
+user gaze [6]. However, it is computationally difficult to cap-
+ture at scale and not available on mobile devices.
+The small
+screens of mobile devices were shown to be effective for gen-
+erating attention heatmaps [9] and measuring user attention in
+the context of advertising [14] and mobile search [12].
+Our
+work focuses on desktop reading but could be applied to mo-
+Original
+Filtered
+Unique Users
+3,105,715
+30,791
+Unique Pages
+171,603
+45,049
+Reading Sessions
+9,025,946
+1,217,634
+Table 1.
+Dataset statistics for the compelte original dataset and the fil-
+tered dataset of article pages and high-activity users.
+bile data with different assumptions. Most closely related, user
+viewport size and article scroll depth have been combined to
+analyze reader attention across two thousand news articles [13].
+The authors focused on differences between pages, using view-
+port data to examine different types of article reading patterns.
+In contrast, we examine patterns of user behavior by modeling
+their attention to individual page elements.
+Our approach is
+informed by knowledge developed in eye tracking studies [3,
+18], while relying on easy-to-capture viewport data.
+DATASET
+We use a sample of two months of traffic to a popular news
+and entertainment website collected using client-side scripts
+developed by Chartbeat.
+1
+The website content requires user
+engagement over relatively long periods of time,
+including
+long-form articles, stories and interviews. The data contains
+over 3M readers and 170K pages (Table 1) representing com-
+plete activity for a set of randomly selected users.
+The data is made of reading sessions, where a single user vis-
+its and interacts with a single page. For each reading session,
+Chartbeat captures snapshots of user interaction approximately
+every fifteen seconds. Each snapshot includes the position of
+the user viewport on the page, the size of the browser window,
+and other data. Snapshots also contain second-to-second user
+interaction between snapshots, including user scrolling, click-
+ing, mouse movement, and viewport resizing. Each article is
+rendered using a standard screen width (1,024 pixels) and a
+fixed user agent to determine the size and positions of HTML
+elements on the page.
+Since we focus on desktop reading and user models, we prune
+non-article pages (e.g., index pages), users who read less than
+20 articles, and mobile reading sessions.
+Within the filtered
+dataset (Table 1), users on average read 40 articles and view
+1,123 page elements (paragraphs and images).
+This large
+amount of per-user data allows us to establish a reasonable
+understanding of individual reading behaviors and attention.
+MODELING SUB-DOCUMENT ATTENTION
+We describe three models of reading behavior to estimate user
+attention at the level of individual HTML elements based on
+viewport time measurements.
+The models are of increasing
+complexity, with a baseline model not using viewport time.
+We assume that a majority of the attention time users spend
+on a page is directed toward the inline text (
+<p>
+) and image
+(
+<img>
+) elements that make up an article,
+rather other ele-
+ments displayed alongside (e.g., navigation links). Therefore,
+we consider only inline text and image elements in our calcu-
+lation of element-level dwell time. We also assume that inline
+text and image elements are arranged linearly in the vertical
+1
+https://chartbeat.com
+direction. These assumptions hold for many websites includ-
+ing the one used in this analysis. Text and image elements are
+“leaf” HTML elements. In our dataset, we do not observe any
+nesting or onscreen overlap between these HTML elements.
+Accordingly, we measure element size and position using only
+the vertical axis of the page.
+Formally,
+a page
+P
+with
+N
+elements
+is
+a set
+of
+tuples
+{h
+e
+i
+, τ
+i
+, β
+i
+i}
+N
+i
+=
+1
+,
+where
+e
+i
+is the content of element
+i
+,
+and
+τ
+i
+and
+β
+i
+describe its location:
+τ
+i
+is the percentage of the page
+from the top where the first pixel of
+e
+i
+appears, and
+β
+i
+is the
+percentage where the last pixel appears. For example, consider
+a page
+P
+with a height of 1,000 pixels that contains, among
+others, an element
+i
+that starts 300 pixels from the top and has
+a height of 200 pixels, and an element that starts 500 pixels
+from the top and has a height of 250 pixels. The set
+P
+contains
+the tuples
+h
+e
+i
+,
+0
+.
+3
+,
+0
+.
+5
+i
+and
+h
+e
+j
+,
+0
+.
+5
+,
+0
+.
+75
+i
+. For each user read-
+ing session, the viewport
+V
+(
+P
+,
+t
+)
+at time
+t
+of page
+P
+is a set of
+K
+tuples
+{h
+e
+i
+, τ
+t
+i
+, β
+t
+i
+i}
+K
+i
+=
+1
+, where each tuple is computed from
+a corresponding tuple from
+P
+: the start
+τ
+t
+and end
+β
+t
+percent-
+ages are modified according to the viewport and only visible
+pixels are considered. For example, given the 1000-pixel page
+P
+above, consider a time
+t
+when only the area between the
+pixels 600 and 900 is visible on screen,
+V
+(
+P
+,
+t
+)
+will be the set
+{h
+e
+j
+,
+0
+.
+0
+,
+0
+.
+5
+i}
+.
+Finally, let
+d
+(
+P
+)
+be the total dwell time (in
+seconds) for page
+P
+, and a reading session be a sequence of
+viewports, one for each second t
+=
+0
+. . .
+d
+(
+P
+)
+.
+Uniform Attention Model
+Our baseline model,
+the Uniform Attention Model (UAM),
+makes the naive assumption that user attention is divided uni-
+formly across all article text and image elements present on a
+page. Given a page
+P
+with
+N
+elements, the UAM dwell time
+of e
+i
+is relative to the normalized size of the element:
+UAM
+(
+e
+i
+) =
+β
+i
+− τ
+i
+∑
+N
+j
+=
+1
+(β
+j
+− τ
+j
+)
+×
+d
+(
+P
+) .
+With UAM,
+elements that take up more space on the page
+are assumed to receive proportionally more attention from
+users. As with the two other models, the denominator adjusts
+for whitespace between page elements and element overlap.
+UAM is the simplest of the three models, and does not consider
+viewport size and scroll data.
+Uniform Viewport Attention Model
+The Uniform Viewport Attention Model (UVAM) considers
+viewport time and assumes that a user may attend to all pixels
+on the screen with equivalent probability. The model only as-
+signs dwell time to text and image elements visible in the user
+viewport.
+User attention is distributed uniformly across all
+visible elements. For each element, UVAM only considers the
+percentage of viewport space occupied by its visible portion.
+UVAM estimates the dwell time on element
+e
+i
+as the portion
+of the viewport occupied by the element normalized for each
+second, and summed over the length of the session:
+UVAM
+(
+e
+i
+) =
+d
+(
+P
+)
+∑
+t
+=
+0
+β
+t
+i
+− τ
+t
+i
+∑
+h
+e
+j
+,τ
+t
+j
+,β
+t
+j
+i∈
+V
+(
+P
+,
+t
+)
+(β
+t
+j
+− τ
+t
+j
+)
+.
+Expected
+Viewport
+Attention
+Figure 1.
+Illustration of normally distributed reading-consistent eye fix-
+ation across the viewport [3, 18].
+This distribution is used in GVAM to
+estimate attention on individual page elements across time.
+Attention Model:
+UAM
+UVAM
+GVAM
+Correlation
+0.094
+0.425
+0.529
+Excluding Spanish
+0.163
+0.490
+0.749
+Table 2.
+Correlation between empirical language reading rates and lan-
+guage reading rates estimated by the three models.
+Gaussian Viewport Attention Model
+Prior results on user attention show the uniform assumption
+to be overly simplistic. Eye tracking studies of users reading
+and interacting with web pages found that users mainly read
+and attend to page elements according to a normal distribu-
+tion placed over the viewport [3]. More recently, as part of a
+study of automatic scrolling, researchers tracked user gaze and
+recorded the coordinates of eye fixations consistent with read-
+ing [18]. The user reading-consistent fixations were normally
+distributed across a screen with a height of 1,024 pixels, with
+mean location of 49.2% from the top of the screen and a stan-
+dard deviation of 20.1% of the height of the screen. Figure 1
+illustrates the estimated viewport attention.
+Our Gaussian Viewport Attention Model (GVAM) estimates
+user attention to each element, while assuming the attention is
+distributed across the viewport in accordance with the distri-
+bution found by Sharmin et al. [18]. We assume the mean and
+standard deviation scale proportionally with the screen size.
+GVAM is computed similar to UVAM:
+GVAM
+(
+e
+i
+) =
+d
+(
+P
+)
+∑
+t
+=
+0
+EVA
+(τ
+t
+i
+, β
+t
+i
+)
+∑
+h
+e
+j
+,τ
+t
+j
+,β
+t
+j
+i∈
+V
+(
+P
+,
+t
+)
+EVA
+(τ
+t
+j
+, β
+t
+j
+)
+,
+where
+EVA
+(τ
+t
+i
+, β
+t
+i
+)
+is the estimated viewport attention for ele-
+ment
+e
+i
+at time
+t
+, and is defined as the cumulative distribution
+function of the normal distribution
+N
+(µ, σ
+2
+)
+evaluated be-
+tween the visible top and bottom of e
+i
+:
+EVA
+(τ
+t
+i
+, β
+t
+i
+) =
+1
+2
+"
+erf
+µ − β
+t
+i
+σ
+√
+2
+!
+−
+erf
+µ − τ
+t
+i
+σ
+√
+2
+!#
+,
+where
+erf
+is the Gauss error function [20]. Following Sharmin
+et al. [18] we set the mean
+µ =
+0
+.
+492
+and standard deviation
+σ =
+0
+.
+201
+.
+Through the normalization of the
+GVAM
+com-
+putation, the model is designed to ignore (a) the probability
+mass of the normal distribution that is beyond the viewport
+boundaries, and (b) gaps between displayed elements.
+Both
+are not considered to draw the reader attention.
+English
+German
+Spanish
+English
+German
+Spanish
+UAM
+GVAM
+200
+400
+600
+150
+200
+250
+200
+400
+600
+150
+200
+250
+Empirical (WPM)
+Estimated (WPM)
+Number of Readers
+4000
+8000
+12000
+16000
+Empirical and Estimated Reading Rate by Language
+English
+German
+Spanish
+UVAM
+150
+200
+250
+Figure 2. Comparison between user reading rates in each language mea-
+sured by IReST and estimated by the three attention models.
+Ideal es-
+timates should be close to the marked identity line.
+The UVAM and
+GVAM plots are scaled up for clarity and are equivalent to the space of
+the blue rectangle in the UAM plot.
+MODEL EVALUATION USING KNOWN READING RATES
+We evaluate our models by comparing their estimated reading
+rates to the existing empirical measurements of the Interna-
+tional Reading Speed Texts (IReST) study [19],
+the largest
+cross-language study of reading rate to date.
+The study in-
+cludes 436 readers in 17 languages reading standardized texts.
+Although the study included only reading on paper, recent stud-
+ies of reading comprehension found no significant difference
+between onscreen and paper reading rates [16].
+To compute reading rates, we first estimated dwell time
+d
+(
+e
+,
+u
+)
+for each user
+u
+and element
+e
+.
+For each text element
+e
+, we
+computed the reading rate
+r
+(
+e
+,
+u
+)
+by dividing the word count
+wc
+(
+e
+)
+by the user
+u
+dwell time:
+r
+(
+e
+,
+u
+) =
+d
+(
+e
+,
+u
+)/
+wc
+(
+e
+)
+.
+We
+computed the median
+2
+of user element reading rates across
+all the text elements for each page, and then across pages to
+get a user reading rate
+r
+(
+u
+)
+. Finally, we calculated the median
+reading rate for all users in each language.
+While exact measurement of language reading rate is chal-
+lenging, even with advanced eye tracking, we expect that a
+more accurate attention model would better capture the way in
+which users read, and therefore display higher correlation with
+the empirical rates measured by IReST. Figure 2 compares the
+reading rates estimated by UAM, UVAM, and GVAM with
+IReST empirical reading rates. The correlations between the
+models and IReST are shown in Table 2.
+Each panel of the
+figure corresponds to one of the three user attention models.
+Markers in each panel represent the model-estimated (y-axis)
+versus empirically-known (x-axis) reading rate for each lan-
+guage, with the size of the marker corresponding to the number
+of readers of articles in each language in our data.
+The line
+drawn in the panels is the identity line, where the estimated
+rate equals the empirical rate. We expect a successful model
+to result in markers close to this line.
+Our results demon-
+strate that both GVAM and UVAM significantly outperform
+the UAM baseline in estimating reading rates and that incor-
+porating known biases of attention in GVAM further improves
+our estimates compared to the simpler models.
+2
+Reading rate of users on individual elements vary significantly by
+user reading style, such as skimming or skipping.
+To best capture
+central
+tendency of readers,
+we calculate reading rates using the
+median rather than the mean throughout this study.
+With the exception of Spanish,
+the reading rates of GVAM
+closely approximate those measured by IReST. It is unclear
+why GVAM is less effective at approximating Spanish reading
+rates. Languages such as English and Spanish, with relatively
+fast readers and higher reader variability (e.g., across countries
+and cultures),
+may requires more observations for accurate
+estimates.
+While we were able to measure reading speed
+for over 16K English readers, our dataset only included 2K
+Spanish readers.
+Excluding Spanish, the only major outlier,
+the correlation between GVAM and IReST reaches 0.749.
+ATTENTION TO IMAGE AND TEXT ACROSS TOPICS
+We apply our models to a sample task of characterizing user
+activity.
+We extend previous eye-tracking work examining
+attention to text and images [4, 7] to understand attention to
+text and images across different article topics.
+This type of
+topic-based analysis of user behavior is enabled, likely for the
+first time, by the scale of our data
+We compute topic distributions with Latent Dirichlet Alloca-
+tion [1, 17] for 44,315 English articles. We set the number of
+topics to 50. For each document, given the topic distribution,
+we pick the max probability topic as the document topic. We
+analyze the ten most common document topics, which include
+9,105 articles read by 16,829 users.
+We estimate user dwell
+time
+d
+(
+e
+,
+u
+)
+for each element using the three attention models,
+and the median value of
+d
+(
+e
+,
+u
+)
+for each user
+u
+on image and
+text elements for each page
+P
+to produce values
+d
+images
+(
+P
+,
+u
+)
+and
+d
+text
+(
+P
+,
+u
+)
+. We calculate the median image and text dwell
+times across articles for each topic.
+Figure 3 shows text and image element dwell time for articles
+of different document topics.
+3
+The GVAM estimates suggest
+users spend a consistent
+amount
+of time on text
+elements
+across topics. However, there are large differences in attention
+to images across topics. While for most articles, we estimate
+users dedicate under 5 seconds per image, users spent roughly
+15 and 30 seconds on images in “music” and “sex” articles.
+In terms of differences between the models,
+while UVAM
+and GVAM results are similar, UVAM estimated paragraph
+dwell time to be higher by time by 13% on average compared
+to GVAM and image dwell time to be lower by 28%.
+As
+expected, the difference between UAM and GVAM was even
+larger: UAM estimated paragraph dwell 74% below GVAM’s
+estimate and image dwell 41% below GVAM’s estimate.
+DISCUSSION AND CONCLUSIONS
+We used viewport time to perform a first large-scale study of
+reading behavior and attention to news articles on the Web, es-
+timating the amount of attention users give to individual para-
+graph and image elements on a page. We showed that GVAM,
+a Gaussian model of attention in the viewport informed by
+prior lab work [3, 18], results in estimates of reading rates that
+track closely to known empirical values. Applying the same
+model to studying time spent on images versus text in articles
+of different topics results in different and potentially more ac-
+curate estimates than the baselines. GVAM is able to capture
+3
+The topic of each of cluster is labeled by hand based on its highest
+probability words.
+Paragraph Elements
+Image Elements
+Drugs
+Fashion
+Gaming
+Health
+Music
+Crime
+Sex
+UK Politics
+US Politics
+War
+0
+10
+20
+30
+0
+10
+20
+30
+Dwell Time (sec)
+UVAM
+UAM
+GVAM
+Paragraph and Image Dwell by Topic
+Figure 3.
+Median dwell time on text paragraphs and images across arti-
+cles in the ten most popular document topics.
+The x-axis shows element
+dwell time in seconds. We show the inferred time based on each model.
+much of the complexity of sub-document user attention to in-
+dividual HTML elements, while only requiring viewport time,
+which is reasonably easy to computationally capture and store.
+Our results indicate that viewport time effectively balances
+between rich-but-costly eye tracking data, which is difficult to
+capture at scale, and cheap-but-limited dwell time data, which
+does not offer in-page insights.
+Our study has several limitations. While GVAM showed rea-
+sonable correlation with known reading metrics, we have no
+way to verify that it is indeed more accurate than other mea-
+sures. While it is informed by lab-validated results [18], the
+evidence we provide above is just a first step in asserting the
+model validity in realistic conditions.
+Further,
+GVAM was
+developed and intended to measure only vertical variations in
+attention.
+Although effective for measuring attention in ap-
+plications with highly linear layout, such as articles or search
+results, GVAM cannot measure variation in horizontal user
+attention. Expanding our models to include dynamic elements,
+such as image galleries and videos, is left for future work.
+Future work may incorporate GVAM with cursor position,
+which has been shown to correlate with eye movement [6],
+to help estimate horizontal engagement.
+Another potential
+direction is incorporating user data and similar detailed analyt-
+ics to design user-specific models. Models of sub-document
+attention have the potential to help better understand users
+and adapt to their preferences.
+Measuring paragraph- and
+image-level changes in attention may be useful in determin-
+ing whether a user enjoys an article and in recommending
+articles, while variation in reading rate between paragraphs
+could signal loss of interest or confusion. Finally, aggregating
+element-level information on user attention by page, topic, and
+user demographics may be helpful in automatic customization
+and adaptation of pages for different groups of users.
+The ability to accurately estimate large-scale sub-document
+attention at the element-level opens up new possibilities for
+massive and detailed studies of usability, multivariate testing,
+personalization, and recommendation on the Web.
+ACKNOWLEDGMENTS
+This work was funded by AOL as part of the Connected Expe-
+riences Laboratory at Cornell Tech. We thank the anonymous
+reviewers and area chairs for their thoughtful comments.
+REFERENCES
+1.
+David M Blei, Andrew Y Ng, and Michael I Jordan. 2003.
+Latent Dirichlet Allocation. Journal of Machine Learning
+Research 3, Jan (2003), 993–1022.
+2.
+Agnieszka Bojko. 2006. Using Eye Tracking to Compare
+Web Page Designs: A Case Study. Journal of Usability
+Studies 1, 3 (May 2006), 112–120.
+http://dl.acm.org/citation.cfm?id=2835663.2835665
+3.
+Georg Buscher, Ralf Biedert, Daniel Heinesch, and
+Andreas Dengel. 2010. Eye Tracking Analysis of
+Preferred Reading Regions on the Screen. In CHI ’10
+Extended Abstracts on Human Factors in Computing
+Systems (CHI EA ’10). ACM, New York, NY, USA,
+3307–3312.
+DOI:
+http://dx.doi.org/10.1145/1753846.1753976
+4.
+Georg Buscher, Edward Cutrell, and Meredith Ringel
+Morris. 2009. What Do You See when You’Re Surfing?:
+Using Eye Tracking to Predict Salient Regions of Web
+Pages. In Proceedings of the SIGCHI Conference on
+Human Factors in Computing Systems (CHI ’09). ACM,
+New York, NY, USA, 21–30.
+DOI:
+http://dx.doi.org/10.1145/1518701.1518705
+5.
+Christopher S. Campbell and Paul P. Maglio. 2001. A
+Robust Algorithm for Reading Detection. In Proceedings
+of the 2001 Workshop on Perceptive User Interfaces (PUI
+’01). ACM, New York, NY, USA, 1–7.
+DOI:
+http://dx.doi.org/10.1145/971478.971503
+6.
+Mon Chu Chen, John R. Anderson, and Myeong Ho
+Sohn. 2001. What Can a Mouse Cursor Tell Us More?:
+Correlation of Eye/Mouse Movements on Web Browsing.
+In CHI ’01 Extended Abstracts on Human Factors in
+Computing Systems (CHI EA ’01). ACM, New York, NY,
+USA, 281–282.
+DOI:
+http://dx.doi.org/10.1145/634067.634234
+7.
+Soussan Djamasbi, Marisa Siegel, and Tom Tullis. 2010.
+Generation Y, Web Design, and Eye Tracking.
+International Journal of Human-Computer Studies 68, 5
+(May 2010), 307–323.
+DOI:
+http://dx.doi.org/10.1016/j.ijhcs.2009.12.006
+8.
+Laura Granka, Matthew Feusner, and Lori Lorigo. 2008.
+Eye Monitoring in Online Search. Passive Eye
+Monitoring (2008), 347–372.
+DOI:
+http://dx.doi.org/10.1007/978-3-540-75412-1_16
+9.
+Jeff Huang, Ryen White, and Georg Buscher. 2012. User
+See, User Point: Gaze and Cursor Alignment in Web
+Search. In Proceedings of the SIGCHI Conference on
+Human Factors in Computing Systems (CHI ’12). ACM,
+New York, NY, USA, 1341–1350.
+DOI:
+http://dx.doi.org/10.1145/2207676.2208591
+10.
+Youngho Kim, Ahmed Hassan, Ryen W. White, and Imed
+Zitouni. 2014a. Comparing Client and Server Dwell Time
+Estimates for Click-level Satisfaction Prediction. In
+Proceedings of the 37th International ACM SIGIR
+Conference on Research & Development in Information
+Retrieval (SIGIR ’14). ACM, New York, NY, USA,
+895–898.
+DOI:
+http://dx.doi.org/10.1145/2600428.2609468
+11.
+Youngho Kim, Ahmed Hassan, Ryen W. White, and Imed
+Zitouni. 2014b. Modeling Dwell Time to Predict
+Click-level Satisfaction. In Proceedings of the 7th ACM
+International Conference on Web Search and Data
+Mining (WSDM ’14). ACM, New York, NY, USA,
+193–202.
+DOI:
+http://dx.doi.org/10.1145/2556195.2556220
+12.
+Dmitry Lagun, Chih-Hung Hsieh, Dale Webster, and
+Vidhya Navalpakkam. 2014. Towards Better
+Measurement of Attention and Satisfaction in Mobile
+Search. In Proceedings of the 37th International ACM
+SIGIR Conference on Research & Development in
+Information Retrieval (SIGIR ’14). ACM, New York, NY,
+USA, 113–122.
+DOI:
+http://dx.doi.org/10.1145/2600428.2609631
+13.
+Dmitry Lagun and Mounia Lalmas. 2016. Understanding
+User Attention and Engagement in Online News Reading.
+In Proceedings of the 9th ACM International Conference
+on Web Search and Data Mining (WSDM ’16). ACM,
+New York, NY, USA, 113–122.
+DOI:
+http://dx.doi.org/10.1145/2835776.2835833
+14.
+Dmitry Lagun, Donal McMahon, and Vidhya
+Navalpakkam. 2016. Understanding Mobile Searcher
+Attention with Rich Ad Formats. In Proceedings of the
+25th Conference on Information and Knowledge
+Management (CIKM ’16). ACM, New York, NY, USA,
+599–608.
+DOI:
+http://dx.doi.org/10.1145/2983323.2983853
+15.
+Pascual Martínez-Gómez, Tadayoshi Hara, and Akiko
+Aizawa. 2012. Recognizing Personal Characteristics of
+Readers using Eye-Movements and Text Features.
+Proceedings of COLING 2012 December (2012),
+1747–1762.
+http://www.aclweb.org/anthology/C12-1107
+16.
+Jan M Noyes and Kate J Garland. 2008. Computer- vs.
+paper-based tasks: are they equivalent? Ergonomics 51, 9
+(2008), 1352–1375.
+DOI:
+http://dx.doi.org/10.1080/00140130802170387
+17.
+Radim
+ˇ
+Reh˚
+u
+ˇ
+rek and Petr Sojka. 2010. Software
+Framework for Topic Modelling with Large Corpora. In
+Proceedings of the LREC 2010 Workshop on New
+Challenges for NLP Frameworks. ELRA, Valletta, Malta,
+45–50.
+http://is.muni.cz/publication/884893/en
+.
+18.
+Selina Sharmin, Oleg Špakov, and Kari-Jouko Räihä.
+2013. Reading On-screen Text with Gaze-based
+Auto-scrolling. In Proceedings of the 2013 Conference on
+Eye Tracking South Africa (ETSA ’13). ACM, New York,
+NY, USA, 24–31.
+DOI:
+http://dx.doi.org/10.1145/2509315.2509319
+19.
+Susanne Trauzettel-Klosinski and Klaus Dietz. 2012.
+Standardized assessment of reading performance: The
+new international reading speed texts IReST.
+Investigative Ophthalmology and Visual Science 53, 9
+(2012), 5452–5461.
+DOI:
+http://dx.doi.org/10.1167/iovs.11-8284
+20.
+Eric W Weisstein. 2002. Erf.
+http://web.archive.org/web/20080207010024/http:
+//www.808multimedia.com/winnt/kernel.htm
+. (2002).
+Retrieved December 2016.
+21.
+Xing Yi, Liangjie Hong, Erheng Zhong, Nanthan Nan
+Liu, and Suju Rajan. 2014. Beyond Clicks: Dwell Time
+for Personalization. In Proceedings of the 8th ACM
+Conference on Recommender Systems (RecSys ’14).
+ACM, New York, NY, USA, 113–120.
+DOI:
+http://dx.doi.org/10.1145/2645710.2645724

@@ -1,0 +1,981 @@
+﻿Latent Dirichlet Allocation and Application to DSPACE
+Ben Eysenbach
+May 10, 2016
+1
+Introduction
+LDA[1]
+is a canonical
+example of a mixed-membership model,
+and it has been applied in a number of
+fields.
+In this project, we
+1
+implement an variational inference algorithm for LDA and use LDA to model
+a large dataset of academic papers.
+2
+Implementing LDA
+The first part of this project focused on implementing the variational inference algorithm in the original
+LDA paper.
+The goal was to produce a functional and comprehensible implementation.
+Learning C++
+was a convenient side effect.
+We did not optimize for performance.
+2.1
+Hyperparameter Optimization
+Implementing the updates to hyperparameter α was challenging because of a typo in section A.4.2 of the
+original LDA paper.
+The log-likelihood is maximized w.r.t α using Newton’s Method, which requires the
+second derivative of the log-likelihood w.r.t α.
+The correct derivatives are shown below, with differences
+highlighted in green.
+L
+[α]
+=
+M
+X
+d=1
+log Γ(
+k
+X
+j=1
+α
+j
+) −
+k
+X
+i=1
+log Γ(α
+i
+) +
+k
+X
+i=1
+((α
+i
+− 1)(Ψ(γ
+di
+) − Φ(
+k
+X
+j=1
+γ
+di
+)))
+!
+∂L
+∂α
+i
+= M
+Ψ
+k
+X
+j=1
+α
+j
+
+− Ψ(α
+i
+)) +
+M
+X
+d=1
+(Ψ(γ
+di
+) − Ψ
+k
+X
+j=1
+γ
+dj
+
+!
+∂L
+∂α
+i
+α
+j
+= − δ(i, j)MΨ
+0
+(α
+i
+) +M Ψ
+0
+k
+X
+j=1
+α
+j
+
+2.2
+Simple Experiments with LDA
+Next, we tested our implementation on two small datasets.
+We originally planned to use the TREC AP
+news corpus and C Elegans abstract corpus from the original LDA paper.
+Unfortunately, we were unable
+to acquire these datasets.
+Instead, we used a dataset of music articles from the New York Times[3] and
+business news from Reuters[13].
+1
+All references to “we” are purely stylistic.
+All work was completed individually.
+1
+(a) New York Times
+(b) Reuters
+Topic 13
+Topic 8
+net
+yeutter
+loss
+remained
+company
+class
+bank
+case
+would
+cable
+qtr
+certificates
+inc
+regulatory
+revs
+feed
+billion
+television
+oper
+unemployment
+Figure 1:
+Negative log-likelihood converging on the New York Times (left) and Reuters (center) datasets.
+Top words for two topics in Reuters (right).
+As a sanity check,
+we computed the negative log-likelihood for each iteration and confirmed that
+they converged.
+This is shown in Fig.
+1 (left and center).
+Note how quickly the algorithm converges,
+even when plotted in log-scale.
+We also computed the top words each topic.
+Fig.
+1 (right) shows the
+top words for topics 13 and 8.
+The first topic relates to business revenues,
+while the second relates to
+government regulation and agriculture.
+2
+2.3
+Random Initialization
+Randomization
+Log-likelihood on NYT
+Log-likelihood on Reuters
+No randomization
+-380382
+-66457.8
+Randomized α
+-380375
+-66392.3
+Randomized α, φ, γ
+-380364
+-66389.9
+Figure 2:
+Log-likelihood with random initializations
+Random initialization was important to our variation inference algorithm.
+As shown in Fig.
+2,
+we
+achieved the highest log-likelihood when we randomly initialized all
+the variational
+parameters.
+We
+found this surprising given that the original LDA paper called for a fixed initialization of φ and γ.
+We
+hypothesize that random initialization helps break symmetry.
+We also found that removing stopwords
+was also important for breaking symmetry between topics.
+3
+DSPACE
+3.1
+Collecting Data
+The next part of the project applied LDA to a dataset of academic papers.
+The MIT Libraries manage
+DSPACE,
+3
+a digital
+repository of papers written by MIT affiliates.
+We scraped this website to gather
+the following metadata for 100,906 papers:
+authors, title, department and abstract.
+We have made this
+metadata dataset publicly available.
+4
+3.2
+Algorithm
+With this data, we wanted to recover the underlying topics of each paper by applying LDA to the paper
+abstracts.
+Given the size of
+these data (11,299,213 words) we opted to use an optimized,
+parallelized
+implemtation of Online LDA [7]
+provided by Gensim [6].
+We used this implementation on our dataset
+of DSPACE abstracts to learn a topic model with 50 topics.
+It converged after three iterations through
+the dataset.
+2
+“yeutter” refers to Clayton Keith Yeutter, the Secretary of Agriculture under George H. W. Bush.
+3
+https://dspace.mit.edu/
+4
+https://github.com/ben-eysenbach/6.882-LDA/blob/master/datasets/dspace.tar.gz?raw=true
+2
+3.3
+Evaluating Learnt Topics
+Both the model
+and the learning algorithm we used are approximations.
+Whether they are useful
+de-
+pends on the task at hand.
+Because we are not interested in any particular task,
+we used “semantic
+meaningfulness” of the learnt topics as a proxy for usefulness.
+We evaluated the learnt topics by com-
+puting the top words and documents for each topic and by visualizing the geometry of the topic latent
+space.
+Topic 2 - Supply Chains
+Topic 22 - Climate Change
+Topic 26 - Air Pollution
+Topic 30 - Chemistry
+Topic 38 - Human Diseases
+Topic 43 - Neuroscience
+model
+climate
+policy
+surface
+gene
+cell
+supply
+model
+water
+energy
+human
+cells
+research
+temperature
+emissions
+phase
+genetic
+protein
+product
+global
+economic
+using
+disease
+expression
+cost
+atmospheric
+housing
+temperature
+genes
+proteins
+system
+surface
+data
+high
+biological
+dna
+management
+emissions
+environmental
+water
+cell
+gene
+industry
+changes
+development
+thermal
+model
+signaling
+business
+using
+air
+properties
+expression
+cellular
+chain
+change
+carbon
+experimental
+data
+role
+Figure 3:
+Top words for each topic
+First,
+we computed the most likely words for each topic by examining the rows of
+the β matrix.
+Fig.
+3 shows the top words for six chosen topics.
+Column titles such as “Supply Chains” were written
+manually;
+they were not output by the algorithm.
+Note that the words within each topic are specific,
+but the six topics themselves are different.
+Next, we computed the top documents for each topic.
+For some topic i, we sorted the documents by
+the probability each belongs to topic i.
+Fig.
+5 shows the titles of these top documents.
+The selected
+topics are the same as in Fig.
+3.
+As before, notice that each topic appears well defined yet distinct.
+Note
+that the learning algorithm did not have access to the document titles during training.
+These two figures demonstrate that LDA learns meaningful topics for this dataset.
+However, they do
+not reveal relationships between topics.
+3.4
+Visualization
+LDA posits that each document is a mixture over topics.
+We expect that semantically similar documents
+have “close” topic proportions.
+Unfortunately, human eyes are two dimensional while these distributions
+over topics are too-many
+5
+dimensional
+(k = 50).
+We explored two approaches to constructing a low
+dimensional visualization:
+Johnson Lindenstrauss and TSNE.
+Johnson Lindenstrauss[9] is an approach to reducing the dimension of data while preserving pairwise
+distances.
+The proof
+of
+correctness is usually stated using L2 norms.
+We attempted to adopt the
+approach to the symmetrized KL norm.
+After many failed attempts,
+we found a paper proving that it
+is impossible to use Johnson Lindenstrauss with the symmetrized KL norm to achieve a low-distortion
+embedding.[5]
+TSNE[4]
+is another method for computing a low dimensional
+embedding while preserving pairwise
+distances.
+6
+Unlike Johnson Lindenstrauss,
+the embedding is nonlinear and does not have the same
+correctness properties.
+Nonetheless, it has been used successfully in a number of settings (e.g.
+[10], [11],
+[12]).
+We applied TSNE to a random sample of 5,000 papers, as shown in Fig.
+4.
+In that figure, each dot
+corresponds to a paper, and the color of the dot indicates the department in which paper was published.
+Recall that the learning algorithm did not have access to these department labels during training.
+Titles
+of documents from three circled clusters in Fig.
+4 are shown in Fig.
+6.
+Similar to the topics shown in
+Fig.
+5, these clusters appear well defined yet distinct from one another.
+We had hoped that documents published in the same department would be clustered in this em-
+bedding.
+While Fig.
+4 shows some clustering by department,
+the departments are more mixed than
+anticipated.
+This result is not entirely surprising given the number of interdepartmental faculty and labs
+at MIT.
+3.5
+Clustering Authors
+The DSPACE dataset we collected can be used not only for discovering document topics,
+but also for
+clustering authors.
+We propose (but do not implement) two methods for this task.
+5
+Pun intended.
+6
+We tested both the symmetrized KL and L2 distance in TSNE.
+Surprisingly,
+the symmetrized KL failed to form
+meaningful clusters.
+Fig.
+4 uses L2.
+3
+Figure 4:
+Embedding of papers by learnt topics
+The first method takes a frequentist approach.
+Let C(i) denote the corpus of
+papers written by
+author i and γ(d) be the distribution over topics assigned by LDA to document d.
+Then define the
+distance between authors i and j as
+d(i, j) =
+1
+|C(i)||C(j)|
+X
+d
+i
+∈C(i)
+X
+d
+j
+∈C(j)
+KL
+symm
+(γ(d
+i
+), γ(d
+j
+))
+Applying this distance metric to each pair of
+authors defines a graph over authors.
+We can then
+model the graph using techniques such as Mixed Membership Stochastic Block Models [8].
+The second method takes a fully Bayesian approach.
+We extend the LDA model to include author-
+specific distributions over topics Θ
+i
+in addition to a global distribution over topics Θ.
+We also include a
+prior over authors π.
+Specifically, we define the following generative model:
+1.
+Choose N ∼ P oisson(ξ)
+2.
+Choose Θ ∼ Dir(α), a global distribution over topics
+3.
+Choose π ∼ Dir(β), a distribution over authors.
+4.
+For each author i, choose Θ
+i
+∼ Dir(Θ).
+5.
+For each of N words w
+n
+:
+(a) Choose author i ∼ M ultinomial(π).
+(b) Choose topic z
+n
+∼ M ultinomial(Θ
+i
+)
+(c) Choose word w
+n
+∼ P (w
+n
+|z
+n
+, β)
+The first method is convenient given a model
+already fit to your corpus.
+The second method is
+more computationally intensive,
+but will better capture the variance of cluster assignments.
+While the
+methods described above are aimed at assigning authors to topics, they can be applied directly to other
+document attributes, such as department or year of publication.
+4
+Conclusion
+The goal of this project was to better understand LDA and mixed membership models.
+We achieved this
+goal by implementing a variational inference algorithm for LDA and applying LDA to a large dataset of
+academic papers.
+Finally, we proposed a method for extending LDA to clustering authors.
+Code for the entire project is available here:
+https://github.com/ben-eysenbach/6.882-LDA
+4
+Additional Figures
+Topic 2 - Supply Chains
+Topic 22 - Climate Change
+Topic 26 - Air Pollution
+Topic 30 - Chemistry
+Topic 38 - Human Diseases
+Topic 43 - Neuroscience
+An exploration of supply chain manage-
+ment practices in the aerospace indus-
+try and in Rolls-Royce
+A comparison of
+the behavior
+of
+dif-
+ferent
+AOGCMs
+in transient
+climate
+change experiments
+Food security and sustainable resource
+management
+Temperature-dependent
+thermal
+con-
+ductivity in silicon nanostructured ma-
+terials studied by the Boltzmann trans-
+port equation
+Manipulating the Selection Forces dur-
+ing
+Affinity Maturation to
+Generate
+Cross-Reactive HIV Antibodies
+An Anterior-to-Posterior Shift in Mid-
+line Cortical
+Activity in Schizophrenia
+During Self-Reflection
+Using and extended enterprise model to
+increase responsiveness
+Global
+warming projections :
+sensitiv-
+ity to deep ocean mixing
+Economic and policy implications of ur-
+ban air pollution in the United States,
+1970 to 2000
+High-strain actuation of
+lead-free per-
+ovskites
+:
+compositional
+effects,
+phe-
+nomenology and mechanism
+Community
+transcriptomics
+reveals
+universal
+patterns of
+protein sequence
+conservation
+in
+natural
+microbial
+communities
+Sound temporal
+envelope
+and time-
+patterns of
+activity in the human au-
+ditory pathway :
+an fMRI study
+Re-architecting the failure analysis sup-
+ply chain
+Consequences
+of
+Considering
+Car-
+bon/Nitrogen Interactions on the Feed-
+backs between Climate and the Terres-
+trial Carbon Cycle
+What
+does stabilizing greenhouse gas
+concentrations mean?
+Experimental studies of the thermoelec-
+tric properties of
+microstructured and
+nanostructured lead salts
+Hepatitis C Virus Network Based Clas-
+sification of
+Hepatocellular
+Cirrhosis
+and Carcinoma
+Reversal of TMS-induced motor twitch
+by training is associated with a reduc-
+tion in excitability of
+the
+antagonist
+muscle.
+Sales & operations planning in a global
+business
+Sensitivity of
+Climate Change Projec-
+tions to Uncertainties in the Estimates
+of
+Observed Changes
+in Deep-Ocean
+Heat Content
+Global health and economic impacts of
+future ozone pollution
+Orientation
+of
+MgO thin
+films
+on
+Si(001) prepared by pulsed laser depo-
+sition
+Genetic
+association with overall
+sur-
+vival
+of
+taxane-treated
+lung
+cancer
+patients
+-
+a genome-wide
+association
+study in human lymphoblastoid cell
+lines followed by a clinical
+association
+study
+Laminar differences in gamma and al-
+pha coherence in the ventral stream
+Multi-echelon
+inventory
+management
+for a fresh produce retail supply chain
+Tropical
+Cyclone Activity Downscaled
+from NOAA-CIRES Reanalysis,
+1908-
+1958
+Climate Co-benefits of Tighter SO2 and
+NOx Regulations in China
+Heat transfer during film condensation
+of potassium vapor
+Effects
+of
+thymic
+selection of
+the
+T
+cell
+repertoire on HLA-class
+I
+associ-
+ated control of HIV infection
+Unconscious pop-out:
+attentional
+cap-
+ture by unseen feature singletons only
+when top-down attention is available
+Inventory optimization in high volume
+aerospace supply chains
+Formation of
+a localized acceleration
+potential during magnetic reconnection
+with a guide field
+Consumption-Based
+Adjustment
+of
+China’s
+Emissions-Intensity
+Targets:
+An Analysis of
+its Potential
+Economic
+Effects
+Superoleophobic Surfaces through Con-
+trol
+of Sprayed-on Stochastic Topogra-
+phy
+Differential
+Virulence of
+Clinical
+and
+Bovine-Biased Enterohemorrhagic Es-
+cherichia coli
+O157:H7 Genotypes
+in
+Piglet and Dutch Belted Rabbit Models
+Dissociable Influences of Auditory Ob-
+ject
+vs.
+Spatial
+Attention on Visual
+System Oscillatory Activity
+Improving supply chain responsiveness
+for diesel engine remanufacturing
+Sensitivity of tropical
+precipitation ex-
+tremes to climate change
+The
+Current
+Water
+and Agriculture
+Context, Challenges, and Policies
+(Invited)
+Role
+of
+Chemical
+Hetero-
+geneities on Oxygen Reduction Kinetics
+on the Surface of Thin Film Cathodes
+A multidimensional
+platform for
+the
+purification of non-coding RNA species
+Two Critical and Functionally Distinct
+Stages of Face and Body Perception
+Product development risk management
+and the role of transparency
+Historical
+and idealized climate model
+experiments:
+an
+intercomparison
+of
+Earth system models
+of
+intermediate
+complexity
+Carbon emissions
+in China:
+How far
+can new efforts bend the curve?
+Unified Model
+for Contact Angle Hys-
+teresis on Heterogeneous and Superhy-
+drophobic Surfaces
+Exome sequencing-driven discovery of
+coding polymorphisms associated with
+common metabolic phenotypes
+Neuroimaging investigation of
+the mo-
+tor control disorder, dystonia with spe-
+cial emphasis on laryngeal dystonia
+Modeling the impact of
+complexity on
+transportation
+Electron temperature fluctuations asso-
+ciated with the weakly coherent mode
+in the edge of I-mode plasmas
+Multiple metrics for quantifying the in-
+tensity of water consumption of energy
+production
+Electrostatic
+charging
+of
+jumping
+droplets
+SF3B1 and Other Novel
+Cancer Genes
+in Chronic Lymphocytic Leukemia
+Multivoxel
+Pattern Analysis
+Reveals
+Auditory Motion Information in MT+
+of Both Congenitally Blind and Sighted
+Individuals
+Emergence of strategic direction,
+orga-
+nizational structure and employee inte-
+gration :
+a framework for the Dialectic
+Organization
+Time-Varying Climate Sensitivity from
+Regional Feedbacks
+Future of oil and gas development in the
+western Amazon
+Theory of Raman enhancement by two-
+dimensional
+materials:
+Applications
+for
+graphene-enhanced
+Raman
+spec-
+troscopy
+Use of
+a conservation-of-linkage strat-
+egy to identify a candidate for the rat
+Lymphopenia gene
+Attention Drives Synchronization of Al-
+pha and Beta Rhythms between Right
+Inferior
+Frontal
+and Primary Sensory
+Neocortex
+Figure 5:
+Titles of papers which had the highest likelihood of belonging to each topic
+Environment
+Chemistry
+Electronics
+The impact of detailed urban-scale processing on the composition,
+distribution, and radiative forcing of anthropogenic aerosols
+Copper-catalyzed arylation of 1,2-amino alcohols.
+Synthesis of N-
+terminal,
+peptide helix initiators,
+and characterization of
+highly
+helical, capped polyalanine peptides
+An aligner for X-ray nanolithography
+Protection of Coastal Infrastructure under Rising Flood Risk
+Halogenated 1’-methyl-1,2’-bipyrroles (MBPs) in the Norwestern
+Atlantic
+An algorithm for rate allocation in a packet-switching network
+with feedback
+Land conversion in Amazonia and Northern South America :
+in-
+fluences on regional hydrology and ecosystem response
+Synthesis
+of
+Marine
+Polycyclic
+Polyethers
+via Endo-Selective
+Epoxide-Opening Cascades
+Propagation and scattering of electromagnetic waves in complex
+environments
+Climate change impacts on freshwater recreational
+fishing in the
+United States
+Three dimensional
+molecular architectures for the synthesis and
+improved properties of high performance polymers
+A method for system performance analysis of
+the SuperSPARc
+microprocessor
+Coupling of
+a regional
+atmospheric model
+(RegCM3) and a re-
+gional oceanic model (FVCOM) over the maritime continent
+Computational Explorations of Mechanisms and Ligand-Directed
+Selectivities of Copper-Catalyzed Ullmann-Type Reactions
+Performance prediction of an image management and communi-
+cation system for cardiac ultrasound
+An analysis of the carbon balance of the Arctic Basin from 1997
+to 2006
+The design and synthesis of
+polymeric assemblies for materials
+applications :
+chemosensing,
+liquid crystal
+alignment and block
+copolymers
+An intelligent automobile diagnostic system
+Effects of
+oceanic and atmospheric phenomena on precipitation
+and flooding in the Manafwa River Basin
+Protein Thioester Synthesis Enabled by Sortase
+Marginal
+cost congestion pricing under approximate equilibrium
+conditions
+Investigating the role of Trichodesmium spp.
+in the oceanic nitro-
+gen cycle through observations and models
+Towards incorporation of catalytic function into small folded pep-
+tide scaffolds
+Modeling poly-silicon gate depletion in submicron MOS devices
+Ionospheric Backscatter Observations at Millstone Hill
+Development of novel
+polymeric architectures for applications in
+drug delivery and studies towards the synthesis of
+perfect poly-
+mers by iterative exponential growth ”Plus” (IEG+)
+A methodology for sizing components in a dual-voltage automo-
+tive electrical system
+Heightened hurricane surge risk in northwest
+Florida revealed
+from climatological-hydrodynamic modeling and paleorecord re-
+construction
+Rapid prototyping of carbon-based chemiresistive gas sensors on
+paper
+Characterization of a wideband monopulse piezoelectric direction
+finder
+Figure 6:
+Titles of papers in each of the three circled regions in Fig.
+4
+References
+[1]
+Blei,
+David M and Ng,
+Andrew Y and Jordan,
+Michael
+I,
+Latent
+Dirichlet
+Allocation,
+Journal
+of
+Machine Learning Research, Vol 3, 2003. (pg 993 - 1022)
+[2]
+Hoffman,
+Blei,
+Wang,
+and Paisley,
+Stochastic Variational
+Inference,
+Journal
+of
+Machine Learning
+Research, Vol 14, 2013. (pg 1303 - 1347)
+[3]
+Andrew Kachites McCallum, MALLET: A Machine Learning for Language Toolkit, http://mallet.
+cs.umass.edu, 2002.
+[4]
+Van der Maaten,
+Laurens and Hinton,
+Geoffrey,
+Visualizing data using t-SNE,
+Journal
+of Machine
+Learning Research, Vol 9, 2008. (pg 2579 - 2605)
+[5]
+Bhattacharya,
+Arnab and Kar,
+Purushottam and Pal,
+Manjish,
+On Low Distortion Embeddings of
+Statistical
+Distance Measures into Low Dimensional
+Spaces, Database and Expert Systems Applica-
+tions, 2009. (pg 164 - 172)
+[6]
+Radim
+ˇ
+Reh˚uˇrek and Petr
+Sojka Software Framework for
+Topic Modelling with Large Corpora,
+Proceedings
+of
+the LREC 2010 Workshop on New Challenges
+for
+NLP Frameworks,
+https://
+radimrehurek.com/gensim/index.html, 2010. (pg 45 - 50)
+5
+[7]
+Hoffman,
+Matthew and Bach,
+Francis R and Blei,
+David M,
+Online Learning for Latent
+Dirichlet
+Allocation, Advances in Neural Information Processing Systems, 2010. (pg 856 - 864)
+[8]
+Airoldi,
+Edo M and Blei,
+David M and Fienberg,
+Stephen E and Xing,
+Eric P,
+Mixed Membership
+Stochastic Blockmodels, Advances in Neural Information Processing Systems, 2009. (pg 33 - 40)
+[9]
+Johnson, William B and Lindenstrauss, Joram, Extensions of Lipschitz mappings into a Hilbert space,
+Contemporary Mathematics, Vol 26, 1984. (pg 189 - 206)
+[10]
+Bengio, Yoshua, Learning Deep Architectures for AI, Foundations and Trends
+R
+in Machine Learn-
+ing, Vol 2, 2009. (pg 1 - 127)
+[11]
+Mohamed, Abdel-rahman and Hinton, Geoffrey and Penn, Gerald, Understanding how Deep Belief
+Networks Perform Acoustic Modelling, Acoustics, Speech and Signal Processing (ICASSP), 2012. (pg
+4273 - 4276)
+[12]
+Shen, Fumin and Shen, Chunhua and Shi, Qinfeng and Hengel, Anton and Tang, Zhenmin, Induc-
+tive Hashing on Manifolds,
+Proceedings of
+the IEEE Conference on Computer Vision and Pattern
+Recognition, 2013. (pg 1562 - 1569)
+[13]
+Lewis, D. D. and Yang, Y. and Rose, T. and Li, F. RCV1:
+A New Benchmark Collection for Text
+Categorization Research Journal
+of
+Machine Learning Research,
+http://www.jmlr.org/papers/
+volume5/lewis04a/lewis04a.pdf, Vol 5, 2004. (pg 361 - 397)
+6

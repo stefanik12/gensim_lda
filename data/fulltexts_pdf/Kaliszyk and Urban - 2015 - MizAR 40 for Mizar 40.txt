@@ -1,0 +1,1543 @@
+﻿J Autom Reasoning (2015) 55:245–256
+DOI 10.1007/s10817-015-9330-8
+MizAR 40 for Mizar 40
+Cezary Kaliszyk
+1
+· Josef Urban
+2
+Received: 2 October 2013 / Accepted: 25 May 2015 / Published online: 21 July 2015
+© The Author(s) 2015. This article is published with open access at Springerlink.com
+Abstract
+As a present to
+Mizar
+on its 40th anniversary, we develop an AI/ATP system that
+in 30 seconds of real time on a 14-CPU machine automatically proves 40 % of the theorems
+in the latest official version of the Mizar Mathematical Library (
+MML
+). This is a considerable
+improvement over previous performance of large-theory AI/ATP methods measured on the
+whole
+MML
+.
+To achieve that,
+a large suite of AI/ATP methods is employed and further
+developed. We implement the most useful methods efficiently, to scale them to the 150000
+formulas in
+MML
+. This reduces the training times over the corpus to 1–3 seconds, allowing
+a simple practical deployment of the methods in the online automated reasoning service for
+the
+Mizar
+users (
+Miz
+AR).
+Keywords Automated reasoning · Formal mathematics · Mizar · Large theories · Machine
+learning · Artificial intelligence · Premise selection
+1 Introduction and Motivation
+Since 2003 the
+Mizar
+Mathematical
+Library
+1
+(
+MML
+) has been used as a repository for
+developing AI/ATP methods for solving formally stated (computer-understandable) conjec-
+tures in general large-theory mathematics [28–30]. By large theories we mean theories with
+1
+http://www.mizar.org
+Josef Urban, funded by NWO grant Knowledge-based Automated Reasoning Radboud University,
+Nijmegen
+
+Josef Urban
+Josef.Urban@gmail.com
+1
+University of Innsbruck, Innsbruck, Austria
+2
+Radboud University, Nijmegen, Netherlands
+246
+C. Kaliszyk, J. Urban
+many concepts, definitions, theorems and lemmas, over which many related conjectures are
+posed, and where it is not immediately clear which of the previous facts will (not) be use-
+ful for a proof of a conjecture. The number and strength of the methods developed has been
+growing, however the methods were often developed and evaluated on smaller benchmarks
+such as the MPTP Challenge
+2
+and MPTP2078 [1].
+Recently,
+we have tried to develop a
+strong suite of AI/ATP methods that scale to the whole June 2012 version of the
+Flyspeck
+[7,
+8] development [14, 15], containing more than 14000 theorems. The best methods using the
+accumulated data have been recently deployed in an online (“cloud-based”) AI/ATP service
+for
+HOL Light
+[9] formalizations [12, 16]. When running the 14 strongest methods in paral-
+lel, 47 % of the
+Flyspeck
+theorems can be proved in 30 seconds without any user interaction.
+To a significant extent, this performance is achieved by learning from the large number of
+previous proofs various high-level [22, 32] and low-level [14, 33] guiding methods for state-
+of-the-art ATP and SMT systems such as
+Vampire
+[19],
+E
+[25] and
+Z3
+[3]. A similar work
+has been recently undertaken with
+Isabelle
+[21].
+We believe that this performance is a milestone on the way to John McCarthy’s AI and
+QED dream of “Heavy Duty Set Theory”, i.e., a sufficiently smart AI/ATP/ITP system that
+can without forcing mathematicians to struggle with various current technologies of explicit
+“proof programming” automatically understand and check reasoning steps done on the level
+that is commonly used in mathematical proofs. If such a system is developed, the current
+barrier preventing computer understanding of common mathematical proofs will to a large
+extent disappear, and mathematics (and thus all human exact thinking) may enter an era of
+ubiquitous computer understanding and strong AI assistance.
+In this work we employ, further develop, and evaluate a suite of scalable AI/ATP meth-
+ods on the whole
+Mizar
+library, containing nearly 58000 theorems. The main experimental
+result
+(Section 3) is that
+the 14 strongest
+methods run in parallel
+for 30 seconds prove
+40.6 % of the 58000
+Mizar
+theorems without any user interaction. If users are also allowed
+to manually select the relevant premises used then by the ATPs, the performance grows to
+56.2 %. Our hope is that this performance may significantly lower the barrier to formalizing
+mathematics in the
+Mizar
+system [6], which has a long history of targeting mathematicians
+with its standard logical foundations, intuitive proof style, and linguistic closeness to math-
+ematical vernacular.
+The various methods used to achieve this performance are described
+in Section 2.
+Section 3 discusses the experiments and results obtained with the methods,
+Section 4 takes a brief look at
+the data obtained from the automatically found proofs,
+Section 5 briefly describes the first
+integration of
+the methods
+in the
+Miz
+AR online
+service [34], and Section 6 discusses future work and concludes.
+2 Learning Proof Guidance from the
+MML
+The general idea behind the large-theory ATP-for-ITP systems that started to be developed
+in the last decade is to combine (i) translations between the ATP and ITP formalisms with
+(ii) high-level premise selection methods [1] and (iii) state-of-the-art ATP systems which
+can be further strengthened and tuned in various ways for the large-theory setting. For the
+translation from the
+Mizar
+logic to TPTP we re-use the existing MPTP translation [29, 30].
+After several initial experiments with various ATPs and their versions, we have decided to
+limit the set of ATPs to
+Vampire
+3.0,
+Z3
+4.0, and
+E
+1.8 run using the
+Epar
+scheduler and
+2
+http://www.cs.miami.edu/
+∼
+tptp/MPTPChallenge/
+MizAR 40 for Mizar 40
+247
+strategies [33].
+This combination also worked well for the experiments with
+Flyspeck
+.
+In
+this work, the main focus is on (ii), i.e., on deploying and improving for
+MML
+the suite of
+scalable high-level premise selection methods which we have recently developed for the
+whole
+Flyspeck
+corpus, containing over 20000 formulas. Here premise selection is the task
+of choosing a subset
+of all
+available facts (premises),
+which is most
+likely to lead to a
+successful automated deduction proof of a given conjecture.
+The currently strongest
+premise selection methods for
+large-theory mathematics are
+data-driven [26]:
+instead of explicit programming of all aspects of knowledge selection,
+data-driven methods extract (learn) significant parts of such complicated algorithms from
+the existing large libraries of solutions (proofs).
+This shift
+from explicit
+(theory-driven)
+programming of AI heuristics to learning AI algorithms from data is to a large extent
+responsible for the recent successes in AI domains such as web search,
+consumer choice
+prediction, autonomous car driving, etc. But this also means that extracting good training
+data from the
+MML
+is equally important as the methods that learn premise selection on such
+data. Interestingly, in large-theory ATP there is a full positive feedback loop [31] between
+the amount/quality of the data and the strength of the methods: not only more/better data
+produce stronger methods (which is the standard data-driven argument), but also stronger
+proving methods produce more/better data in the form of proofs. This is quite a unique prop-
+erty of this very expressive and fully semantic AI domain, born quite recently thanks to the
+development on large formal mathematical libraries such as the
+MML
+[36]. The main body
+of our work thus consists of the following steps:
+1.
+Obtaining from the
+MML
+suitable data (proof dependencies) on which premise selection
+methods can be trained.
+2.
+Developing, training and testing such premise selection methods and their parameters
+on a small random subset of the
+MML
+.
+3.
+Iterating steps (1) and (2), i.e., using the most successful methods to get more proofs,
+and training further methods on them.
+2.1 Obtaining Proof Dependencies from the
+MML
+There are 57897
+Mizar
+theorems and unnamed toplevel lemmas in the most recent official
+MML
+4.181.1147.
+This set is canonically (chronologically) ordered by the
+MML
+order of
+articles,
+and by the (chronological) order of theorems in the articles.
+This ordering also
+applies to the about 90000 other
+Mizar
+formulas (typically encoding the type system and
+other automations known to Mizar) used in the problems. Our goal is to prove automatically
+as many of the 57897 theorems as possible, using at each point all the available formulas
+and all information about previous theorems and their proofs.
+The human-written
+Mizar
+proofs contain explicit
+information about
+the theorems and
+definitions used. This information is however incomplete. For re-playing the
+Mizar
+proofs
+with ATPs,
+a lot
+of “background” knowledge (typically about
+typing of terms) needs to
+be explicitly added.
+The
+MPTP
+system adds such background formulas heuristically in a
+fixpoint manner, by looking at the set of symbols in the problem and adding the appropriate
+typing formulas. The average size of an ATP problem constructed in this way by
+MPTP
+is
+328 formulas, while the average number of the explicit
+Mizar
+proof references is only 12.
+In [1] we have constructed a computationally expensive method (using the
+Mizar
+checker)
+that
+reduces the number of the background formulas 2–3 times.
+However,
+the measured
+performance gain from that method when re-proving with ATPs the MPTP2078 problems
+was only about 4 %, and in [2] it was found that the ATPs still typically do not use many of
+248
+C. Kaliszyk, J. Urban
+Table 1
+Improving the dependency data used for training premise selection
+Pass
+ATPs
+Premise Selection
+Theorems (%)
+Dependencies
+1
+V
+300s
+MPTP
+re-proving
+27842 (48 %)
+27842
+2
+V
+,
+E
+,
+Z3
+120s
+trained on (1), premises limited by (1)
+29519 (51 %)
+30024
+3
+V
+,
+E
+120s
+trained on (2), premises unlimited
+30889 (53.4 %)
+31720
+4
+V
+,
+E
+120s
+trained on (3), premises unlimited
+31599 (54.6 %)
+32976
+5
+V
+,
+E
+120s
+trained on (4), premises unlimited
+32010 (55.3 %)
+35870
+6
+V
+,
+E
+120s
+trained on (5), premises unlimited
+32165 (55.6 %)
+36122
+the
+Mizar
+-needed background formulas. Since learning from the minimized ATP proofs is
+typically superior [15, 22], in the current work we decided to skip the expensive
+Mizar
+-based
+proof minimization, and focus on using the ATP proofs of the heuristically constructed re-
+proving problems coming from the
+Mizar
+theorems. This decision was influenced by older
+preliminary 20-second testing using an Intel Xeon 2.67 GHz server, in which
+Vampire
+1.8
+proved 20302 of the
+MPTP
+-constructed theorem problems,
+Epar
+proved 20324, and together
+they proved 23141, i.e., 40 % of the theorems.
+Table 1 shows the gradual growth of the set of ATP-computed proof dependencies that
+we mainly use for learning. The first set is obtained by running
+Vampire
+3.0 for 300 sec-
+onds
+3
+on the
+MPTP
+-constructed re-proving problems. The additional 1677 solutions in the
+second set are obtained by learning premise selection on the first set, and running ATPs for
+120 seconds again on various most relevant slices of the re-proving problems (we always
+include the explicit
+Mizar
+references in such pruned ATP problems). The following passes no
+longer prune the
+MPTP
+-constructed re-proving problems. They just use the premise selec-
+tors trained on the previous passes to suggest the most relevant premises, regardless of the
+original
+Mizar
+proofs, and re-learn from the newly obtained proofs in several iterations as in
+the
+MaLARea
+system [31, 35]. Such iterations are also quite expensive to compute for a new
+development. However, we have shown in [16] that this information can be in large libraries
+efficiently re-used and does not need to be computed for every version again. As in [15], the
+difference to the original
+MaLARea
+iterations is that at each premise-selection point only
+the chronologically previous proofs are used for learning. This corresponds to the ultimate
+deployment scenario, when always only the library proofs written so far are known.
+In total, these iterations yield 32165 ATP proofs, and with the final evaluation described
+in Section 3.2 this number reaches 32557 theorems.
+This means that
+when using either
+human or AI-based premise selection and their combinations,
+state-of-the-art
+ATPs are
+today able to prove 56.23 % of the toplevel
+MML
+theorems. This is a very good motivation
+for developing good premise-selection methods.
+2.2 Premise Selection Techniques
+The premise selection techniques we start with, are the relatively fast scalable methods used
+for
+Flyspeck
+in [15]: Naive Bayes (nb) and distance-weighted k-nearest neighbor [5] (knn).
+In particular, a family of differently parametrized k-NNs together with the IDF (inverse doc-
+ument frequency) feature weighting scheme [11] have recently provided quite significant
+3
+The time limit
+of 300 seconds has worked well
+in the previous experiments done over
+Flyspeck
+[15].
+Increasing the time limit further does not help significantly and it costs a lot of resources.
+MizAR 40 for Mizar 40
+249
+performance improvement [14].
+This is here extended to naive Bayes (nb idf).
+We are
+interested both in the strongest
+possible methods,
+and also in methods that
+can be quite
+weak, but complement well the stronger methods.
+Apart from minor implementational modifications,
+we characterize each formula with
+the syntactic features used by
+MaLARea
+: symbols, terms and subterms of the formula. In
+the most successful methods, all variables in such features are renamed to just one variable
+A0 (widening the similarity relation),
+however to a smaller extent,
+also the features with
+original variables are useful.
+Following the recent successful use by
+MaLARea
+0.5 in the
+2013 CASC LTB competition [17] we also add a version of distance-weighted k-NN using
+the Latent Semantic Indexing [4] (LSI) preprocessing of the feature space done efficiently
+by the
+gensim
+[23] toolkit. We test the LSI preprocessing with 800, 3200, and 6400 topics
+(lsi 800 .. lsi 6400), and also versions with and without the TF-IDF feature scaling
+(e.g., (lsi 3200ti)).
+The next modification of k-NN are various recursive schemes for weighting the neigh-
+bors’
+dependencies.
+The geo 1 F version stops the dependency recursion at
+the first
+level, weighting each dependence of a neighbor N by the factor F ∗ distance(N ) (where
+F ∈ (0, 1)), and taking maximum (instead of sum) of such weights over all neighbors. The
+geo r F version does full dependency recursion, weighting the indirect dependencies by
+F
+recursionlevel
+∗ dist ance(N ), and again taking maximum over all such factors.
+In [22] a linear combination of the strongest learning method with the
+SInE
+[10] heuristic
+produced very good results. This is an instance of ensemble learning where multiple base
+methods are combined into stronger classifiers.
+We heuristically explore combinations of
+the various base methods using various weighting schemes. In addition to the linear com-
+bination,
+we try geometric,
+harmonic,
+and quadratic average,
+and also use minimum and
+maximum of ranks. In particular taking the minimal rank (comb min) and the geometric
+average (comb geo) of ranks (computed as additions of logarithms) turn out to be quite
+successful. This can be explained in various ways, for example, taking the geometric aver-
+age is the correct way of averaging ratios.
+Since ATPs are very (probably exponentially)
+sensitive to the number of axioms,
+treating the particular aggregated rankings as ratios is
+quite likely fitting to our domain (e.g., the ratio between 50th and 60th premise is 1.2, while
+the ratio between 10th and 20th premise is 2, whereas the linear distance is the same in the
+two cases).
+We also try several
+methods of boosting [24]:
+using for training of the next
+method
+only those proof dependencies that
+are badly predicted by the previous methods.
+While
+we believe that
+there are good reasons why this approach should help (e.g.,
+our current
+methods being quite simple and thus hard to fit to more complicated ideas), so far this has
+not provided significant improvements.
+All the tested methods
+4
+(apart from LSI (
+gensim
+) and
+SInE
+(
+E
+prover)) are now uniformly
+implemented in
+OCaml
+, which gives significant speedup over the initial Perl implementation
+on the large number of features,
+labels and examples used when training over the whole
+MML
+(the number of features reaches several hundred thousand). The most useful methods
+are further implemented in C++, making them about twice as fast as their
+OCaml
+version.
+A particularly useful low-level optimization is the use of partial sorting (based on heapsort)
+of the scores according to the number of premises demanded from a particular premise-
+selection method. For example, if only 128 premises are needed, the partial sorting is much
+more efficient than full sorting of the whole array of 150000
+MML
+formulas.
+4
+For their details see http://cl-informatik.uibk.ac.at/users/cek/mizAR/legend.txt
+250
+C. Kaliszyk, J. Urban
+2.3 ATPs and Their Low-Level Guidance
+No particular
+development
+of
+ATP strategies
+was
+done for
+this
+work on the whole
+MML
+.
+However,
+thanks
+to the recent
+CASC competitions
+containing
+Mizar
+divisions
+(Mizar@Turing12, CASC LTB 2013) the recent versions of
+Vampire
+and
+Epar
+seem to be
+tuned well for MPTP2078. In particular, a set of strong strategies for
+E
+has been automati-
+cally developed by
+BliStr
+[33] in 2012 on the 1000 Mizar@Turing12 problems, raising the
+performance on MPTP2078 over
+E
+’s auto-mode by 25 %. A second round of such strategy
+evolution on these 1000 problems was done for
+MaLARea
+0.5 in CASC LTB 2013, where
+additionally a number of strong
+SInE
+strategies were evolved.
+Vampire
+3.0 is on
+MML
+16 %
+stronger than
+Vampire
+2.6.
+3 Experiments and Results
+3.1 Experiments and Results on a Random Subset of 1930 Problems
+Most of the experimental research was done on a random subset of
+MML
+consisting of 1930
+theorems (more precisely, every 30th theorem was used). For each of these theorems, the
+premise selection methods were trained on all the preceding proof data (Section 2.1), and
+chosen numbers (32,
+64,
+96,
+128,
+256,
+512 and 1024) of the best-ranked premises were
+given to the ATPs. Most of the experiments during the development of the premise selection
+methods were done with
+Vampire
+3.0. The final experiments were extended to
+Epar
+and
+Z3
+.
+As in [15], the systems were run with a 30 second time limit on a 48-core server with AMD
+Opteron 6174 2.2 GHz CPUs, 320 GB RAM, and 0.5 MB L2 cache per CPU. In real time,
+each evaluation thus took 2–3 hours for one ATP.
+In total,
+70 different premise-selection
+methods have been tried on the random sample, see our web page for a detailed listing.
+5
+Table 2 shows the fourteen methods and their parameters that
+performed best
+on the
+1930-subset. The -SOTAC (State of the art contribution) is the sum of a system’s SOTAC
+over all problems attempted, where for each problem solved by a system, its SOTAC for the
+problem is the inverse of the number of systems in our evaluation that solved this problem.
+This metric shows how useful a particular method is in a collection of other methods (in this
+case all the 70 methods that have been tried).
+Table 3 shows the 14 methods that collectively (when computed in a greedy way)
+6
+cover
+as many of the 1930 problems as possible. To be as orthogonal as possible, the methods in
+this set differ a lot in their parameters, the data trained on, and the number of best premises
+given to the ATP. Their joint performance on this subset is 44 %. All the 70 tested methods
+together solve 968 of the 1930 problems, i.e., 50.155 % .
+3.2 Experiments and Results on the Whole
+MML
+When the developed methods on the 1930-subset
+reached sufficiently high joint
+perfor-
+mance, we evaluated the most useful 14 methods on the whole
+MML
+, again with a 30-second
+5
+http://cl-informatik.uibk.ac.at/users/cek/mizAR/5yp.html
+6
+Such greedy (covering) sequence of methods starts with the best method,
+and each next method in such
+sequence is the one that greedily adds most solutions to the union of solutions of the previous methods in the
+sequence.
+MizAR 40 for Mizar 40
+251
+Table 2
+14 best premise selection methods on the 1930-subset
+Method
+Parameters
+Premises
+ATP
+Theorem (%)
+-SOTAC
+comb
+min 2k 20 20
+128
+Epar
+550 (28.50)
+2.41
+comb
+geo
+3k 50 00
+96
+V
+544 (28.19)
+1.94
+lsi
+3200ti
+8 80
+128
+Epar
+537 (27.82)
+2.17
+comb
+geo
+1k 33 33
+96
+V
+535 (27.72)
+1.60
+comb
+geo
+10k 33 33
+96
+V
+533 (27.62)
+1.73
+comb
+geo
+3k 20 20
+96
+V
+533 (27.62)
+1.71
+comb
+geo
+3k 33 33
+96
+V
+533 (27.62)
+1.63
+comb
+geo
+3k 25 25 25
+96
+V
+532 (27.57)
+1.62
+comb
+har
+2k k200 33 33
+256
+Epar
+532 (27.57)
+2.19
+comb
+geo
+3k 33 33
+96
+V
+531 (27.51)
+1.69
+comb
+geo
+3k 50 00
+128
+V
+531 (27.51)
+1.76
+comb
+geo
+1k 33 33
+128
+V
+529 (27.41)
+1.68
+knn
+is040
+128
+V
+528 (27.36)
+1.85
+knn
+is
+40
+96
+Epar
+528 (27.36)
+2.40
+Theorem (%): Number and percentage of theorems proved by a system.
+-SOTAC: See the explanatory text for this metric.
+time limit. This took about one week of real time on our server. The performance of these
+methods is shown in Table 4. The methods are ordered there from top to bottom already by
+their position in the greedy covering sequence for the whole
+MML
+. The table says that run-
+ning these fourteen methods in parallel for 30 seconds gives a 40.6 % chance of solving an
+MML
+theorem without any user interaction. The best previous result in such fully automated
+learning/proving over the whole
+MML
+was 18 %,
+achieved in [2] by running
+Vampire
+0.6
+Table 3
+The top 14 methods in the greedy sequence on the 1930-subset
+Method
+Parameters
+Deps
+Premises
+ATP
+Sum %
+Sum
+comb
+min 2k 20 20
+ATP6
+128
+Epar
+28.497
+550
+comb
+qua
+k200 3k 33 33
+ATP4
+512
+V
+32.798
+633
+comb
+geo
+3k 33 33
+ATP3
+64
+V
+35.959
+694
+lsi
+3200ti
+8 80
+ATP6
+128
+Z3
+37.461
+723
+geo
+r
+99
+ATP6
+64
+V
+38.653
+746
+knn
+200
+ATP1+
+Mizar
+1024
+V
+39.741
+767
+nb
+idf010
+ATP6
+128
+Epar
+40.725
+786
+comb
+min
+20 20
+ATP2
+128
+V
+41.347
+798
+comb
+geo
+3k 50 00
+ATP3
+1024
+V
+41.969
+810
+knn
+is040
+ATP1
+1024
+Epar
+42.487
+820
+knn
+is
+40
+ATP6
+96
+Z3
+43.005
+830
+geo
+1
+66
+ATP3
+1024
+V
+43.420
+838
+lsi
+6400
+8 120
+ATP1
+64
+V
+43.782
+845
+geo
+1
+33
+ATP3
+256
+V
+44.093
+851
+252
+C. Kaliszyk, J. Urban
+Table 4
+14 most covering methods on the whole
+MML
+, ordered by greedy coverage
+Method
+Parameters
+Prems.
+ATP
+-SOTAC
+Theorem (%)
+Greedy (%)
+comb
+min 2k 20 20
+128
+Epar
+1728.34
+15789 (27.3)
+15789 (27.2)
+lsi
+3200ti
+8 80
+128
+Epar
+1753.56
+15561 (26.9)
+17985 (31.0)
+comb
+qua
+2k k200 33 33
+512
+Epar
+1520.73
+13907 (24.0)
+19323 (33.4)
+knn
+is
+40
+96
+Z3
+1634.50
+11650 (20.1)
+20388 (35.2)
+nb
+idf010
+128
+Epar
+1630.77
+14004 (24.2)
+21057 (36.4)
+knn
+is
+80
+1024
+V
+1324.39
+12277 (21.2)
+21561 (37.2)
+geo
+r
+99
+64
+V
+1357.58
+11578 (20.0)
+22006 (38.0)
+comb
+geo
+2k 50 50
+64
+Epar
+1724.43
+14335 (24.8)
+22359 (38.6)
+comb
+geo
+2k 60 20
+1024
+V
+1361.81
+12382 (21.4)
+22652 (39.1)
+comb
+har
+2k k200 33 33
+256
+Epar
+1714.06
+15410 (26.6)
+22910 (39.6)
+geo
+r
+90
+256
+V
+1445.18
+13850 (23.9)
+23107 (39.9)
+lsi
+3200ti
+8 80
+128
+V
+1621.11
+14783 (25.5)
+23259 (40.2)
+comb
+geo
+2k 50 00
+96
+V
+1697.10
+15139 (26.1)
+23393 (40.4)
+geo
+r
+90
+256
+Epar
+1415.48
+14093 (24.3)
+23478 (40.6)
+for 20 seconds (using about twice as fast Intel Xeon machine than our AMD server) on 200
+best-ranked premises proposed by the SNoW system using the Naive Bayes learner. Since
+this was just a single method,
+a fair comparison is with the best method developed here,
+which solves 27.3 %, i.e. 50 % more problems. One of the reasons for this improvement are
+obviously the better training data developed here by the six
+MaLARea
+-style proving/learning
+passes over the
+MML
+.
+It should be however noted that much better results than 18 % have been achieved on
+smaller benchmarks such as MPTP2078,
+where more expensive methods such as kernel-
+based learning [22] could be applied.
+Comparison with those results is however possible
+only in a high-level way: we use different
+MML
+version here, different versions of the ATPs,
+coarser slices of the best premises,
+and we do not limit the premises only to those avail-
+able in the 33 articles used for MPTP2078. The best result on MPTP2078 reported in [20]
+was 823 problems (out of 2078) solved with 70 premises,
+Vampire
+0.6 and 5s on an Intel
+Xeon machine. The best new performance on the 2061 problems corresponding to the 33
+MPTP2078 articles in the current
+MML
+is 1059 problems solved in 30 seconds by
+Epar
+using
+128 best premises.
+7
+To make a bit closer comparison, we test the current best-performing
+method on the 2061 problems also with the old
+Vampire
+0.6 and 5 seconds on the old Intel
+machine, solving 726 problems. This is practically the same result as the performance of the
+best old kernel-based method (combined with SInE) on the MPTP2078 benchmark when
+using 128 premises. This seems to be an evidence (modulo all the differences named above)
+that the methods based on fast scalable learning techniques such as k-NN can with enough
+care catch up with the existing kernel-based techniques.
+Quite likely,
+this is however not
+the last word, and we hope to get further improvements by scaling up and strengthening the
+kernel-based and related methods.
+7
+The detailed results restricted to the 2061 problems are at
+http://cl-informatik.uibk.ac.at/users/cek/mizl/
+mptp2k.html
+MizAR 40 for Mizar 40
+253
+4 Proofs
+We
+have
+briefly compared the
+shortest
+ATP proofs
+found with the
+corresponding
+MML
+proofs. For this, we only consider the 28892 named
+Mizar
+theorems for which we have
+obtained either a human or AI-advised ATP proof. The complexity metric used for a human-
+written
+Mizar
+proof is just the number of proof lines in the
+Mizar
+article, while for the ATP
+proofs we use the number of dependencies.
+8
+These statistics,
+sorted by the largest differ-
+ence between these metrics is available online
+9
+, together with the ATP dependencies used
+for this comparison
+10
+. For example the first entry says that the ATP proof of the theorem
+REARRAN1:24
+11
+has a 534-lines long
+Mizar
+proof, while the shortest ATP proof found has
+only 5 dependencies. Indeed, this greatest AI/ATP-found proof shortening is valid, thanks
+to a symmetry between the concepts used in this theorem and a previously proved theorem
+REARRAN1:17
+12
+which can be established quite quickly from the concepts’ definitions.
+The
+Mizar
+proof instead proceeds by repeating the whole argument from scratch, modifying
+it at appropriate places to the symmetric concepts.
+The AI/ATP toolchain has thus man-
+aged to succinctly express the difference between the two theorems in a very explicit and
+operational way, while the human authors probably were on some level also aware of the
+symmetry,
+but were not able to capture it so precisely and succinctly.
+In some sense,
+the
+AI/ATP system has thus managed to find, precisely formulate, and productively use a new
+mathematical trick.
+This comparison,
+showing such most
+striking shortenings,
+is also useful
+for heuristic
+checking of the correctness of the whole translation/AI/ATP toolchain. By random inspec-
+tion of a dozen of such shortenings, no suspicious proofs were found, i.e., all the inspected
+ATP proofs could be replayed in
+Mizar
+. On the other hand, some of the ATP proofs can get
+very long, and may be probably already quite hard to understand without further refactoring
+and presentation methods.
+Finally, the
+Mizar
+proof length expressed in terms of the lines of code can also serve as
+another metric for measuring the performance of the ATP methods. The total number of the
+Mizar
+source lines used for the proofs of the 52248 named toplevel theorems is 1297926. The
+sum of the
+Mizar
+proof lines of the 28892 named theorems that were proved automatically
+(either from human or AI-selected premises) is 300914. This means that on average 23.2 %
+of the proof lines can be “written automatically”, if such automation is called on the toplevel
+named theorems. This is a metric that in some sense complements the 56.23 % ratio obtained
+in Section 2.1, showing that the ATPs are much better in proving the
+Mizar
+-easy theorems.
+On the other hand, the 23.2 % average would be obviously improved a lot if also the proof-
+local lemmas were included in the experiments, and the number of lines corresponding to
+such lemmas was appropriately included in the statistics.
+5 Integration with
+Miz
+AR
+The new optimized C++ versions of the premise selectors are sufficiently fast
+to train
+on the whole
+MML
+in 1–3 seconds.
+This simplifies the integration of the methods in the
+8
+These choices can obviously be questioned, but as a first comparison they are useful enough.
+9
+http://mizar.cs.ualberta.ca/
+∼
+mptp/mml4.181.1147/html/00prdiff15.html
+10
+http://mizar.cs.ualberta.ca/
+∼
+mptp/mml4.181.1147/html/00atpdeps
+11
+http://mizar.cs.ualberta.ca/
+∼
+mptp/mml4.181.1147/html/rearran1.html#T24
+12
+http://mizar.cs.ualberta.ca/
+∼
+mptp/mml4.181.1147/html/rearran1.html#T17
+254
+C. Kaliszyk, J. Urban
+Miz
+AR service. For each query, the premise selectors are always first trained on the whole
+MML
+and also on the features and proof dependencies added from the current article.
+13
+After
+such training, the premise selectors are presented with the conjecture features, to which they
+respond by ranking the available theorems according to their relevance for the conjecture.
+The several premise selection methods with their corresponding ATPs are run in parallel,
+and if successful, the result is communicated to the user. The main
+Miz
+AR server (Intel Xeon
+2.67 GHz) is considerably faster than the AMD machines used for most of the experiments.
+The service thus always updates itself with new data:
+the conjecture is always a part
+of a particular
+Mizar
+article,
+which is submitted as a whole to the system.
+However,
+in
+comparison with the recently produced
+HOL Light
+service (
+HOL(y)Hammer
+), the updating
+is so far more limited.
+We do not
+yet
+try to get
+(for better training) the minimized ATP
+proofs of the article’s theorems that
+precede the current
+conjecture.
+One reason is that,
+unlike in
+HOL(y)Hammer
+, the
+Miz
+AR service allows anonymous uploads of whole articles,
+but does not yet keep such projects persistent.
+Adding such persistence should make the
+computing and minimization of ATP proofs less expensive, because such data can then be
+quite efficiently cached and re-used (see Section 3 of [16]).
+Another difference to the
+HOL Light
+setting is the very common use of local constants
+(eigenvariables) in the Ja
+´
+skowski-style
+Mizar
+proofs. The large-scale experiments (and thus
+also the training data obtained from them) presented here only deal with the set of toplevel
+Mizar
+theorems which do not
+contain such proof-local
+constants.
+This has two different
+effects when proving the proof-local lemmas that contain such constants:
+1.
+The local assumptions and lemmas about such constants are naturally preferred by the
+premise selectors (in particular when using weighting schemes such as TF-IDF [14]),
+because such local constants (which always have a distinct internal name) and the terms
+containing them are rare. This is good, because such local lemmas are typically quite
+relevant to the local conjecture.
+2.
+The feature representation of the proof-local lemmas may become quite distant (in the
+various metrics used by k-NN) from the general theorems that are needed to justify such
+lemmas, because many terms in the lemmas are instantiated with the local constants.
+This may be a serious problem, preventing finding the relevant theorems.
+We use a simple method to counter (2): We generalize all local constants in such proof-local
+conjectures to variables. The term features of such generalized versions of the lemmas are
+used together with the standard term features.
+This is clearly just a first step,
+the general
+task of getting features that indicate for example the (lack of) the instantiation relationship
+between two formulas is quite interesting, and various syntactic and semantic methods are
+possible [18].
+Further experiments and evaluation of such issues,
+as well
+as of the user-
+perceived strengthening of the
+Miz
+AR service are left as future work.
+6 Conclusion, Future Work and Thanks
+The main result of this work is the 40.6 % success rate in proving the toplevel
+Mizar
+the-
+orems fully automatically.
+This has been achieved by several
+iterations of implementing
+better premise selection methods, using them to obtain better training data, and using such
+13
+In the
+Miz
+AR service,
+the conjecture is always submitted with the whole
+Mizar
+article in which the
+conjecture is stated.
+MizAR 40 for Mizar 40
+255
+data to further improve the performance of the learning methods. The methods were imple-
+mented very efficiently, allowing their easy deployment in the
+Miz
+AR service. We believe
+that such strong AI/ATP systems are very useful tools that make formal mathematics much
+more accessible, and their gradual strengthening is today one of the most promising paths
+towards the eventual
+adoption of computer-assisted mathematics (and exact
+science) by
+mainstream mathematicians (and exact scientists).
+The main body of future work is thus further strengthening of the various parts (e.g.,
+features/labels and the whole learning setup,
+machine-learning techniques,
+ATPs) of the
+AI/ATP methods. Also, more advanced proof reconstruction such as [13, 27] is still missing
+for
+Mizar
+. With longer and longer ATP proofs, human-friendly transformations and presen-
+tations of such proofs are becoming more and more important tasks that will quite likely also
+benefit from learning the “human-friendliness” from large repositories of human-oriented
+proofs such as the
+MML
+.
+Thus it seems that the forty years of incessant and stubborn designing and building of the
+human-oriented formal mathematical language and large library by the
+Mizar
+team, and in
+particular by the recently deceased
+Mizar
+gurus Andrzej Trybulec and Piotr Rudnicki, have
+already resulted in one of the most interesting AI corpora currently available to mankind.
+It will be quite hard for the historians to properly enumerate all their inventions that led
+to the current state of the art.
+We would like to thank Andrzej and Piotr for this lifelong
+Opus Magnum, for their infatuating dreams, their wide and never-ending interest in science
+(and science fiction),
+and for their great sense of fun combined with high doses of self-
+criticism,
+down-to-earth common sense,
+caution and modesty,
+that
+made them into such
+great scientists, hackers, teachers, debaters, critics, and friends.
+Open Access
+This article is distributed under the terms of the Creative Commons Attribution 4.0 Inter-
+national License (http://creativecommons.org/licenses/by/4.0/), which permits unrestricted use, distribution,
+and reproduction in anymedium, provided you give appropriate credit to the original author(s) and the source,
+provide a link to the Creative Commons license, and indicate if changes were made.
+References
+1.
+Alama, J., Heskes, T., K
+¨
+uhlwein, D., Tsivtsivadze, E., Urban, J.: Premise selection for mathematics by
+corpus analysis and kernel methods. J. Autom. Reason. 52(2), 191–213 (2014)
+2.
+Alama,
+J.,
+K
+¨
+uhlwein,
+D.,
+Urban,
+J.:
+Automated and human proofs in general
+mathematics:
+an initial
+comparison. In: Bjørner, N., Voronkov, A. (eds.) LPAR of LNCS, vol. 7180, pp. 37–45. Springer (2012)
+3.
+de Moura,
+L.M.,
+Bjørner,
+N.: Z3: an efficient SMT solver .
+In: Ramakrishnan,
+C.R.,
+Rehof,
+J.
+(eds.)
+TACAS of LNCS, vol. 4963, pp. 337–340. Springer (2008)
+4.
+Deerwester,
+S.C.,
+Dumais,
+S.T.,
+Landauer,
+T.K.,
+Furnas,
+G.W.,
+Harshman,
+R.A.:
+Indexing by latent
+semantic analysis. JASIS 41(6), 391–407 (1990)
+5.
+Dudani,
+S.A.: The distance-weighted k-nearest-neighbor rule.
+IEEE Trans.
+Syst.
+Man Cybern.
+SMC-
+6(4), 325–327 (1976)
+6.
+Grabowski, A., Korniłowicz, A., Naumowicz, A.: Mizar in a nutshell. Journal of Formalized Reasoning
+3(2), 153–245 (2010)
+7.
+Hales,
+T.:
+Dense Sphere Packings:
+A Blueprint
+for Formal
+Proofs of London Mathematical
+Society
+Lecture Note Series, vol. 400. Cambridge University Press (2012)
+8.
+Hales,
+T.C.,
+Adams,
+M.,
+Bauer,
+G.,
+Dang,
+D.T.,
+Harrison,
+J.,
+Hoang,
+T.L.,
+Kaliszyk,
+C.,
+Magron,
+V.,
+McLaughlin,
+S.,
+Nguyen,
+T.T.,
+Nguyen,
+T.Q.,
+Nipkow,
+T.,
+Obua,
+S.,
+Pleso,
+J.,
+Rute,
+J.,
+Solovyev,
+A.,
+Ta,
+A.H.T.,
+Tran,
+T.N.,
+Trieu,
+D.T.,
+Urban,
+J.,
+Vu,
+K.K.,
+Zumkeller,
+R.: A formal proof of the Kepler
+conjecture. CoRR (2015). arXiv:1501.02155
+9.
+Harrison, J.: HOL light: a tutorial introduction. In: Srivas, M.K., Camilleri, A.J. (eds.) FMCAD of LNCS,
+vol. 1166, pp. 265–269. Springer (1996)
+256
+C. Kaliszyk, J. Urban
+10.
+Hoder, K., Voronkov, A.: Sine qua non for large theory reasoning. In: Bjørner, N., Sofronie-Stokkermans,
+V. (eds.) CADE of LNCS, vol. 6803, pp. 299–314. Springer (2011)
+11.
+Jones, K.S.: A statistical interpretation of term specificity and its application in retrieval. J. Doc. 28, 11–
+21 (1972)
+12.
+Kaliszyk, C., Urban, J.: Automated reasoning service for HOL light. In: Carette, J., Aspinall, D., Lange,
+C.,
+Sojka,
+P.,
+Windsteiger,
+W.
+(eds.) MKM/Calculemus/DML of Lecture Notes in Computer Science,
+vol. 7961, pp. 120–135. Springer (2013)
+13.
+Kaliszyk, C., Urban, J.: PRocH: proof reconstruction for HOL Light. In: Bonacina, M.P. (ed.) CADE of
+Lecture Notes in Computer Science, vol. 7898, pp. 267–274. Springer (2013)
+14.
+Kaliszyk, C., Urban, J.: Stronger automation for Flyspeck by feature weighting and strategy evolution.
+In: Blanchette, J.C., Urban, J. (eds.) PxTP 2013 of EPiC Series. EasyChair, vol. 14, pp. 87–95 (2013)
+15.
+Kaliszyk, C., Urban, J.: Learning-assisted automated reasoning with Flyspeck. J. Autom. Reason. 53(2),
+173–213 (2014)
+16.
+Kaliszyk, C., Josef, Urban.: HOL(y)Hammer: online ATP service for HOL Light. Math. Comput. Sci.
+9(1), 5–22 (2015)
+17.
+Kaliszyk, C., Urban, J., Vysko
+ˇ
+cil, J.: Machine learner for automated reasoning 0.4 and 0.5. CoRR (2014).
+Accepted to PAAR’14. arXiv:1402.2359
+18.
+Kaliszyk,
+C.,
+Urban,
+J.,
+Vysko
+ˇ
+cil,
+J.:
+Efficient
+semantic features for automated reasoning over large
+theories. In: Proceedings of the 24th International Joint Conference on Artificial Intelligence (IICAI’15).
+to appear (2015)
+19.
+Kov
+´
+acs, L., Voronkov, A.: First-order theorem proving and vampire. In: Sharygina, N., Veith, H. (eds.)
+CAV of Lecture Notes in Computer Science, vol. 8044, pp. 1–35. Springer (2013)
+20.
+Kuehlwein, D., Urban, J.: Learning from multiple proofs: first experiments. In: Fontaine, P., Schmidt,
+R.A., Schulz, S. (eds.) PAAR-2012 of EPiC Series, vol. 21, pp. 82–94. EasyChair (2013)
+21.
+K
+¨
+uhlwein, D., Blanchette, J.C., Kaliszyk, C., Urban, J.: MaSh: machine learning for Sledgehammer. In:
+Blazy,
+S.,
+Paulin-Mohring,
+C.,
+Pichardie,
+D.
+(eds.) Proceeding of the 4th international conference on
+interactive theorem proving (ITP’13) of LNCS, vol. 7998, pp. 35–50. Springer (2013)
+22.
+K
+¨
+uhlwein,
+D.,
+van Laarhoven,
+T.,
+Tsivtsivadze,
+E.,
+Urban,
+J.,
+Heskes,
+T.: Overview and evaluation of
+premise selection techniques for large theory mathematics. In: Gramlich, B., Miller, D., Sattler, U. (eds.)
+IJCAR of LNCS, vol. 7364, pp. 378–392. Springer (2012)
+23.
+ˇ
+Reh
+˚
+u
+ˇ
+rek, R., Sojka, P.: Software framework for topic modelling with large corpora. In: Proceedings of
+the LREC 2010 workshop on new challenges for NLP frameworks, pp. 45–50. ELRA, Valletta, Malta
+(2010)
+24.
+Schapire, R.E.: The strength of weak learnability. Mach. Learn. 5, 197–227 (1990)
+25.
+Schulz, S.: E - A brainiac theorem prover. AI Commun. 15(2-3), 111–126 (2002)
+26.
+Shawe-Taylor, J., Cristianini, N.: Kernel methods for pattern analysis. Cambridge University Press, New
+York (2004)
+27.
+Smolka, S.J., Blanchette, J.C.: Robust, semi-intelligible Isabelle proofs from ATP proofs. In: Blanchette,
+J.C., Urban, J. (eds.) PxTP 2013 of EPiC Series, vol. 14, pp. 117–132. EasyChair (2013)
+28.
+Josef U.: Translating Mizar for first order theorem provers. In: MKM of LNCS, vol. 2594, pp. 203–215.
+Springer (2003)
+29.
+Urban, J.: MPTP - motivation, implementation, first experiments. J. Autom. Reason. 33(3-4), 319–339
+(2004)
+30.
+Urban, J.: MPTP 0.2: design, implementation, and initial experiments. J. Autom. Reason. 37(1-2), 21–
+43 (2006)
+31.
+Urban, J.: MaLARea: a metasystem for automated reasoning in large theories. In: Sutcliffe, G., Urban,
+J., Schulz, S. (eds.) ESARLT of CEUR Workshop Proceedings, vol. 257. CEUR-WS.org (2007)
+32.
+Urban,
+J.:
+An overview of methods for large-theory automated theorem proving (Invited Paper).
+In:
+H
+¨
+ofner, P., McIver, A., Struth, G. (eds.) ATE Workshop, volume 760 of CEUR Workshop Proceedings,
+pp. 3–8. CEUR-WS.org (2011)
+33.
+Urban, J.: BliStr: the blind strategymaker, CoRR. arXiv:1301.2683. Accepted to PAAR’14 (2014)
+34.
+Urban, J., Rudnicki, P., Sutcliffe, G.: ATP and presentation service for Mizar formalizations. J. Autom.
+Reason. 50, 229–241 (2013)
+35.
+Urban, J., Sutcliffe, G., Pudl
+´
+ak, P., Vysko
+ˇ
+cil, J.: MaLARea SG1 - machine learner for automated rea-
+soning with semantic guidance. In: Armando, A., Baumgartner, P., Dowek, G. (eds.) IJCAR of LNCS,
+vol. 5195, pp. 441–456. Springer (2008)
+36.
+Urban,
+J.,
+Vysko
+ˇ
+cil,
+J.:
+Theorem proving in large formal
+mathematics as an emerging AI field.
+In:
+Bonacina,
+M.P.,
+Stickel,
+M.E.
+(eds.)
+Automated reasoning and mathematics:
+essays in memory of
+william McCune of LNAI, vol. 7788, pp. 240–257. Springer (2013)

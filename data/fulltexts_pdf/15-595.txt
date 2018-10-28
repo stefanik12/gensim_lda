@@ -1,0 +1,9311 @@
+﻿Journal of Machine Learning Research 18 (2018) 1-38
+Submitted 11/15; Revised 12/17; Published 4/18
+Principled Selection of Hyperparameters in the Latent Dirichlet
+Allocation Model
+Clint P. George
+CLINTPG
+@
+UFL
+.
+EDU
+Informatics Institute
+University of Florida
+Gainesville, FL
+32611
+, USA
+Hani Doss
+DOSS
+@
+STAT
+.
+UFL
+.
+EDU
+Department of Statistics
+University of Florida
+Gainesville, FL
+32611
+, USA
+Editor: David Blei
+Abstract
+Latent Dirichlet Allocation (LDA) is a well known topic model that is often used to make inference
+regarding the properties of collections of text documents.
+LDA is a hierarchical Bayesian model,
+and involves a prior distribution on a set of latent topic variables.
+The prior is indexed by certain
+hyperparameters, and even though these have a large impact on inference, they are usually chosen
+either in an ad-hoc manner,
+or by applying an algorithm whose theoretical
+basis has not
+been
+firmly established.
+We present a method,
+based on a combination of Markov chain Monte Carlo
+and importance sampling, for estimating the maximum likelihood estimate of the hyperparameters.
+The method may be viewed as a computational scheme for implementation of an empirical Bayes
+analysis. It comes with theoretical guarantees, and a key feature of our approach is that we provide
+theoretically-valid error margins for our estimates.
+Experiments on both synthetic and real data
+show good performance of our methodology.
+Keywords:
+Empirical Bayes inference,
+latent Dirichlet allocation,
+Markov chain Monte Carlo,
+model selection, topic modelling.
+1.
+Introduction
+Latent Dirichlet Allocation (LDA, Blei et al. 2003) is a model that is used to describe high-dimen-
+sional sparse count data represented by feature counts. Although the model can be applied to many
+different kinds of data,
+for example collections of annotated images and social networks,
+for the
+sake of concreteness, here we focus on data consisting of a collection of documents.
+Suppose we
+have a corpus of documents, say a collection of news articles, and these span several different topics,
+such as sports, medicine, politics, etc.
+We imagine that for each word in each document, there is a
+latent (i.e. unobserved) variable indicating a topic from which that word is drawn. There are several
+goals, but two principal ones are to recover an interpretable set of topics, and to make inference on
+the latent topic variables for each document.
+To describe the LDA model, we first set up some terminology and notation.
+There is a vocab-
+ulary
+V
+of
+V
+words; typically,
+this is taken to be the union of all the words in all the documents
+of the corpus, after removing stop (i.e. uninformative) words.
+(Throughout, we use “word” to refer
+to either an actual word, or to a phrase, such as “heart attack”; LDA has implementations that deal
+c
+2018 Clint P. George and Hani Doss.
+License: CC-BY 4.0, see
+https://creativecommons.org/licenses/by/4.0/
+. Attribution requirements are provided at
+http://jmlr.org/papers/v18/15-595.html
+.
+G
+EORGE AND
+D
+OSS
+with each of these.) There are
+D
+documents in the corpus, and for
+d = 1, . . . , D
+, document
+d
+has
+n
+d
+words,
+w
+d1
+, . . . , w
+dn
+d
+.
+The order of the words is considered uninformative, and so is neglected.
+Each word is represented as an index vector of dimension
+V
+with a
+1
+at the
+s
+th
+element,
+where
+s
+denotes the term selected from the vocabulary.
+Thus,
+document
+d
+is represented by the matrix
+w
+d
+= (w
+d1
+, . . . , w
+dn
+d
+)
+and the corpus is represented by the list
+w = (w
+1
+, . . . , w
+D
+)
+.
+The number
+of topics,
+K
+, is finite and known.
+By definition, a topic is a distribution over
+V
+, i.e. a point in the
+simplex
+S
+V
+= {a ∈ R
+V
+: a
+1
+, . . . , a
+V
+≥ 0,
+P
+V
+j=1
+a
+j
+= 1}
+.
+For
+d = 1, . . . , D
+, for each word
+w
+di
+,
+z
+di
+is an index vector of dimension
+K
+which represents the latent variable that denotes the topic
+from which
+w
+di
+is drawn.
+The distribution of
+z
+d1
+, . . . , z
+dn
+d
+will depend on a document-specific
+variable
+θ
+d
+which indicates a distribution on the topics for document
+d
+.
+We will use
+Dir
+L
+(a
+1
+, . . . , a
+L
+)
+to denote the finite-dimensional Dirichlet distribution on the sim-
+plex
+S
+L
+.
+Also, we will use
+Mult
+L
+(b
+1
+, . . . , b
+L
+)
+to denote the multinomial distribution with number
+of trials equal to
+1
+and probability vector
+(b
+1
+, . . . , b
+L
+)
+.
+We will form a
+K × V
+matrix
+β
+,
+whose
+t
+th
+row is the
+t
+th
+topic (how
+β
+is formed will be described shortly).
+Thus,
+β
+will consist of vec-
+tors
+β
+1
+, . . . , β
+K
+, all lying in
+S
+V
+.
+The LDA model is indexed by hyperparameters
+η ∈ (0, ∞)
+and
+α ∈ (0, ∞)
+K
+.
+It is represented graphically in Figure 1,
+and described formally by the following
+hierarchical model:
+1.
+β
+t
+iid
+∼ Dir
+V
+(η, . . . , η), t = 1, . . . , K
+.
+2.
+θ
+d
+iid
+∼ Dir
+K
+(α), d = 1, . . . , D
+, and the
+θ
+d
+’s are independent of the
+β
+t
+’s.
+3.
+Given
+θ
+1
+, . . . , θ
+D
+,
+z
+di
+iid
+∼ Mult
+K
+(θ
+d
+), i
+= 1, . . . , n
+d
+, d = 1, . . . , D
+,
+and the
+D
+matrices
+(z
+11
+, . . . , z
+1n
+1
+), . . . , (z
+D1
+, . . . , z
+Dn
+D
+)
+are independent.
+4.
+Given
+β
+and the
+z
+di
+’s, the
+w
+di
+’s are independently drawn from the row of
+β
+indicated by
+z
+di
+, i =
+1, . . . , n
+d
+, d = 1, . . . , D
+.
+From the description of the model, we see that there is a latent topic variable for every word that
+appears in the corpus.
+Thus it is possible that a document spans several topics.
+Also,
+because
+β
+is chosen once,
+at the top of the hierarchy,
+it is shared among the
+D
+documents.
+Thus the model
+encourages different documents to share the same topics,
+and moreover,
+all the documents in the
+corpus share a single set of topics defined by
+β
+.
+w
+di
+z
+di
+θ
+d
+α
+β
+t
+η
+i = 1, . . . , n
+d
+d = 1, . . . , D
+t = 1, . . . , K
+Figure 1:
+Graphical
+model
+representation
+for
+LDA.
+Nodes
+denote random vari-
+ables,
+shaded nodes denote observed
+variables,
+edges
+denote
+conditional
+dependencies, and plates denote repli-
+cated processes.
+Let
+θ = (θ
+1
+, . . . , θ
+D
+)
+,
+z
+d
+= (z
+d1
+, . . . , z
+dn
+d
+)
+for
+d = 1, . . . , D
+,
+z = (z
+1
+, . . . , z
+D
+)
+,
+and let
+ψ = (β, θ, z)
+.
+The model is indexed by the hyperparameter vector
+h = (η, α) ∈ (0, ∞)
+K+1
+.
+For
+any given
+h
+, lines
+1
+–
+3
+induce a prior distribution on
+ψ
+, which we will denote by
+ν
+h
+.
+Line
+4
+gives
+the likelihood.
+The words
+w
+are observed, and we are interested in
+ν
+h,w
+, the posterior distribution
+of
+ψ
+given
+w
+corresponding to
+ν
+h
+.
+In step
+2
+it is common to take the distribution of the
+θ
+d
+’s to
+2
+H
+YPERPARAMETER
+S
+ELECTION IN
+LDA M
+ODEL
+be a symmetric Dirichlet, although arbitrary Dirichlets are sometimes used.
+Our model allows for
+arbitrary Dirichlets, for the sake of generality, but in all our examples we use symmetric Dirichlets
+because a high-dimensional hyperparameter can cause serious problems.
+We return to this point at
+the end of Section 2.1.
+The hyperparameter vector
+h
+is not random,
+and must be selected in advance.
+It has a strong
+effect on the distribution of the parameters of the model.
+For example, when
+η
+is large, the topics
+tend to be probability vectors which spread their mass evenly among many words in the vocabulary,
+whereas when
+η
+is small, the topics tend to put most of their mass on only a few words.
+Also, in
+the special case where
+α = (α, . . . , α)
+, so that
+Dir
+K
+(α)
+is a symmetric Dirichlet indexed by the
+single parameter
+α
+, when
+α
+is large, each document tends to involve many different topics; on the
+other hand, in the limiting case where
+α → 0
+, each document involves a single topic, and this topic
+is randomly chosen from the set of all topics.
+The preceding paragraph is about the effect of
+h
+on the prior distribution of the parameters. We
+may think about the role of
+h
+on statistical inference by considering posterior distributions. Let
+g
+be
+a function of the parameter
+ψ
+. For example,
+g(ψ)
+might be the indicator of the event
+kθ
+i
+− θ
+j
+k ≤ 
+,
+where
+i
+and
+j
+are the indices of two particular documents,
+
+is some user-specified small number,
+and
+k · k
+denotes ordinary Euclidean distance in
+R
+K
+.
+In this case, the value of
+g(ψ)
+gives a way
+of determining whether the topics for documents
+i
+and
+j
+are nearly the same (
+g(ψ) = 1
+),
+or not
+(
+g(ψ) = 0
+).
+Of interest then is the posterior probability
+ν
+h,w
+(kθ
+i
+− θ
+j
+k ≤ )
+, which is given by
+the integral
+R
+g(ψ) dν
+h,w
+(ψ)
+.
+In another example,
+the function
+g
+might be taken to measure the
+distance between two topics of interest. In Section 2.4 we demonstrate empirically that the posterior
+expectation given by the integral
+R
+g(ψ) dν
+h,w
+(ψ)
+can vary considerably with
+h
+.
+To summarize: the hyperparameter
+h
+can have a strong effect not only on the prior distribution
+of the parameters in the model,
+but
+also on their posterior distribution;
+therefore it
+is important
+to choose it
+carefully.
+Yet
+in spite of the very widespread use of LDA,
+there is no method for
+choosing the hyperparameter that
+has a firm theoretical
+basis.
+In the literature,
+h
+is sometimes
+selected in some ad-hoc or arbitrary manner.
+A principled way of selecting it
+is via maximum
+likelihood:
+we let
+m
+w
+(h)
+denote the marginal likelihood of the data as a function of
+h
+,
+and use
+ˆ
+h = arg max
+h
+m
+w
+(h)
+which is,
+by definition,
+the empirical
+Bayes choice of
+h
+.
+We will
+write
+m(h)
+instead of
+m
+w
+(h)
+unless we need to emphasize the dependence on
+w
+.
+Unfortunately,
+the
+function
+m(h)
+is analytically intractable:
+m(h)
+is the likelihood of the data with all latent variables
+integrated or summed out,
+and from the hierarchical nature of the model,
+we see that
+m(h)
+is a
+very large sum, because we are summing over all possible values of
+z
+.
+Blei et al. (2003) propose
+estimating
+arg max
+h
+m(h)
+via a combination of the EM algorithm and “variational inference” (VI-
+EM).
+Very briefly,
+w
+is viewed as “observed data,” and
+ψ
+is viewed as “missing data.” Because
+the “complete data likelihood”
+p
+h
+(ψ, w)
+is available, the EM algorithm is a natural candidate for
+estimating
+arg max
+h
+m(h)
+,
+since
+m(h)
+is the “incomplete data likelihood.” But the E-step in the
+algorithm is infeasible because it requires calculating an expectation with respect to the intractable
+distribution
+ν
+h,w
+.
+Blei et al. (2003) substitute an approximation to this expectation.
+Unfortunately,
+because there are no useful bounds on the approximation,
+and because the approximation is used
+at every iteration of the algorithm,
+there are no results regarding the theoretical properties of this
+method. Wallach (2006) (see also Wallach (2008)) proposed a “Gibbs-EM” algorithm, in which the
+E-step is approximated by a Markov chain Monte Carlo estimate.
+This method can perform well
+empirically but, as for the VI-EM algorithm, its theoretical validity has not been established.
+The
+3
+G
+EORGE AND
+D
+OSS
+advantages and disadvantages of these two approximations to the EM algorithm are discussed in
+Section 5.1.
+Wallach et al. (2009) give an overview of a class of methods for estimating a combination of
+some parameter components and some hyperparameter components and,
+in principle,
+these pro-
+cedures could be adapted to the problem of estimating
+h
+.
+The methods they present differ from
+EM-based approaches in two fundamental respects: (1) they work with an objective function which
+is not the marginal likelihood function
+m(h)
+, but rather a measure of the “predictive performance
+of the LDA model indexed by
+h
+,” and (2) evaluation of their objective function at hyperparameter
+value
+h
+requires running a Markov chain, and this has to be done “for each value of
+h
+” before doing
+the maximization of the objective function, which can impose a heavy computational burden.
+This
+paper is discussed further in Section 5.
+Another approach for dealing with the problem of having to make a choice of the hyperparame-
+ter vector is the fully Bayes approach, in which we simply put a prior on the hyperparameter vector,
+that is, add one layer to the hierarchical model.
+For example, we can either put a flat prior on each
+component of the hyperparameter, or put a gamma prior instead. While this approach can be useful,
+there are reasons why one may want to avoid it.
+On the one hand,
+if we put a flat prior then one
+problem is that we are effectively skewing the results towards large values of the hyperparameter
+components.
+A more serious problem is that the posterior may be improper.
+In this case,
+insidi-
+ously, if we use Gibbs sampling to estimate the posterior, it is possible that all conditionals needed
+to implement the sampler are proper;
+but Hobert and Casella (1996) have shown that the Gibbs
+sampler output may not give a clue that there is a problem.
+On the other hand, if we use a gamma
+prior,
+then at least in the case of a symmetric Dirichlet on the
+θ
+d
+’s,
+we have not made things any
+easier:
+we have to specify four gamma hyperparameters.
+Another reason to avoid the fully Bayes
+approach is that, in broad terms, the general interest in empirical Bayes methods arises in part from
+a desire to select a specific value of the hyperparameter vector because this gives a model that is
+more parsimonious and interpretable.
+This point is discussed more fully (in a general context) in
+George and Foster (2000) and Robert (2001, Chapter 7).
+In the present paper we show that while it is not possible to compute
+m(h)
+itself, it is neverthe-
+less possible, with a single MCMC run, to estimate the entire function
+m(h)
+up to a multiplicative
+constant.
+Before proceeding, we note that if
+c
+is a constant, then the information regarding
+h
+given
+by the two functions
+m(h)
+and
+cm(h)
+is the same: the same value of
+h
+maximizes both functions,
+and the second derivative matrices of the logarithm of these two functions are identical.
+In particu-
+lar, the Hessians of the logarithm of these two functions at the maximum (i.e. the observed Fisher
+information) are the same and, therefore, the standard point estimates and confidence regions based
+on
+m(h)
+and
+cm(h)
+are identical. Let
+g
+be a function of
+ψ
+and let
+I(h) =
+R
+g(ψ) dν
+h,w
+(ψ)
+denote
+the posterior expectation of
+g(ψ)
+.
+We also show that it is possible to estimate the entire function
+I(h)
+with a single MCMC run.
+As we will see in Section 2,
+our approach for estimating
+m(h)
+up to a single multiplicative
+constant and
+I(h)
+has two requirements: (i) we need a formula for the ratio
+ν
+h
+1
+(ψ)/ν
+h
+2
+(ψ)
+for any
+two hyperparameter values
+h
+1
+and
+h
+2
+, and (ii) for any hyperparameter value
+h
+, we need an ergodic
+Markov chain whose invariant distribution is the posterior
+ν
+h,w
+. This paper is organized as follows.
+In Section 2 we explain our method for estimating the function
+m(h)
+up to a single multiplicative
+constant (and hence its argmax) and for estimating the family of posterior expectations
+{I(h), h ∈
+H}
+; and we also explain how to form error margins for our estimates,
+paying particular attention
+to theoretical underpinnings.
+Additionally,
+we provide the formula for the ratio
+ν
+h
+1
+(ψ)/ν
+h
+2
+(ψ)
+.
+4
+H
+YPERPARAMETER
+S
+ELECTION IN
+LDA M
+ODEL
+In Section 3 we consider synthetic data sets generated from a simple model
+in which
+h
+is low
+dimensional and known, and we show that our method correctly estimates the true value of
+h
+.
+In
+Section 4 we describe two Markov chains which satisfy requirement (ii) above.
+In Section 5 we
+compare,
+both theoretically and empirically,
+the various methods of estimating the maximizer of
+the marginal likelihood function,
+in terms of accuracy.
+Then we compare the various choices of
+the hyperparameter that are used in the literature—those that are ad-hoc and those that estimate
+the maximizer of the marginal
+likelihood function—through a standard criterion that
+is used to
+evaluate topic models,
+and we show that our method performs favorably.
+In Section 6 we make
+some concluding remarks, and the Appendix contains some of the technical material that is needed
+in the paper.
+2.
+Estimation of the Marginal Likelihood up to a Multiplicative Constant and
+Estimation of Posterior Expectations
+This section consists of four parts.
+In Section 2.1 we show how the marginal likelihood function
+can be estimated (up to a constant) with a single MCMC run. Section 2.2 concerns estimation of the
+posterior expectation of a function
+g
+of the parameter
+ψ
+,
+given by the integral
+R
+g(ψ) dν
+h,w
+(ψ)
+,
+and which depends on
+h
+.
+We show how the entire family of posterior expectations
+{I(h), h ∈ H}
+can be estimated with a single MCMC run.
+In Section 2.3 we explain that the simple estimates
+given in Sections 2.1 and 2.2 can have large variances, and we present estimates which are far more
+reliable. In Section 2.4 we illustrate our methodology on a corpus created from Wikipedia.
+Let
+H = (0, ∞)
+K+1
+be the hyperparameter space.
+For any
+h ∈ H
+,
+ν
+h
+and
+ν
+h,w
+are prior and
+posterior distributions, respectively, of the vector
+ψ = (β, θ, z)
+, for which some components are
+continuous and some are discrete.
+We will use
+`
+w
+(ψ)
+to denote the likelihood function (which is
+given by line
+4
+of the LDA model).
+2.1 Estimation of the Marginal Likelihood up to a Multiplicative Constant
+Note that
+m(h)
+is the normalizing constant in the statement “the posterior is proportional to the
+likelihood times the prior,” i.e.
+ν
+h,w
+(ψ) =
+`
+w
+(ψ)ν
+h
+(ψ)
+m(h)
+.
+Now suppose that we have a method for constructing a Markov chain on
+ψ
+whose invariant distri-
+bution is
+ν
+h,w
+and which is ergodic.
+Two Markov chains which satisfy these criteria are discussed
+in later in this section.
+Let
+h
+∗
+∈ H
+be fixed but arbitrary, and let
+ψ
+1
+, ψ
+2
+, . . .
+be an ergodic Markov
+chain with invariant distribution
+ν
+h∗,w
+. For any
+h ∈ H
+, as
+n → ∞
+we have
+1
+n
+n
+X
+i=1
+ν
+h
+(ψ
+i
+)
+ν
+h
+∗
+(ψ
+i
+)
+a.s.
+−−→
+Z
+ν
+h
+(ψ)
+ν
+h
+∗
+(ψ)
+dν
+h
+∗
+,w
+(ψ)
+=
+m(h)
+m(h
+∗
+)
+Z
+`
+w
+(ψ)ν
+h
+(ψ)/m(h)
+`
+w
+(ψ)ν
+h
+∗
+(ψ)/m(h
+∗
+)
+dν
+h
+∗
+,w
+(ψ)
+=
+m(h)
+m(h
+∗
+)
+Z
+ν
+h,w
+(ψ)
+ν
+h
+∗
+,w
+(ψ)
+dν
+h
+∗
+,w
+(ψ)
+=
+m(h)
+m(h
+∗
+)
+.
+(2.1)
+5
+G
+EORGE AND
+D
+OSS
+The almost sure convergence statement in (2.1) follows from ergodicity of the chain.
+(There is a
+slight abuse of notation in (2.1) in that we have used
+ν
+h
+∗
+,w
+to denote a probability measure when we
+write
+dν
+h
+∗
+,w
+, whereas in the integrand,
+ν
+h
+,
+ν
+h
+∗
+, and
+ν
+h
+∗
+,w
+refer to probability densities.) The signifi-
+cance of (2.1) is that this result shows that we can estimate the entire family
+{m(h)/m(h
+∗
+), h ∈ H}
+with a single Markov chain run.
+Since
+m(h
+∗
+)
+is a constant, the remarks made in Section 1 apply,
+and we can estimate
+arg max
+h
+m(h)
+.
+The usefulness of (2.1) stems from the fact that the average
+on the left side involves only the priors, so we effectively bypass having to deal with the posterior
+distributions.
+The development in (2.1) is not new (although we do not know who first noticed it), and the esti-
+mate on the left side of (2.1) is not the one we will ultimately use (cf. Section 2.3); we present (2.1)
+primarily for motivation.
+Note that (2.1) is generic,
+i.e. it is not specific to the LDA model:
+it is
+potentially valid for any Bayesian model for which we have a data vector
+w
+, a corresponding like-
+lihood function
+`
+w
+(ψ)
+, and parameter vector
+ψ
+having prior
+ν
+h
+, with hyperparameter
+h ∈ H
+.
+We
+now discuss carefully the scope of its applicability.
+In order to be able to use (2.1) to obtain valid
+estimators of the family
+m(h)/m(h
+∗
+), h ∈ H
+, we need the following.
+C1
+A closed-form expression for the ratio of densities
+ν
+h
+(ψ)/ν
+h
+∗
+(ψ)
+for some fixed
+h
+∗
+∈ H
+.
+C2
+A method for generating an ergodic Markov chain with invariant distribution
+ν
+h
+∗
+,w
+.
+We need C1 in order to write down the estimators, and we need C2 for the estimators to be valid.
+For notational convenience,
+let
+B
+n
+(h) = (1/n)
+P
+n
+i=1
+[ν
+h
+(ψ
+i
+)/ν
+h
+∗
+(ψ
+i
+)]
+,
+and define
+B(h) =
+m(h)/m(h
+∗
+)
+.
+In order to use (2.1) to obtain a valid estimator, together with a confidence interval
+(confidence set, if
+dim(h) > 1
+) for
+arg max
+h
+m(h)
+, we need in addition the following.
+C3
+A result that says that the convergence in the first line of (2.1) is uniform in
+h
+.
+C4
+A result that says that if
+G
+n
+(h)
+is the centered and scaled version of the estimate on the left
+side of (2.1) given by
+G
+n
+(h) = n
+1/2
+(B
+n
+(h) − B(h))
+, then
+G
+n
+(·)
+converges in distribution to
+a Gaussian process indexed by
+h
+.
+We now explain these last two conditions.
+Generally speaking,
+for real-valued functions
+f
+n
+and
+f
+defined on
+H
+,
+the pointwise convergence condition
+f
+n
+(h) → f (h)
+for each
+h ∈ H
+does not
+imply that
+arg max
+h
+f
+n
+(h)
+→ arg max
+h
+f (h)
+.
+Indeed,
+counterexamples are easy to construct,
+and in Section A.2 of the Appendix we provide a simple one.
+In order to be able to conclude
+that
+arg max
+h
+f
+n
+(h)
+→ arg max
+h
+f (h)
+,
+which is a global
+condition,
+we need the convergence
+of
+f
+n
+to
+f
+to be uniform (this is discussed rigorously in Section A.2 of the Appendix).
+Hence
+we need C3.
+Regarding confidence intervals (or sets) for
+arg max
+h
+f (h)
+,
+we note that
+B
+n
+(h)
+is
+simply an average,
+and so under suitable regularity conditions,
+it satisfies a central limit theorem
+(CLT). However, we are not interested in a central limit theorem for
+B
+n
+(h)
+, but rather in a CLT for
+arg max
+h
+B
+n
+(h)
+.
+In this regard, C4 is a “uniform in
+h
+CLT” that is necessary to obtain a CLT of
+the form
+n
+1/2
+(arg max
+h
+B
+n
+(h) − arg max
+h
+B(h))
+d
+→ N (0, Σ)
+for some positive definite matrix
+Σ
+,
+which is what is needed to form confidence sets for
+arg max
+h
+B(h)
+.
+Again,
+this is discussed
+rigorously in Section A.2 of the Appendix.
+6
+H
+YPERPARAMETER
+S
+ELECTION IN
+LDA M
+ODEL
+We now discuss Conditions C1–C4.
+Condition C1 is satisfied by the LDA model, and in Sec-
+tion A.1 of the Appendix we show that the ratio of densities
+ν
+h
+/ν
+h
+∗
+is given by
+ν
+h
+(ψ)
+ν
+h
+∗
+(ψ)
+=
+"
+D
+Y
+d=1
+Γ
+P
+K
+j=1
+α
+j
+
+Q
+K
+j=1
+Γ(α
+j
+)
+Q
+K
+j=1
+Γ(α
+∗
+j
+)
+Γ
+P
+K
+j=1
+α
+∗
+j
+
+K
+Y
+j=1
+θ
+α
+j
+−α
+∗
+j
+dj
+!#"
+K
+Y
+j=1
+
+Γ(V η)
+Γ(η)
+V
+Γ(η
+∗
+)
+V
+Γ(V η
+∗
+)
+V
+Y
+t=1
+β
+η−η
+∗
+jt
+
+#
+,
+(2.2)
+where
+h
+∗
+= (η
+∗
+, α
+∗
+)
+.
+There are many extensions and variants of the LDA model described in Section 1—too many to
+even list them all here—and versions of (2.2) can be obtained for these models. This has to be done
+separately for each case.
+The features of the LDA model that make it possible to obtain a ratio of
+densities formula are that it is a hierarchical model, and at every stage the distributions are explicitly
+finite dimensional.
+For other models, a ratio of densities formula is obtainable routinely as long as
+these features exist:
+when they do,
+we have a closed-form expression for the prior distribution
+ν
+h
+(ψ)
+, and hence a closed-form expression for the ratio
+ν
+h
+(ψ)/ν
+h
+∗
+(ψ)
+.
+Unfortunately,
+a ratio of densities formula is not
+always available.
+A prominent
+example is
+the “Hierarchical
+Dirichlet
+Processes” model
+introduced in Teh et
+al.
+(2006),
+which effectively
+allows infinitely many topics but with finitely many realized in any given document.
+Very briefly,
+in this model, for word
+i
+in document
+d
+, there is an unobserved topic
+ψ
+di
+.
+The latent topic vector
+ψ
+d
+= (ψ
+d1
+, . . . , ψ
+dn
+d
+)
+has a complicated joint distribution with strength of dependence governed by
+a hyperparameter
+h
+1
+(the precision parameter of the Dirichlet process in the middle of the hierarchy),
+and the
+D
+vectors
+ψ
+1
+, . . . , ψ
+D
+also have a complicated dependence structure,
+with strength of
+dependence governed by a hyperparameter
+h
+2
+(the precision parameter of the Dirichlet
+process
+at the top of the hierarchy).
+The parameter vector for the model is
+ψ = (ψ
+1
+, . . . , ψ
+D
+)
+and the
+hyperparameter is
+h = (h
+1
+, h
+2
+)
+. Unfortunately, the joint (prior) distribution of
+ψ
+is not available in
+closed form, and our efforts to obtain a formula for
+ν
+h
+(ψ)/ν
+h
+∗
+(ψ)
+have been fruitless.
+Regarding Condition C2, we note that Griffiths and Steyvers have developed a “collapsed Gibbs
+sampler” (CGS) which runs over the vector
+z
+.
+The invariant distribution of the CGS is the con-
+ditional distribution of
+z
+given
+w
+.
+The CGS cannot be used directly,
+because to apply (2.1) we
+need a Markov chain on the triple
+(β, θ, z)
+,
+whose invariant distribution is
+ν
+h
+∗
+,w
+.
+In Section 4
+we obtain the conditional distribution of
+(β, θ)
+given
+z
+and
+w
+, and we show how to sample from
+this distribution.
+Therefore,
+given a Markov chain
+z
+(1)
+, . . . , z
+(n)
+generated via the CGS,
+we can
+form triples
+(z
+(1)
+, β
+(1)
+, θ
+(1)
+), . . . , (z
+(n)
+, β
+(n)
+, θ
+(n)
+)
+, and it is easy to see that this sequence forms
+a Markov chain with invariant distribution
+ν
+h
+∗
+,w
+.
+We will refer to this Markov chain as the Aug-
+mented Collapsed Gibbs Sampler, and use the acronym ACGS. In Section 4 we show that the ACGS
+is not only geometrically ergodic, but actually is uniformly ergodic.
+We also show how to sample
+from the conditional distribution of
+z
+given
+(β, θ)
+and
+w
+.
+This enables us to construct a two-cycle
+Gibbs sampler which runs on the pair
+(z, (β, θ))
+.
+We will refer to this chain as the Grouped Gibbs
+Sampler,
+and use the acronym GGS.
+Either the ACGS or the GGS may be used,
+and we see that
+Condition C2 is satisfied for the LDA model.
+The theorem below pertains to the LDA model and states that for this model,
+arg max
+h
+B
+n
+(h)
+converges to
+arg max
+h
+m(h)
+almost surely, and that
+arg max
+h
+B
+n
+(h)
+satisfies a CLT. The theorem
+also gives a procedure for constructing confidence sets for
+arg max
+h
+m(h)
+.
+The result is explicit.
+Therefore, given a desired level of precision, we can determine the Markov chain length needed to
+estimate
+arg max
+h
+m(h)
+with that level of precision.
+The proof of the theorem is in Section A.2
+of the Appendix.
+The theorem is valid under some natural and mild regularity conditions which
+7
+G
+EORGE AND
+D
+OSS
+are given in the Appendix.
+(We have relegated the regularity conditions and a discussion of their
+significance to the Appendix in order to avoid making the present section too technical.)
+Let
+p
+be
+the dimension of
+h
+. So
+p = 2
+if we take the distribution of the
+θ
+d
+’s to be a symmetric Dirichlet, and
+p = K + 1
+if we allow this distribution to be an arbitrary Dirichlet.
+Theorem 1 Let
+ψ
+1
+, ψ
+2
+, . . .
+be generated according to the Augmented Collapsed Gibbs Sampling
+algorithm described above,
+let
+B
+n
+(h)
+be the estimate on the left side of
+(2.1),
+and assume that
+Conditions A1–A6 in Section A.2 of the Appendix hold. Then:
+1.
+arg max
+h
+B
+n
+(h)
+a.s.
+−−→ arg max
+h
+m(h)
+.
+2.
+n
+1/2
+arg max
+h
+B
+n
+(h) − arg max
+h
+m(h)
+
+d
+→ N
+p
+(0, Σ)
+for some positive definite matrix
+Σ
+.
+3.
+Let
+b
+Σ
+n
+be the estimate of
+Σ
+obtained by the method of batching described in Section A.2 of the
+Appendix.
+Then
+b
+Σ
+n
+a.s.
+−−→ Σ
+,
+and in particular
+b
+Σ
+n
+is invertible for large
+n
+.
+Consequently,
+the
+ellipse
+E
+given by
+E =
+
+h : (arg max
+u
+B
+n
+(u) − h)
+>
+b
+Σ
+−1
+n
+(arg max
+u
+B
+n
+(u) − h) ≤ χ
+2
+p,.95
+/n
+is an asymptotic
+95%
+confidence set for
+arg max
+h
+m(h)
+. Here,
+χ
+2
+p,.95
+denotes the
+.95
+quantile of
+the chi-square distribution with
+p
+degrees of freedom.
+Remark 2 The mathematical development in the proof requires a stipulation (Condition A5) which
+says that
+the distinguished point
+h
+∗
+is not
+quite arbitrary:
+if
+we specify
+H = [η
+(L)
+, η
+(U )
+] ×
+[α
+(L)
+1
+, α
+(U )
+1
+] × · · · × [α
+(L)
+K
+, α
+(U )
+K
+]
+, then
+h
+∗
+must satisfy
+η
+∗
+< 2η
+(L)
+and
+α
+∗
+j
+< 2α
+(L)
+j
+, j = 1, . . . , K.
+(2.3)
+(Condition (2.3) is replaced by the obvious simpler analogue in the case of symmetric Dirichlets.)
+Thus, Condition A5 provides guidelines regarding the user-selected value of
+h
+∗
+.
+Remark 3 Part 3 suggests that one should not use arbitrary Dirichlets when
+K
+is large. The ellipse
+is centered at
+arg max
+u
+B
+n
+(u)
+and the lengths of its principal axes are governed by the term
+χ
+2
+p,.95
+.
+When
+p = K + 1
+and
+K
+is large,
+χ
+2
+K+1,.95
+is on the order of
+K + 1
+, and the confidence set for the
+empirical Bayes estimate of
+h
+is then huge. In other words, when we use an arbitrary Dirichlet, our
+estimates are very inaccurate.
+Actually, the problem that arises when
+dim(h) = K
+is not limited to our Monte Carlo scheme
+for estimating
+arg max
+h
+m(h)
+.
+There is a fundamental problem, which has to do with the fact that
+there is not enough information in the corpus to estimate a high-dimensional
+h
+.
+Suppose we view
+the
+D
+documents as being drawn from some idealized population generated according to the LDA
+model indexed by
+h
+0
+.
+Leaving aside computational issues,
+suppose we are able to calculate
+ˆ
+h =
+arg max
+h
+m(h)
+, the maximum likelihood estimate of
+h
+0
+, to infinite accuracy. Standard asymptotics
+give
+D
+1/2
+(
+ˆ
+h−h
+0
+)
+d
+→ N
+p
+(0, Ω
+−1
+)
+as
+D → ∞
+, where
+Ω
+is the Fisher information matrix. Therefore,
+a
+95%
+confidence set for
+h
+0
+is given by the ellipse
+
+h : (
+ˆ
+h − h)
+>
+Ω(
+ˆ
+h − h) ≤ χ
+2
+K+1,.95
+/D
+, and we
+see that for high-dimensional
+h
+,
+D
+must be very large for us to be able to accurately estimate
+h
+0
+.
+8
+H
+YPERPARAMETER
+S
+ELECTION IN
+LDA M
+ODEL
+2.2 Estimation of the Family of Posterior Expectations
+Let
+g
+be a function of
+ψ
+,
+and let
+I(h) =
+R
+g(ψ) dν
+h,w
+(ψ)
+be the posterior expectation of
+g(ψ)
+when the prior is
+ν
+h
+.
+Suppose that we are interested in estimating
+I(h)
+for all
+h ∈ H
+.
+Proceeding
+as we did for estimation of the family of ratios
+{m(h)/m(h
+∗
+), h ∈ H}
+,
+let
+h
+∗
+∈ H
+be fixed
+but arbitrary, and let
+ψ
+1
+, ψ
+2
+, . . .
+be an ergodic Markov chain with invariant distribution
+ν
+h∗,w
+.
+To
+estimate
+R
+g(ψ) dν
+h,w
+(ψ)
+, the obvious approach is to write
+Z
+g(ψ) dν
+h,w
+(ψ) =
+Z
+g(ψ)
+ν
+h,w
+(ψ)
+ν
+h
+∗
+,w
+(ψ)
+dν
+h
+∗
+,w
+(ψ)
+(2.4)
+and then use the importance sampling estimate
+(1/n)
+P
+n
+i=1
+g(ψ
+i
+)[ν
+h,w
+(ψ
+i
+)/ν
+h
+∗
+,w
+(ψ
+i
+)]
+.
+This will
+not work because we do not know the normalizing constants for
+ν
+h,w
+and
+ν
+h
+∗
+,w
+.
+This difficulty is
+handled by rewriting
+R
+g(ψ) dν
+h,w
+(ψ)
+, via (2.4), as
+Z
+g(ψ)
+`
+w
+(ψ)ν
+h
+(ψ)/m(h)
+`
+w
+(ψ)ν
+h
+∗
+(ψ)/m(h
+∗
+)
+dν
+h
+∗
+,w
+(ψ) =
+m(h
+∗
+)
+m(h)
+Z
+g(ψ)
+ν
+h
+(ψ)
+ν
+h
+∗
+(ψ)
+dν
+h
+∗
+,w
+(ψ)
+=
+m(h
+∗
+)
+m(h)
+R
+g(ψ)
+ν
+h
+(ψ)
+ν
+h
+∗
+(ψ)
+dν
+h
+∗
+,w
+(ψ)
+m(h
+∗
+)
+m(h)
+R
+ν
+h
+(ψ)
+ν
+h
+∗
+(ψ)
+dν
+h
+∗
+,w
+(ψ)
+(2.5a)
+=
+R
+g(ψ)
+ν
+h
+(ψ)
+ν
+h
+∗
+(ψ)
+dν
+h
+∗
+,w
+(ψ)
+R
+ν
+h
+(ψ)
+ν
+h
+∗
+(ψ)
+dν
+h
+∗
+,w
+(ψ)
+,
+(2.5b)
+where in (2.5a) we have used the fact that the integral in the denominator is just
+1
+, in order to cancel
+the unknown constant
+m(h
+∗
+)/m(h)
+in (2.5b). The idea to express
+R
+g(ψ) dν
+h,w
+(ψ)
+in this way was
+proposed in a different context by Hastings (1970).
+Expression (2.5b) is the ratio of two integrals
+with respect to
+ν
+h
+∗
+,w
+, each of which may be estimated from the sequence
+ψ
+1
+, ψ
+2
+, . . . , ψ
+n
+. We may
+estimate the numerator and the denominator by
+1
+n
+n
+X
+i=1
+g(ψ
+i
+)[ν
+h
+(ψ
+i
+)/ν
+h
+∗
+(ψ
+i
+)]
+and
+1
+n
+n
+X
+i=1
+[ν
+h
+(ψ
+i
+)/ν
+h
+∗
+(ψ
+i
+)]
+respectively. Thus, if we let
+w
+(h)
+i
+=
+ν
+h
+(ψ
+i
+)/ν
+h
+∗
+(ψ
+i
+)
+P
+n
+e=1
+[ν
+h
+(ψ
+e
+)/ν
+h
+∗
+(ψ
+e
+)]
+,
+then these are weights,
+and we see that
+the desired integral
+may be estimated by the weighted
+average
+ˆ
+I(h) =
+n
+X
+i=1
+g(ψ
+i
+)w
+(h)
+i
+.
+(2.6)
+The significance of this development is that it shows that with a single Markov chain run, we can
+estimate the entire family of posterior expectations
+{I(h), h ∈ H}
+. As was the case for the estimate
+on the left side of (2.1), the estimate (2.6) is remarkable in its simplicity. To compute it, we need to
+know only the ratio of the priors, and not the posteriors.
+9
+G
+EORGE AND
+D
+OSS
+2.3 Serial Tempering
+Unfortunately, (2.6) suffers a serious defect: unless
+h
+is close to
+h
+∗
+,
+ν
+h
+can be nearly singular with
+respect to
+ν
+h
+∗
+over the region where the
+ψ
+i
+’s are likely to be, resulting in a very unstable estimate.
+A similar remark applies to the estimate on the left side of (2.1). In other words, there is effectively
+a “radius” around
+h
+∗
+within which one can safely move. To state the problem more explicitly: there
+does not exist a single
+h
+∗
+for which the ratios
+ν
+h
+(ψ)/ν
+h
+∗
+(ψ)
+have small variance simultaneously
+for all
+h ∈ H
+.
+One way of dealing with this problem is to select
+J
+fixed points
+h
+1
+, . . . , h
+J
+∈ H
+that “cover”
+H
+in the sense that for every
+h ∈ H
+,
+ν
+h
+is “close to” at least one of
+ν
+h
+1
+, . . . , ν
+h
+J
+.
+We then replace
+ν
+h
+∗
+in the denominator by
+(1/J )
+P
+J
+j=1
+b
+j
+ν
+h
+j
+, for some suitable choice of positive
+constants
+b
+1
+, . . . , b
+J
+.
+Operating intuitively, we say that for any
+h ∈ H
+, because there exists at least
+one
+j
+for which
+ν
+h
+is close to
+ν
+h
+j
+, the variance of
+ν
+h
+(ψ)/[(1/J )
+P
+J
+j=1
+b
+j
+ν
+h
+j
+(ψ)]
+is small; hence the
+variance of
+ν
+h
+(ψ)/[(1/J )
+P
+J
+j=1
+b
+j
+ν
+h
+j
+(ψ)]
+is small simultaneously for all
+h ∈ H
+.
+Whereas for the
+estimates (2.1) and (2.6) we need a Markov chain with invariant distribution is
+ν
+h∗,w
+, in the present
+situation we need a Markov chain whose invariant distribution is the mixture
+(1/J )
+P
+J
+j=1
+ν
+h
+j
+,w
+.
+This approach may be implemented by a methodology called serial tempering (Marinari and Parisi
+(1992); Geyer and Thompson (1995)),
+originally developed for the purpose of improving mixing
+rates of certain Markov chains that are used to simulate physical systems in statistical mechanics.
+However,
+it can be used for a very different purpose,
+namely to increase the range of values over
+which importance sampling estimates have small variance.
+We now summarize this methodology,
+in the present context, and show how it can be used to produce estimates that are stable over a wide
+range of
+h
+values.
+Our explanations are detailed,
+because the material is not trivial and because
+we wish to deal with estimates of both marginal likelihood and posterior expectations.
+The reader
+who is not interested in the detailed explanations can skip the rest of this subsection with no loss
+regarding understanding the rest of the material in this paper, and simply regard serial tempering as
+a black box that produces estimates of the marginal likelihood (up to a constant) and of posterior
+expectations (cf. (2.1) and (2.6)) that are stable over a wide
+h
+-region.
+To simplify the discussion, suppose that in line
+2
+of the LDA model we take
+α = (α, . . . , α)
+,
+i.e.
+Dir
+K
+(α)
+is a symmetric Dirichlet, so that
+H
+is effectively two-dimensional, and suppose that we
+take
+H
+to be a bounded set of the form
+H = [η
+L
+, η
+U
+] × [α
+L
+, α
+U
+]
+. Our goal is to generate a Markov
+chain with invariant distribution
+(1/J )
+P
+J
+j=1
+ν
+h
+j
+,w
+.
+The updates will sample different components
+of this mixture,
+with jumps from one component to another.
+We now describe this carefully.
+Let
+Ψ
+denote the state space for
+ψ
+.
+Recall that
+ψ
+has some continuous components and some discrete
+components.
+To proceed rigorously, we will take
+ν
+h
+and
+ν
+h,w
+to all be densities with respect to a
+measure
+µ
+on
+Ψ
+.
+Define
+L = {1, . . . , J }
+, and for
+j ∈ L
+, suppose that
+Φ
+j
+is a Markov transition
+function on
+Ψ
+with invariant distribution equal to the posterior
+ν
+h
+j
+,w
+. On occasion we will write
+ν
+j
+instead of
+ν
+h
+j
+. This notation is somewhat inconsistent, but we use it in order to avoid having double
+and triple subscripts. We have
+ν
+h,w
+= `
+w
+ν
+h
+/m(h)
+and
+ν
+h
+j
+,w
+= `
+w
+ν
+j
+/m(h
+j
+), j = 1, . . . , J
+.
+Serial tempering involves considering the state space
+L × Ψ
+, and forming the family of distri-
+butions
+{P
+ζ
+, ζ ∈ R
+J
+}
+on
+L × Ψ
+with densities
+p
+ζ
+(j, ψ) ∝ `
+w
+(ψ)ν
+j
+(ψ)/ζ
+j
+.
+(2.7)
+(To be pedantic, these are densities with respect to
+µ × σ
+, where
+σ
+is counting measure on
+L
+.) The
+vector
+ζ
+is a tuning parameter, which we discuss shortly.
+For any value of
+ζ
+, by standard methods
+involving the Metropolis-Hastings algorithm, we can generate a Markov chain having invariant dis-
+10
+H
+YPERPARAMETER
+S
+ELECTION IN
+LDA M
+ODEL
+tribution equal to (2.7).
+If we take
+ζ
+j
+= am(h
+j
+)
+for
+j = 1, . . . , J
+, where
+a
+is an arbitrary constant,
+then the
+ψ
+-marginal of
+p
+ζ
+is exactly
+(1/J )
+P
+J
+j=1
+ν
+h
+j
+,w
+, so we can generate a Markov chain with
+the desired invariant distribution.
+Unfortunately,
+the values
+m(h
+1
+), . . . , m(h
+J
+)
+are unknown (our
+objective is precisely to estimate them). It will turn out that for any value of
+ζ
+, a Markov chain with
+invariant distribution (2.7) enables us to estimate the vector
+(m(h
+1
+), . . . , m(h
+j
+))
+up to a constant,
+and the closer
+ζ
+is to a constant multiple of
+(m(h
+1
+), . . . , m(h
+j
+))
+,
+the better is our estimate.
+This
+gives rise to a natural
+iterative procedure for estimating
+(m(h
+1
+), . . . , m(h
+j
+))
+.
+We now give the
+details.
+Let
+Γ(j, ·)
+be a Markov transition function on
+L
+. In our context, we would typically take
+Γ(j, ·)
+to be the uniform distribution on
+N
+j
+, where
+N
+j
+is a set consisting of the indices of the
+h
+l
+’s which
+are close to
+h
+j
+.
+Serial tempering is a Markov chain on
+L × Ψ
+which can be viewed as a two-block
+Metropolis-Hastings (i.e. Metropolis-within-Gibbs) algorithm, and is run as follows.
+Suppose that
+the current state of the chain is
+(L
+i−1
+, ψ
+i−1
+)
+.
+•
+A new value
+j ∼ Γ(L
+i−1
+, ·)
+is proposed. We set
+L
+i
+= j
+with the Metropolis probability
+ρ = min
+
+1,
+Γ(j, L
+i−1
+)
+Γ(L
+i−1
+, j)
+ν
+j
+(ψ
+i−1
+)/ζ
+j
+ν
+L
+i−1
+(ψ
+i−1
+)/ζ
+L
+i−1
+
+,
+(2.8)
+and with the remaining probability we set
+L
+i
+= L
+i−1
+.
+•
+Generate
+ψ
+i
+∼ Φ
+L
+i
+(ψ
+i−1
+, ·)
+.
+By standard arguments,
+the density (2.7) is an invariant density for the serial tempering chain.
+A
+key observation is that the
+ψ
+-marginal density of
+p
+ζ
+is
+f
+ζ
+(ψ) = (1/c
+ζ
+)
+J
+X
+j=1
+`
+w
+(ψ)ν
+j
+(ψ)/ζ
+j
+,
+where
+c
+ζ
+=
+J
+X
+j=1
+m(h
+j
+)/ζ
+j
+.
+(2.9)
+Suppose that
+(L
+1
+, ψ
+1
+), (L
+2
+, ψ
+2
+), . . .
+is a serial tempering chain. To estimate
+m(h)
+, consider
+c
+M
+ζ
+(h) =
+1
+n
+n
+X
+i=1
+ν
+h
+(ψ
+i
+)
+(1/J )
+P
+J
+j=1
+ν
+j
+(ψ
+i
+)/ζ
+j
+.
+(2.10)
+Note that this estimate depends only on the
+ψ
+-part of the chain. Assuming that we have established
+that the chain is ergodic, we have
+c
+M
+ζ
+(h)
+a.s.
+−−→
+Z
+ν
+h
+(ψ)
+(1/J )
+P
+J
+j=1
+ν
+j
+(ψ)/ζ
+j
+P
+J
+j=1
+`
+w
+(ψ)ν
+j
+(ψ)/ζ
+j
+c
+ζ
+dµ(ψ)
+=
+Z
+`
+w
+(ψ)ν
+h
+(ψ)
+c
+ζ
+/J
+dµ(ψ)
+=
+m(h)
+c
+ζ
+/J
+.
+(2.11)
+This means that
+for
+any
+ζ
+,
+the family
+
+c
+M
+ζ
+(h), h ∈ H
+can be used to estimate the family
+{m(h), h ∈ H}
+, up to a single multiplicative constant.
+11
+G
+EORGE AND
+D
+OSS
+To estimate the family of integrals
+
+R
+g(ψ) dν
+h,w
+(ψ), h ∈ H
+, we proceed as follows. Let
+b
+U
+ζ
+(h) =
+1
+n
+n
+X
+i=1
+g(ψ
+i
+)ν
+h
+(ψ
+i
+)
+(1/J )
+P
+J
+j=1
+ν
+j
+(ψ
+i
+)/ζ
+j
+.
+(2.12)
+By ergodicity we have
+b
+U
+ζ
+(h)
+a.s.
+−−→
+Z
+g(ψ)ν
+h
+(ψ)
+(1/J )
+P
+J
+j=1
+ν
+j
+(ψ)/ζ
+j
+P
+J
+j=1
+`
+w
+(ψ)ν
+j
+(ψ)/ζ
+j
+c
+ζ
+dµ(ψ)
+=
+Z
+`
+w
+(ψ)g(ψ)ν
+h
+(ψ)
+c
+ζ
+/J
+dµ(ψ)
+=
+m(h)
+c
+ζ
+/J
+Z
+g(ψ) dν
+h,w
+(ψ).
+(2.13)
+Combining the convergence statements (2.13) and (2.11), we see that
+ˆ
+I
+st
+ζ
+(h)
+:
+=
+b
+U
+ζ
+(h)
+c
+M
+ζ
+(h)
+a.s.
+−−→
+Z
+g(ψ) dν
+h,w
+(ψ).
+(2.14)
+Suppose that for some constant
+a
+, we have
+(ζ
+1
+, . . . , ζ
+J
+) = a(m(h
+1
+), . . . , m(h
+J
+)).
+(2.15)
+Then
+c
+ζ
+= J/a
+,
+and as noted earlier,
+f
+ζ
+(ψ) = (1/J)
+P
+J
+j=1
+ν
+h
+j
+,w
+(ψ)
+,
+i.e.
+the
+ψ
+-marginal of
+p
+ζ
+(see (2.9)) gives equal
+weight
+to each of the component
+distributions in the mixture.
+(Express-
+ing this slightly differently,
+if (2.15) is true,
+then the invariant density (2.7) becomes
+p
+ζ
+(j, ψ) =
+(1/J )ν
+h
+j
+,w
+(ψ)
+, so the
+L
+-marginal distribution of
+p
+ζ
+gives mass
+(1/J )
+to each point in
+L
+.) There-
+fore,
+for large
+n
+,
+the proportions of time spent
+in the
+J
+components of the mixture are about
+the same,
+a feature which is essential
+if serial
+tempering is to work well.
+In practice,
+we can-
+not arrange for (2.15) to be true,
+because
+m(h
+1
+), . . . , m(h
+J
+)
+are unknown.
+However,
+the vector
+(m(h
+1
+), . . . , m(h
+J
+))
+may be estimated (up to a multiplicative constant) iteratively as follows. If the
+current value is
+ζ
+(t)
+, then set
+ζ
+(t+1)
+1
+, . . . , ζ
+(t+1)
+J
+
+=
+c
+M
+ζ
+(t)
+(h
+1
+), . . . ,
+c
+M
+ζ
+(t)
+(h
+J
+)
+
+.
+(2.16)
+From the convergence result (2.11), we get
+c
+M
+ζ
+(t)
+(h
+j
+)
+a.s.
+−−→ m(h
+j
+)/a
+ζ
+(t)
+, where
+a
+ζ
+(t)
+is a constant,
+i.e. (2.15) is nearly satisfied by
+ζ
+(t+1)
+1
+, . . . , ζ
+(t+1)
+J
+
+. To determine the number of iterations needed,
+at each iteration we record the proportions of time spent in the
+J
+different components of the mix-
+ture, i.e. the vector
+(1/n)
+P
+n
+i=1
+I(L
+i
+= 1), . . . , (1/n)
+P
+n
+i=1
+I(L
+i
+= J)
+
+, and we stop the iteration
+when this vector is nearly uniform.
+In all our examples,
+three or four iterations were sufficient.
+Pseudocode is given in Algorithm 1.
+To sum up, we estimate the family of marginal likelihoods (up to a constant) and the family of
+posterior expectations as follows. First, we obtain the vector of tuning parameters
+ζ
+via the iterative
+scheme given by (2.16).
+To estimate the family of marginal likelihoods (up to a constant) we use
+12
+H
+YPERPARAMETER
+S
+ELECTION IN
+LDA M
+ODEL
+Algorithm 1: Serial tempering. See the discussion in Sec. 2.3 and Appendices A.1 and 4.
+Data: Observed words
+w
+Result: A Markov chain on
+L × Ψ
+1
+specify
+h
+1
+, . . . , h
+J
+∈ H
+;
+2
+initialize
+ζ
+(1)
+1
+, . . . , ζ
+(1)
+J
+;
+3
+initialize
+ψ
+0
+= (β
+(0)
+, θ
+(0)
+, z
+(0)
+)
+,
+L
+0
+;
+4
+compute count statistics
+n
+dk
+and
+m
+dkv
+, for
+d = 1, . . . , D, k = 1, . . . , K, v = 1, . . . , V
+;
+5
+for tuning iteration
+t = 1, . . .
+do
+6
+for MCMC iteration
+i = 1, . . .
+do
+// The Metropolis-Hastings update
+// Set
+L
+i
+via the probability
+ρ
+given by
+(2.8)
+7
+propose index
+j ∼ Γ(L
+i−1
+, ·)
+;
+8
+sample
+U ∼
+Uniform
+(0, 1)
+;
+9
+if
+U < ρ
+then
+10
+set
+L
+i
+= j
+;
+11
+else
+12
+set
+L
+i
+= L
+i−1
+;
+// Generate
+ψ
+i
+= (β
+(i)
+, θ
+(i)
+, z
+(i)
+) ∼ Φ
+L
+i
+(ψ
+i−1
+, ·)
+13
+for document
+d = 1, . . . , D
+do
+14
+for word
+w
+dr
+,
+r = 1, . . . , n
+d
+do
+15
+sample topic index
+z
+(i)
+dr
+via the CGS (Griffiths and Steyvers, 2004);
+16
+update count statistics
+n
+dk
+and
+m
+dkv
+according to
+z
+(i)
+dr
+and
+w
+dr
+;
+17
+for topic
+k = 1, . . . , K
+do
+18
+sample topic
+β
+(i)
+k
+via (4.5);
+19
+for document
+d = 1, . . . , D
+do
+20
+sample the distribution on topics
+θ
+(i)
+d
+via (4.5);
+// Update tuning parameters
+ζ
+1
+, . . . , ζ
+J
+21
+compute the estimates
+c
+M
+ζ
+(t)
+(h
+1
+), . . . ,
+c
+M
+ζ
+(t)
+(h
+J
+)
+via (2.10) using
+ψ
+i
+and
+ζ
+(t)
+1
+, . . . , ζ
+(t)
+J
+;
+22
+set
+ζ
+(t+1)
+1
+, . . . , ζ
+(t+1)
+J
+
+=
+c
+M
+ζ
+(t)
+(h
+1
+), . . . ,
+c
+M
+ζ
+(t)
+(h
+J
+)
+
+;
+c
+M
+ζ
+(h)
+defined in (2.10),
+and to estimate the family of posterior expectations we use
+ˆ
+I
+st
+ζ
+(h)
+=
+b
+U
+ζ
+(h)
+
+c
+M
+ζ
+(h)
+(see (2.12) and (2.10)).
+We point out that it is possible to estimate the family of marginal likelihoods (up to a constant)
+by
+f
+M
+ζ
+(h) =
+1
+n
+n
+X
+i=1
+ν
+h
+(ψ
+i
+)
+ν
+L
+i
+(ψ
+i
+)/ζ
+L
+i
+.
+(2.17)
+13
+G
+EORGE AND
+D
+OSS
+Note that
+f
+M
+ζ
+(h)
+uses the sequence of pairs
+(L
+1
+, ψ
+1
+), (L
+2
+, ψ
+2
+), . . .
+,
+and not
+just
+the sequence
+ψ
+1
+, ψ
+2
+, . . .
+. To see why (2.17) is a valid estimator, observe that by ergodicity we have
+f
+M
+ζ
+(h)
+a.s.
+−−→
+ZZ
+ν
+h
+(ψ)
+ν
+L
+(ψ)/ζ
+L
+·
+
+1
+c
+ζ
+`
+w
+(ψ)ν
+L
+(ψ)/ζ
+L
+
+dµ(ψ) dσ(L)
+=
+ZZ
+m(h)
+c
+ζ
+ν
+h,w
+(ψ) dµ(ψ) dσ(L)
+= J
+m(h)
+c
+ζ
+.
+(2.18)
+(Note that the limit in (2.18) is the same as the limit in (2.11).)
+Similarly,
+we may estimate the
+integral
+R
+g(ψ) dν
+h,w
+(ψ)
+by the ratio
+˜
+I
+st
+ζ
+(h) =
+n
+X
+i=1
+g(ψ
+i
+)ν
+h
+(ψ
+i
+)
+ν
+L
+i
+(ψ
+i
+)/ζ
+L
+i
+
+n
+X
+i=1
+ν
+h
+(ψ
+i
+)
+ν
+L
+i
+(ψ
+i
+)/ζ
+L
+i
+.
+The estimate
+˜
+I
+st
+ζ
+(h)
+is also based on the pairs
+(L
+1
+, ψ
+1
+), (L
+2
+, ψ
+2
+), . . .
+,
+and it is easy to show that
+˜
+I
+st
+ζ
+(h)
+a.s.
+−−→
+R
+g(ψ) dν
+h,w
+(ψ)
+.
+The estimates
+f
+M
+ζ
+(h)
+and
+˜
+I
+st
+ζ
+(h)
+are the ones that are used by Marinari and Parisi (1992) and
+Geyer and Thompson (1995), but
+c
+M
+ζ
+(h)
+and
+ˆ
+I
+st
+ζ
+(h)
+appear to significantly outperform
+f
+M
+ζ
+(h)
+and
+˜
+I
+st
+ζ
+(h)
+in terms of accuracy. We demonstrate this in Section 2.4.
+Remark 4 Theorem 1 continues to be true when we use the serial tempering chain, as opposed to
+the simple ACGS.
+The needed changes are that in the statement of the theorem
+B
+n
+is replaced with
+c
+M
+ζ
+,
+and Condition A5 is replaced by the following.
+If
+h
+(1)
+, . . . , h
+(J )
+are the grid points used in
+running the serial tempering chain, then the stipulation on
+h
+∗
+given by (2.3) is satisfied by
+h
+(j)
+for
+at least one index
+j
+. See the proof of Theorem 1 in the Appendix.
+Globally-Valid Confidence Bands for
+{I(h), h ∈ H}
+Based on Serial Tempering
+Here we
+explain how to form confidence bands for the family
+{I(h), h ∈ H}
+based on
+{
+ˆ
+I
+st
+ζ
+(h), h ∈ H}
+.
+Our arguments are informal,
+and we focus primarily on the algorithm for constructing the bands.
+The proof that the method works is given in Section A.3 of the Appendix.
+We will write
+ˆ
+I
+instead
+of
+ˆ
+I
+st
+ζ
+to lighten the notation.
+Suppose that
+sup
+h∈H
+n
+1/2
+|
+ˆ
+I(h) − I(h)|
+has a limiting distribution as
+n → ∞
+(in the Appendix we explain why such a result is true), and suppose that we know the
+.95
+quantile of this distribution, i.e. we know the value
+c
+.95
+such that
+P
+
+sup
+h∈H
+n
+1/2
+|
+ˆ
+I(h) − I(h)| ≤ c
+.95
+
+= .95.
+(2.19)
+In this case we may rewrite (2.19) as
+P
+
+ˆ
+I(h) − c
+.95
+/n
+1/2
+≤ I(h) ≤
+ˆ
+I(h) + c
+.95
+/n
+1/2
+for all
+h ∈ H
+
+= .95,
+meaning that the band
+ˆ
+I(h) ± c
+.95
+/n
+1/2
+is a globally-valid confidence band for
+{I(h), h ∈ H}
+. (In
+contrast, for a pointwise band
+(L(h), U (h)), h ∈ H
+, we can only make the statement
+P L(h) ≤
+14
+H
+YPERPARAMETER
+S
+ELECTION IN
+LDA M
+ODEL
+I(h) ≤ U (h)
+
+= .95
+for each
+h ∈ H
+, and we cannot make any statement regarding simultaneous
+coverage.)
+The difficulty is in obtaining
+c
+.95
+, and we now show how this quantity can be estimated through
+the method of batching, which is described as follows.
+The sequence
+ψ
+1
+, . . . , ψ
+n
+is broken up into
+J
+consecutive pieces of equal lengths called batches. For
+j = 1, . . . , J
+, let
+ˆ
+I
+j
+(h)
+be the estimate of
+I(h)
+produced by batch
+j
+. Now the
+ˆ
+I
+j
+(h)
+’s are each formed from a sample of size
+n/J
+. Informally,
+if
+n
+is large and
+n/J
+is also large,
+then for
+j
+= 1, . . . , J
+,
+sup
+h∈H
+(n/J)
+1/2
+|
+ˆ
+I
+j
+(h) − I(h)|
+and
+sup
+h∈H
+n
+1/2
+|
+ˆ
+I(h) − I(h)|
+have approximately the same distribution.
+Therefore,
+to estimate
+c
+.95
+,
+we let
+S
+j
+= sup
+h∈H
+(n/J)
+1/2
+|
+ˆ
+I
+j
+(h) − I(h)|
+, and as our estimate of
+c
+.95
+we use the
+95
+th
+percentile
+of the sequence
+S
+1
+, . . . , S
+J
+.
+Unfortunately,
+the
+S
+j
+’s are not available,
+because they involve
+I(h)
+,
+which is unknown.
+So instead we use
+S
+j
+= sup
+h∈H
+(n/J)
+1/2
+|
+ˆ
+I
+j
+(h) −
+ˆ
+I(h)|
+,
+in which we have
+substituted
+ˆ
+I(h)
+for
+I(h)
+.
+To conclude, let
+S
+[1]
+≤ S
+[2]
+≤ · · ·
+≤ S
+[J ]
+denote the ordered values of
+the sequence
+S
+1
+, . . . , S
+J
+.
+We estimate
+c
+.95
+via
+S
+[.95J ]
+, and our
+95%
+globally-valid confidence band
+for
+{I(h), h ∈ H}
+is
+
+ˆ
+I(h) ± S
+[.95J ]
+/n
+1/2
+, h ∈ H
+. In the Appendix we show that the probability
+that the entire function
+{I(h), h ∈ H}
+lies inside the band converges to
+.95
+as
+n → ∞
+.
+There are
+conditions on
+J
+:
+we need that
+J → ∞
+and
+n/J → ∞
+; a good choice is
+J = n
+1/2
+.
+The Markov
+chain length
+n
+should be chosen such that the band is acceptably narrow.
+Iterative Scheme for Choosing the Grid
+The performance of serial tempering depends crucially
+on the choice of grid points
+h
+1
+, . . . , h
+J
+, and it is essential that
+arg max
+h
+m(h)
+be close to at least
+one of the grid points,
+for the reason discussed at
+the beginning of this section.
+This creates a
+circular problem:
+the ideal grid is one that is centered or nearly centered at
+arg max
+h
+m(h)
+,
+but
+arg max
+h
+m(h)
+is unknown. The problem is compounded by the fact that the grid has to be “tight,”
+i.e. the points
+h
+1
+, . . . , h
+J
+need to be close together.
+This is because when the corpus is large, if
+h
+j
+and
+h
+j
+0
+are not close, then for
+j 6= j
+0
+,
+ν
+h
+j
+and
+ν
+h
+j
+0
+are nearly singular (each is a product of a large
+number of terms—see (2.2)). In the serial tempering chain, this near singularity causes the proposal
+j ∼ Γ(L
+i−1
+, ·)
+(see (2.8)) to have high probability of being rejected,
+and the chain does not mix
+well. To deal with this problem, we use an iterative scheme which proceeds as follows. We initialize
+the experiment with a fixed
+h
+(0)
+(for example
+h
+(0)
+= (1, 1)
+) and a subgrid that “covers”
+h
+(0)
+(for
+example a subgrid with convex hull equal to
+[1/2, 2] × [1/2, 2]
+).
+We then subsample a small set of
+documents from the corpus and run the serial tempering chain to find the estimate of the maximizer
+of the marginal likelihood for the subsampled corpus, using the current grid setting.
+We iterate:
+at
+iteration
+t
+, we set
+h
+(t)
+to be the estimate of the maximizer obtained from the previous iteration, and
+select a subgrid that covers
+h
+(t)
+. As the iteration number
+t
+increases, the grid is made more narrow,
+and the number of subsampled documents is increased.
+This scheme works because in the early
+iterations the number of documents is small, so the near-singularity problem does not arise, and we
+can use a wide grid.
+In our experience,
+decreasing the dimensions of the
+α
+- and
+η
+-grids by
+10%
+and increasing the number of subsampled documents by
+10%
+at each iteration works well. It is very
+interesting to note that convergence may occur before the subsample size is equal to the number
+of documents in the corpus, in which case there is no need to ever deal with the entire corpus, and
+in fact this is typically what happens, unless the corpus is small.
+(By “convergence” we mean that
+h
+(t)
+is nearly the same as the values from the previous iterations.) Of course, for small corpora the
+near-singularity problem does not arise, and the iterative scheme can be skipped entirely.
+To illustrate the scheme,
+we generated a corpus according to the LDA model with
+D = 10
+5
+,
+K = 50
+,
+V = 500
+,
+n
+d
+= 80
+for all
+d
+,
+and
+h
+true
+= (η, α) = (.8, .2)
+,
+and ran the scheme using
+15
+G
+EORGE AND
+D
+OSS
+Markov chains of length
+n = 50,000
+and grids of size
+J = 100
+. As will be clear shortly, our results
+would have been identical if
+D
+had been any number bigger than
+10
+5
+. Figure 2 shows the marginal
+likelihood surfaces as the iterations progress. At iteration 1, the
+α
+-value of the maximizer is outside
+the convex hull of the grid, and at the second iteration, the grid is centered at that point.
+Figure 3
+gives precise information on the number of subsampled documents (left panel), and the lower and
+upper endpoints of the
+α
+- and
+η
+-values used in the grids,
+as the iterations progress (right panel).
+The right panel also gives
+α
+- and
+η
+-values of the estimate of the argmax as the iterations progress.
+As can be seen from Figure 3, the scheme has effectively converged after about
+18
+iterations, and at
+convergence the number of subsampled documents is only
+200
+.
+alpha
+0.8
+0.9
+1.0
+1.1
+1.2
+eta
+0.8
+0.9
+1.0
+1.1
+1.2
+Estimate of m(h)
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+(a) Iteration
+1
+alpha
+0.7
+0.8
+0.9
+1.0
+eta
+0.7
+0.8
+0.9
+1.0
+1.1
+Estimate of m(h)
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+(b) Iteration
+2
+alpha
+0.4
+0.5
+0.6
+0.7
+eta
+0.7
+0.8
+0.9
+1.0
+Estimate of m(h)
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+(c) Iteration
+4
+alpha
+0.2
+0.3
+0.4
+0.5
+eta
+0.6
+0.7
+0.8
+0.9
+Estimate of m(h)
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+(d) Iteration
+8
+alpha
+0.1
+0.2
+0.3
+0.4
+0.5
+eta
+0.9
+1.0
+1.1
+Estimate of m(h)
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+(e) Iteration
+12
+alpha
+0.1
+0.2
+0.3
+eta
+1.00
+1.05
+1.10
+1.15
+1.20
+Estimate of m(h)
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+(f) Iteration
+18
+Figure 2:
+Values of
+c
+M(h)
+for iterations
+1
+,
+2
+,
+4
+,
+8
+,
+12
+,
+18
+using a synthetic corpus generated accord-
+ing to the LDA model with
+K = 20
+,
+n
+d
+= 100
+for each
+d
+,
+V = 100
+, and
+h
+true
+= (.8, .2)
+.
+Serial tempering is a method for enhancing the simple estimator (2.1) which works well when
+dim(h)
+is low.
+The method does not scale well when
+dim(h)
+increases.
+In Section 6 we discuss
+this issue and present an idea on a different way to enhance (2.1) when
+h
+is high dimensional.
+2.4 Illustration on a Wikipedia Corpus
+In Section 1 we mentioned that the hyperparameter
+h
+has a strong effect on the prior distribution of
+the parameters in the model.
+Here we show empirically that it has a strong impact on the posterior
+distribution, and hence on inference based on this posterior distribution. To this end, we considered
+a corpus of articles from Wikipedia, constructed as follows.
+When a Wikipedia article is created, it
+16
+H
+YPERPARAMETER
+S
+ELECTION IN
+LDA M
+ODEL
+50
+100
+150
+200
+5
+10
+15
+20
+Iteration number
+Number of documents
+(a) Number of documents
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+1.1
+1.2
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+Iteration number
+Values
+alpha−grid−end
+alpha−grid−start
+alpha−hat
+eta−grid−end
+eta−grid−start
+eta−hat
+(b) Grid configurations and
+α
+- and
+η
+-values of estimate of the argmax
+Figure 3:
+Iterations in the serial tempering scheme used on the synthetic corpus in Figure 2:
+left
+panel gives the number of documents subsampled at each iteration; right panel gives the
+specifications for the grid at each iteration.
+is typically tagged to one or more categories, one of which is the “primary category.” The corpus
+consists of
+8
+documents from the category Leopardus,
+8
+from the category Lynx, and
+7
+from Prion-
+ailurus. There are
+303
+words in the vocabulary, and the total number of words in the corpus is
+7788
+.
+We took
+K = 3
+, so implicitly we envisage a topic being induced by each of the three categories.
+The corpus is quite small, but it is challenging to analyze because the topics are very close to each
+other, so in the posterior distribution there is a great deal of uncertainty regarding the latent topic
+indicator variables, and this is why we chose this data set.
+(In our analysis of this corpus, we treat
+the articles as unlabeled, i.e. we act as if for each article we don’t know the category from which
+the article is taken.)
+As mentioned in Section 1, two quantities of interest are the posterior proba-
+bility that the topic indicator variables for documents
+i
+and
+j
+are close, i.e.
+ν
+h,w
+(kθ
+i
+− θ
+j
+k ≤ )
+,
+and the posterior expectation of the distance between topics
+i
+and
+j
+, which is given by the integral
+R
+kβ
+i
+− β
+j
+k dν
+h,w
+(ψ)
+. Figure 4 gives plots of estimates of these posterior probabilities and expec-
+tations, as
+h
+varies, together with
+95%
+globally-valid confidence sets.
+The plots clearly show that
+these posterior probabilities and expectations vary considerably with
+h
+.
+Each plot
+was constructed from a serial
+tempering chain,
+using the methodology described
+in Section 2.3.
+Details regarding the chain and the plots are as follows.
+We took the sequence
+h
+1
+, . . . , h
+J
+to consist
+of an
+11 × 20
+grid of
+220
+evenly-spaced values over the region
+(η, α)
+∈
+[.6, 1.1] × [.15, 1.1]
+.
+For each hyperparameter value
+h
+j
+(
+j = 1, . . . , 220
+),
+we took
+Φ
+j
+to be the
+Markov transition function of the Augmented Collapsed Gibbs Sampler alluded to earlier and de-
+scribed in detail
+in Section 4 (in all
+our experiments we used the Augmented Collapsed Gibbs
+Sampler, but the Grouped Gibbs Sampler gives results which are very similar). We took the Markov
+transition function
+K(j, ·)
+on
+L = {1, . . . , 220}
+to be the uniform distribution on
+N
+j
+where
+N
+j
+is
+the subset of
+L
+consisting of the indices of the
+h
+l
+’s that are neighbors of the point
+h
+j
+.
+(An interior
+point has eight neighbors, an edge point has five, and a corner point has three.)
+1
+1. Software for implementation of our algorithms as well as datasets we use are available as an R package at
+https:
+//github.com/clintpgeorge/ldamcmc
+17
+G
+EORGE AND
+D
+OSS
+0.2
+0.4
+0.6
+0.8
+1.0
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+1.1
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+a
+h
+Est. of 
+n
+h,w
+(||
+q
+7
+- q
+8
+||
+2
+£
+.07)
+0.2
+0.4
+0.6
+0.8
+1.0
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+1.1
+0.08
+0.09
+0.10
+0.11
+a
+h
+Est. of 
+ó
+õ
+||
+b
+1
+- b
+2
+||
+2
+d
+n
+h,w
+(
+y
+)
+Figure 4:
+Variability of posterior probabilities and expectations for the Cats corpus from Wikipedia.
+Left panel: estimate of the posterior probability that documents
+7
+and
+8
+have essentially
+the same topics, in the sense that
+kθ
+7
+− θ
+8
+k ≤ .07
+, as
+h
+varies.
+Right panel: estimate of
+the posterior expectation of the (Euclidean, i.e.
+L
+2
+) distance between topics
+1
+and
+2
+as
+h
+varies.
+In Section 2.3, we stated that
+c
+M
+ζ
+(h)
+and
+ˆ
+I
+st
+ζ
+(h)
+appear to significantly outperform
+f
+M
+ζ
+(h)
+and
+˜
+I
+st
+ζ
+(h)
+in terms of accuracy.
+We now provide some evidence for this,
+and we will deal with the
+estimates of
+I(h)
+(a comparison of
+c
+M
+ζ
+(h)
+and
+f
+M
+ζ
+(h)
+is given in George (2015)). We considered the
+Wikipedia Cats corpus described above, and we took
+I(h) = ν
+h,w
+(kθ
+7
+−θ
+8
+k ≤ .07)
+. We calculated
+ˆ
+I
+st
+ζ
+(h)
+twice, using two different seeds, and also calculated
+˜
+I
+st
+ζ
+(h)
+twice, using two different seeds,
+in every case using the same
+h
+-range that was used in Figure 4. The four surfaces were constructed
+via four independent serial tempering experiments,
+each involving two iterations (each of length
+50,000
+after a short burn-in period) to form the tuning parameter
+ζ
+, which was given initial value
+ζ
+(0)
+= ζ
+(0)
+1
+, . . . , ζ
+(0)
+220
+
+= (1, . . . , 1)
+, and one final iteration (of length
+100,000
+) to form the estimate
+of
+I(h)
+. Figure 5(a) shows the two estimates
+ˆ
+I
+st
+ζ
+(h)
+, and Figure 5(b) shows the two estimates
+˜
+I
+st
+ζ
+(h)
+.
+The figures show that the two independent estimates
+ˆ
+I
+st
+ζ
+(h)
+are close to each other, whereas the two
+independent estimates
+˜
+I
+st
+ζ
+(h)
+are not.
+Although the variability of
+ˆ
+I
+st
+ζ
+(h)
+is significantly smaller than that of
+˜
+I
+st
+ζ
+(h)
+, the figures perhaps
+don’t show this very clearly because a visual comparison of two surfaces is not easy. Therefore, we
+extracted two one-dimensional slices from each panel in Figure 5, which we used to create Figure 6.
+The figure shows the values of the two versions of
+ˆ
+I
+st
+ζ
+(η, α)
+and the two versions of
+˜
+I
+st
+ζ
+(η, α)
+when
+η
+is fixed at
+.70
+(two left panels); and it shows these plots when
+η
+is fixed at
+1.00
+(two right panels).
+The superiority of
+ˆ
+I
+st
+ζ
+over
+˜
+I
+st
+ζ
+is striking.
+We mention that,
+ostensibly,
+c
+M
+ζ
+(h)
+and
+ˆ
+I
+st
+ζ
+(h)
+require
+more computation, but the quantities
+(1/J )
+P
+J
+j=1
+ν
+j
+(ψ
+i
+)/ζ
+j
+, i = 1, . . . , n
+are calculated once, and
+stored. Doing this essentially eliminates the increased computing cost.
+18
+H
+YPERPARAMETER
+S
+ELECTION IN
+LDA M
+ODEL
+0.2
+0.4
+0.6
+0.8
+1.0
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+1.1
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+a
+h
+I
+z
+st
+(
+h
+, 
+a
+)
+(a)
+ˆ
+I
+st
+ζ
+(η, α)
+0.2
+0.4
+0.6
+0.8
+1.0
+0.5
+0.6
+0.7
+0.8
+0.9
+1.0
+1.1
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+a
+h
+I
+z
+st
+(
+h
+, 
+a
+)
+(b)
+˜
+I
+st
+ζ
+(η, α)
+Figure 5:
+Comparison of the variability of
+ˆ
+I
+st
+ζ
+and
+˜
+I
+st
+ζ
+.
+Left panel shows two independent estimates
+of
+I(η, α) = ν
+h,w
+(kθ
+7
+− θ
+8
+k ≤ .07)
+using
+ˆ
+I
+st
+ζ
+(η, α)
+. Right panel uses
+˜
+I
+st
+ζ
+instead of
+ˆ
+I
+st
+ζ
+.
+3.
+Empirical Assessment of the Estimator of the Argmax
+Consider the LDA model with a given hyperparameter value,
+which we will denote by
+h
+true
+,
+and
+suppose we carry out steps
+1
+–
+4
+of the model,
+where in the final step we generate the corpus
+w
+.
+The maximum likelihood estimate of
+h
+is
+ˆ
+h = arg max
+h
+m(h)
+and,
+as we mentioned earlier,
+for
+any constant
+a
+,
+known or unknown,
+arg max
+h
+m(h) = arg max
+h
+am(h)
+.
+As noted earlier,
+the
+family
+
+c
+M
+ζ
+(h), h ∈ H
+,
+where
+c
+M
+ζ
+(h)
+is given by (2.10),
+may be used to estimate the family
+{m(h), h ∈ H}
+up to a multiplicative constant. So we may use
+arg max
+h
+c
+M
+ζ
+(h)
+to estimate
+ˆ
+h
+.
+Recall that
+B
+n
+(h)
+is the estimate of
+m(h)/m(h
+∗
+)
+given by the left side of equation (2.1).
+In
+theory,
+arg max
+h
+B
+n
+(h)
+can also be used.
+However,
+as we pointed out
+earlier,
+B
+n
+(h)
+is stable
+only for
+h
+close to
+h
+∗
+—a similar remark applies to
+ˆ
+I(h)
+—and unless the region of hyperparameter
+values of interest is small,
+we would not use
+B
+n
+(h)
+and
+ˆ
+I(h)
+,
+and we would use estimates based
+on serial
+tempering instead.
+We have included the derivations of
+B
+n
+(h)
+and
+ˆ
+I(h)
+primarily for
+motivation, as these makes it easier to understand the development of the serial tempering estimates.
+In Section 2.4 we presented an experiment
+which strongly suggested that
+ˆ
+I
+st
+ζ
+(h)
+is significantly
+better than
+˜
+I
+st
+ζ
+(h)
+in terms of variance. George (2015) gives experimental evidence that, analogously,
+c
+M
+ζ
+(h)
+is significantly better than
+f
+M
+ζ
+(h)
+.
+Therefore, for the rest of this paper, we use only
+c
+M
+ζ
+(h)
+and
+ˆ
+I
+st
+ζ
+(h)
+.
+Here we present the results of some experiments which demonstrate good performance of
+ˆ
+ˆ
+h
+:
+=
+arg max
+h
+c
+M
+ζ
+(h)
+as an estimate of
+h
+true
+.
+We took
+α = (α, . . . , α)
+,
+i.e.
+Dir
+K
+(α)
+is a symmetric
+Dirichlet, so that the hyperparameter in the model reduces to
+h = (η, α) ∈ (0, ∞)
+2
+. Our experiment
+is set up as follows:
+the vocabulary size is
+V = 40
+,
+the number of documents is
+D = 400
+,
+the
+document lengths are
+n
+d
+= 80, d = 1, . . . , D
+, and the number of topics is
+K = 8
+.
+We used four
+settings for the hyperparameter under which we generate the model:
+h
+true
+is taken to be
+(.25, .25)
+,
+(.25, 4)
+,
+(4, .25)
+, and
+(4, 4)
+. We estimated the marginal likelihood surfaces (up to a constant) on an
+19
+G
+EORGE AND
+D
+OSS
+0.2
+0.4
+0.6
+0.8
+1.0
+1.2
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+α
+I
+(
+h
+)
+(a)
+ˆ
+I
+st
+ζ
+(.70, α)
+0.2
+0.4
+0.6
+0.8
+1.0
+1.2
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+α
+I
+(
+h
+)
+(b)
+ˆ
+I
+st
+ζ
+(1.0, α)
+0.2
+0.4
+0.6
+0.8
+1.0
+1.2
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+α
+I
+(
+h
+)
+(c)
+˜
+I
+st
+ζ
+(.70, α)
+0.2
+0.4
+0.6
+0.8
+1.0
+1.2
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+α
+I
+(
+h
+)
+(d)
+˜
+I
+st
+ζ
+(1.0, α)
+Figure 6:
+Two one-dimensional views of the plots in Figure 5.
+Each of the top two panels shows
+two independent estimates of
+I(η, α)
+, using
+ˆ
+I
+st
+ζ
+(η, α)
+.
+For the left panel,
+η = 0.70
+, and
+for the right panel,
+η = 1.00
+.
+The bottom two panels use
+˜
+I
+st
+ζ
+instead of
+ˆ
+I
+st
+ζ
+.
+The plots
+show that the variability of
+ˆ
+I
+st
+ζ
+is much smaller than that of
+˜
+I
+st
+ζ
+.
+evenly-spaced
+50 × 50
+grid of
+2500
+values using
+c
+M
+ζ
+(h)
+calculated from a serial tempering chain
+implemented as follows.
+The size of the subgrid was taken to be
+11 × 11 = 121
+, and we used ten
+iterations of the iterative scheme described in Section 2.3 to form the final subgrid.
+The subgrid
+for each of the four corpora is shown in the first section of the supplementary document George
+and Doss.
+For each hyperparameter value
+h
+j
+(
+j
+= 1, . . . , 121
+),
+we took
+Φ
+j
+to be the Markov
+transition function of the Augmented Collapsed Gibbs sampler.
+We took the Markov transition
+function
+K(j, ·)
+on
+L = {1, . . . , 121}
+to be the uniform distribution on
+N
+j
+where
+N
+j
+is the subset
+of
+L
+consisting of the indices of the
+h
+l
+’s that are neighbors of the point
+h
+j
+.
+We obtained the value
+ζ
+final
+via three iterations of the scheme given by (2.16), in which we ran the serial tempering chain
+in each tuning iteration for
+100,000
+iterations after a short burn-in period, and we initialized
+ζ
+(0)
+=
+ζ
+(0)
+1
+, . . . , ζ
+(0)
+121
+
+= (1, . . . , 1)
+.
+Using
+ζ
+final
+,
+we ran the final serial tempering chain for the same
+number of iterations as in the tuning stage.
+Figure 7 gives plots of the estimates
+c
+M
+ζ
+(h)
+and also of their Monte Carlo standard errors
+(MCSE) for the four specifications of
+h
+true
+.
+We computed these standard error estimates using
+the method of batch means, which is implemented in the R package
+mcmcse
+(Flegal et al., 2016);
+they are valid pointwise,
+as opposed to globally,
+over the
+h
+-region of interest.
+They indicate that
+the accuracy of
+c
+M
+ζ
+(·)
+is adequate over the entire
+h
+-range for each of the four cases of
+h
+true
+.
+(We
+20
+H
+YPERPARAMETER
+S
+ELECTION IN
+LDA M
+ODEL
+produced error margins that are valid locally, as opposed to globally, because it is of interest to see
+the regions where the variability is high.)
+In the supplementary document George and Doss we
+show plots of the occupancy times for the
+121
+components of the mixture distribution.
+For each of
+the four values of
+h
+true
+, these occupancy times are close to uniform, indicating adequate mixing. We
+note that
+arg max
+h
+c
+M
+ζ
+(h)
+can be obtained through a grid search from the plots in Figure 7, which
+is what we did in this particular illustration, but in practice these plots don’t need to be generated,
+and
+arg max
+h
+c
+M
+ζ
+(h)
+can be found very quickly through standard optimization algorithms such as
+those that work through gradient-based approaches (which are very easy to implement here, since
+dim(h)
+is only
+2
+).
+These algorithms take very little time because they require calculation of
+c
+M
+ζ
+(·)
+for only a few values of
+h
+.
+For the case where
+dim(h)
+is large, we mention in particular Bergstra
+and Bengio (2012),
+who argue that random search is more efficient than grid search when only a
+few components of
+h
+matter. As can be seen from the figure,
+arg max
+h
+c
+M
+ζ
+(h)
+provides fairly good
+estimates of
+h
+true
+.
+This experiment involves modest sample sizes; when we increase the number of
+documents, the surfaces become more peaked, and
+ˆ
+ˆ
+h
+is closer to
+h
+true
+(experiments not shown).
+George (2015) shows that estimates based on
+f
+M
+ζ
+also provide good estimates of
+h
+true
+, and he
+compares the
+f
+M
+ζ
+and the
+c
+M
+ζ
+estimates.
+From his comparison,
+we can conclude that the extent
+of the superiority of the estimates based on
+c
+M
+ζ
+is about the same on the synthetic corpora of the
+present section as in the real data illustration of Section 2.4.
+4.
+Construction of Two Markov Chains with Invariant Distribution
+ν
+h
+∗
+,w
+In order to develop Markov chains on
+ψ = (β, θ, z)
+whose invariant distribution is the posterior
+ν
+h,w
+, we first express the posterior in a convenient form. We start with the familiar formula
+ν
+h,w
+(ψ) ∝ `
+w
+(ψ)ν
+h
+(ψ),
+(4.1)
+where the likelihood
+`
+w
+(ψ) = p
+(h)
+w | z,θ,β
+(w | z, θ, β)
+is given by line
+4
+of the LDA model statement.
+For
+d = 1, . . . , D
+and
+j = 1, . . . , K
+, let
+S
+dj
+= {i : 1 ≤ i ≤ n
+d
+and
+z
+dij
+= 1}
+, which is the set of
+indices of all words in document
+d
+whose latent topic variable is
+j
+.
+With this notation, from line
+4
+of the model statement we have
+p
+(h)
+w | z,θ,β
+(w | z, θ, β) =
+D
+Y
+d=1
+n
+d
+Y
+i=1
+Y
+j:z
+dij
+=1
+V
+Y
+t=1
+β
+w
+dit
+jt
+=
+D
+Y
+d=1
+K
+Y
+j=1
+V
+Y
+t=1
+Y
+i∈S
+dj
+β
+w
+dit
+jt
+=
+D
+Y
+d=1
+K
+Y
+j=1
+V
+Y
+t=1
+β
+P
+i∈S
+dj
+w
+dit
+jt
+=
+D
+Y
+d=1
+K
+Y
+j=1
+V
+Y
+t=1
+β
+m
+djt
+jt
+,
+(4.2)
+where
+m
+djt
+=
+P
+i∈S
+dj
+w
+dit
+counts the number of words in document
+d
+for which the latent topic
+is
+j
+and the index of the word in the vocabulary is
+t
+.
+Recalling the definition of
+n
+dj
+given just
+before (A.1), and noting that
+P
+i∈S
+dj
+w
+dit
+=
+P
+n
+d
+i=1
+z
+dij
+w
+dit
+, we see that
+m
+djt
+=
+n
+d
+X
+i=1
+z
+dij
+w
+dit
+and
+V
+X
+t=1
+m
+djt
+= n
+dj
+.
+(4.3)
+21
+G
+EORGE AND
+D
+OSS
+alpha
+0.1
+0.2
+0.3
+0.4
+0.5
+eta
+0.1
+0.2
+0.3
+0.4
+0.5
+Estimate of m(h)
+0
+5
+10
+15
+20
+25
+30
+(a)
+c
+M
+ζ
+(h)
+:
+h
+true
+= (.25, .25)
+,
+ˆ
+ˆ
+h = (.24, .24)
+alpha
+0.1
+0.2
+0.3
+0.4
+0.5
+eta
+0.1
+0.2
+0.3
+0.4
+0.5
+MCSE of the Estimate of m(h)
+0.0
+0.5
+1.0
+1.5
+(b) MCSE of
+c
+M
+ζ
+(h)
+:
+h
+true
+= (.25, .25)
+alpha
+2
+3
+4
+5
+6
+eta
+0.1
+0.2
+0.3
+0.4
+0.5
+Estimate of m(h)
+0.0
+0.5
+1.0
+(c)
+c
+M
+ζ
+(h)
+:
+h
+true
+= (.25, 4)
+,
+ˆ
+ˆ
+h = (.19, 4.2)
+alpha
+2
+3
+4
+5
+6
+eta
+0.1
+0.2
+0.3
+0.4
+0.5
+MCSE of the Estimate of m(h)
+0.00
+0.05
+0.10
+0.15
+(d) MCSE of
+c
+M
+ζ
+(h)
+:
+h
+true
+= (.25, 4)
+alpha
+0.1
+0.2
+0.3
+0.4
+0.5
+eta
+2
+3
+4
+5
+6
+Estimate of m(h)
+0
+10
+20
+30
+40
+(e)
+c
+M
+ζ
+(h)
+:
+h
+true
+= (4, .25)
+,
+ˆ
+ˆ
+h = (4.2, .27)
+alpha
+0.1
+0.2
+0.3
+0.4
+0.5
+eta
+2
+3
+4
+5
+6
+MCSE of the Estimate of m(h)
+0
+2
+4
+6
+8
+10
+12
+(f) MCSE of
+c
+M
+ζ
+(h)
+:
+h
+true
+= (4, .25)
+alpha
+3
+4
+5
+6
+7
+eta
+3
+4
+5
+6
+7
+Estimate of m(h)
+0.0
+0.5
+1.0
+(g)
+c
+M
+ζ
+(h)
+:
+h
+true
+= (4, 4)
+,
+ˆ
+ˆ
+h = (4.9, 4.2)
+alpha
+3
+4
+5
+6
+7
+eta
+3
+4
+5
+6
+7
+MCSE of the Estimate of m(h)
+0.0
+0.1
+0.2
+0.3
+(h) MCSE of
+c
+M
+ζ
+(h)
+:
+h
+true
+= (4, 4)
+Figure 7:
+c
+M
+ζ
+(h)
+and MCSE of
+c
+M
+ζ
+(h)
+for four values of
+h
+true
+. In each case,
+ˆ
+ˆ
+h
+is close to
+h
+true
+.
+22
+H
+YPERPARAMETER
+S
+ELECTION IN
+LDA M
+ODEL
+Plugging the likelihood (4.2) and the prior (A.1) into (4.1),
+and absorbing Dirichlet normalizing
+constants into an overall constant of proportionality, we have
+ν
+h,w
+(ψ) ∝
+"
+D
+Y
+d=1
+K
+Y
+j=1
+V
+Y
+t=1
+β
+m
+djt
+jt
+#"
+D
+Y
+d=1
+K
+Y
+j=1
+θ
+n
+dj
+dj
+#"
+D
+Y
+d=1
+K
+Y
+j=1
+θ
+α
+j
+−1
+dj
+#"
+K
+Y
+j=1
+V
+Y
+t=1
+β
+η−1
+jt
+#
+.
+(4.4)
+The expression for
+ν
+h,w
+(ψ)
+above also appears in the unpublished report Fuentes et al. (2011).
+The Conditional Distributions of
+(β, θ)
+Given
+z
+and of
+z
+Given
+(β, θ)
+All distributions below are conditional distributions given
+w
+,
+which is fixed,
+and henceforth this
+conditioning is suppressed in the notation.
+Note that in (4.4), the terms
+m
+djt
+and
+n
+dj
+depend on
+z
+.
+By inspection of (4.4), we see that given
+z
+,
+θ
+1
+, . . . , θ
+D
+and
+β
+1
+, . . . , β
+K
+are all independent
+,
+θ
+d
+∼ Dir
+K
+n
+d1
++ α
+1
+, . . . , n
+dK
++ α
+K
+
+,
+β
+j
+∼ Dir
+V
+P
+D
+d=1
+m
+dj1
++ η, . . . ,
+P
+D
+d=1
+m
+djV
++ η
+
+.
+(4.5)
+From (4.4) we also see that
+p
+(h)
+z | θ,β
+(z | θ, β) ∝
+D
+Y
+d=1
+K
+Y
+j=1
+"
+V
+Y
+t=1
+β
+m
+djt
+jt
+#
+θ
+n
+dj
+dj
+!
+=
+D
+Y
+d=1
+n
+d
+Y
+i=1
+K
+Y
+j=1
+"
+V
+Y
+t=1
+β
+z
+dij
+w
+dit
+jt
+θ
+z
+dij
+w
+dit
+dj
+#
+(4.6)
+=
+D
+Y
+d=1
+n
+d
+Y
+i=1
+K
+Y
+j=1
+"
+V
+Y
+t=1
+β
+jt
+θ
+dj
+
+w
+dit
+#
+z
+dij
+,
+(4.7)
+where (4.6) follows from (4.3).
+Let
+p
+dij
+=
+Q
+V
+t=1
+β
+jt
+θ
+dj
+
+w
+dit
+.
+By inspection of (4.7) we see
+immediately that given
+(θ, β)
+,
+z
+11
+, . . . , z
+1n
+1
+, z
+21
+, . . . , z
+2n
+2
+, . . . , z
+D1
+, . . . , z
+Dn
+D
+are all independent
+,
+z
+di
+∼ Mult
+K
+(p
+di1
+, . . . , p
+diK
+).
+(4.8)
+The conditional distribution of
+(β, θ)
+given by (4.5) can be used, in conjunction with the CGS
+of Griffiths and Steyvers (2004),
+to create a Markov chain on
+ψ
+whose invariant
+distribution is
+ν
+h,w
+: if
+z
+(1)
+, z
+(2)
+, . . .
+is the CGS, then for
+l = 1, 2, . . .
+, we generate
+(β
+(l)
+, θ
+(l)
+)
+from
+p
+(h)
+θ,β | z
+(· | z
+(l)
+)
+given by (4.5) and form
+(z
+(l)
+, β
+(l)
+, θ
+(l)
+)
+—this is what we have called the Augmented CGS.
+The
+CGS is uniformly ergodic (Theorem 1 of Chen and Doss (2017)) and an easy argument shows that
+the resulting ACGS is therefore also uniformly ergodic (and in fact, the rate of convergence of the
+ACGS is exactly the same as that of the CGS; see Diaconis et al. (2008, Lemma 2.4)).
+The two conditionals (4.5) and (4.8) also enable a direct
+construction of a two-cycle Gibbs
+sampler that runs on the pair
+(z, (β, θ))
+—this is what we have called the Grouped Gibbs Sampler.
+This Gibbs sampler has the very attractive feature that it can be parallelized: From (4.5), we see that
+23
+G
+EORGE AND
+D
+OSS
+given
+z
+and
+w
+, the
+θ
+d
+’s and
+β
+t
+’s are all independent, so can be updated simultaneously by different
+processors; and from (4.8), we see that given
+(β, θ)
+and
+w
+, all the components of
+z
+are independent,
+so can also be updated simultaneously by different processors.
+This scheme was noted earlier by
+Newman et
+al.
+(2009),
+who dismissed it
+on the grounds that
+the Collapsed Gibbs Sampler has
+superior mixing properties because, according to Liu et al. (1994), collapsing improves the mixing
+rate.
+However,
+the theorem from Liu et al.
+(1994) that Newman et al.
+(2009) are citing does not
+apply to the present situation.
+To be specific, Liu et al. (1994) consider a Gibbs sampling situation
+involving three variables
+X
+,
+Y
+, and
+Z
+.
+They show that a Gibbs sampler on the pair
+(X, Y )
+(with
+Z
+integrated out), which they call a collapsed Gibbs sampler, is superior to a Gibbs sampler on the
+triple
+(X, Y, Z)
+.
+But for the LDA model, the CGS on
+z = (z
+11
+, . . . , z
+1n
+1
+, . . . , z
+D1
+, . . . , z
+Dn
+D
+)
+is
+not a collapsed version of the Gibbs sampler that runs on the pair
+z, (β, θ)
+
+in any sense, so which
+of the two Gibbs samplers is superior in terms of mixing rate is an open question.
+George (2015)
+compared the mixing rates for various parameters empirically,
+and found that the mixing rate for
+the CGS is faster, but not much faster.
+A paper based on George (2015) that studies this Grouped
+Gibbs Sampler, including its mixing rate and computational complexity, is under preparation (Doss
+and George, 2017).
+5.
+Evaluation: Choice of Estimator of
+arg max
+h
+m(h)
+and Resulting Model Fit
+The maximizer of the marginal likelihood,
+ˆ
+h = arg max
+h
+m(h)
+, may be estimated via the MCMC
+scheme described in the present paper, or by some version of the EM algorithm (VI-EM or Gibbs-
+EM). Our main goal in this section is two-fold.
+(1) We show empirically that neither the VI-EM
+nor the Gibbs-EM method provides estimates of
+ˆ
+h
+that
+are as accurate as ours,
+and we briefly
+discuss why theoretically neither VI-EM nor Gibbs-EM, at least in its current implementation, can
+be expected to work correctly.
+We also compare VI-EM to Gibbs-EM in terms of accuracy, which
+to the best of our knowledge has not been done before, and compare VI-EM, Gibbs-EM, and our
+estimator in terms of speed.
+This is done in Section 5.1.
+(2) We consider some of the default
+choices of
+h
+used in the literature that use ad-hoc (i.e. non-principled) criteria. We look at model fit
+and show empirically that when we use any of the three estimates of
+ˆ
+h
+(VI-EM, Gibbs-EM, or our
+serial tempering method), model fit is better than if we use any of the ad-hoc choices.
+This is done
+in Section 5.2.
+5.1 Comparison of Methods for Estimating
+arg max
+h
+m(h)
+For uniformity of notation, let
+ˆ
+ˆ
+h
+ST
+,
+ˆ
+ˆ
+h
+VEM
+, and
+ˆ
+ˆ
+h
+GEM
+be the estimates of
+ˆ
+h
+formed from serial tem-
+pering MCMC, VI-EM, and Gibbs-EM, respectively, and recall that
+ˆ
+ˆ
+h
+ST
+=
+ˆ
+ˆ
+h = arg max
+h
+c
+M
+ζ
+(h)
+.
+VI-EM The estimate
+ˆ
+ˆ
+h
+VEM
+proposed by Blei et al.
+(2003) is obtained as follows.
+If
+h
+(k)
+is the
+current value of
+h
+,
+the E-step of the EM algorithm is to calculate
+E
+h
+(k)
+log(p
+h
+(ψ, w))
+
+,
+where
+p
+h
+(ψ, w)
+is the joint distribution of
+(ψ, w)
+under the LDA model indexed by
+h
+, and the subscript
+to the expectation indicates that the expectation is taken with respect to
+ν
+h
+(k)
+,w
+.
+This step is infea-
+sible because
+ν
+h
+(k)
+,w
+is analytically intractable.
+We consider
+{q
+φ
+, φ ∈ Φ}
+, a (finite-dimensional)
+parametric family of analytically tractable distributions on
+ψ
+,
+and within this family,
+we find the
+distribution, say
+q
+φ
+∗
+, which is “closest” to
+ν
+h
+(k)
+,w
+. Let
+Q(h)
+be the expected value of
+log(p
+h
+(ψ, w))
+24
+H
+YPERPARAMETER
+S
+ELECTION IN
+LDA M
+ODEL
+with respect to
+q
+φ
+∗
+.
+We view
+Q(h)
+as a proxy for
+E
+h
+(k)
+log(p
+h
+(ψ, w))
+
+, and the M-step is then to
+maximize
+Q(h)
+with respect to
+h
+, to produce
+h
+(k+1)
+. The maximization is done analytically.
+The implementation of the EM algorithm through variational inference methods outlined above
+describes what Blei et al. (2003) do conceptually, but not exactly. Actually, Blei et al. (2003) apply
+VI-EM to a model that is different from ours.
+In that model,
+β
+is viewed as a fixed but unknown
+parameter, to be estimated, and the latent variable is
+ϑ = (θ, z)
+.
+Thus, the observed and missing
+data are, respectively,
+w
+and
+ϑ
+, and the marginal likelihood is a function of two variables,
+h
+and
+β
+.
+Abstractly speaking, the description of VI-EM given above is exactly the same.
+We implemented
+VI-EM to the version of the LDA model
+considered in this paper,
+by modifying the Blei
+et
+al.
+(2003) code. While VI-EM can handle very large corpora with many topics, there are no theoretical
+results regarding convergence of the sequence
+h
+(k)
+to
+arg max
+h
+m(h)
+, and VI-EM has the following
+problems: it may have poor performance if the approximation of
+ν
+h
+(k)
+,w
+by
+q
+φ
+∗
+is not good; and if
+the likelihood surface is multimodal, as in Figure 7(e), then it can fail to find the global maximum
+(as is the case for all EM-type algorithms and also gradient-based approaches).
+Gibbs-EM Monte Carlo EM (MC-EM), in which the E-step is replaced by a Monte Carlo estimate,
+dates back to Wei and Tanner (1990),
+and was introduced to the machine learning community in
+Andrieu et al. (2003).
+As mentioned earlier, since an error is introduced at every iteration, there is
+no reason to expect that the algorithm will converge at all,
+let alone to the true maximizer of the
+likelihood.
+In fact, Wei and Tanner (1990) recognized this problem and suggested that the Markov
+chain length be increased at every iteration of the EM algorithm.
+We will let
+m
+k
+denote the MC
+length at the
+k
+th
+iteration.
+Convergence of MC-EM (of which the Gibbs-EM algorithm of Wallach
+(2008) is a special case) is a nontrivial issue.
+It was studied by Fort and Moulines (2003),
+who
+showed that a minimal condition is that
+m
+k
+→ ∞
+at the rate of
+k
+a
+, for some
+a > 1
+.
+However, they
+do not give guidelines for choosing
+a
+.
+Other conditions imposed in Fort and Moulines (2003) are
+fairly stringent, and it is not clear whether they are satisfied in the LDA model. In the current imple-
+mentation of Gibbs-EM (Wallach, 2006), the latent variable is taken to be
+z
+(because the standard
+Markov chain used to estimate posterior distributions in this model is the CGS). At the
+k
+th
+itera-
+tion, a Markov chain
+z
+1
+, . . . , z
+m
+k
+with invariant distribution equal to the posterior distribution of
+z
+given
+w
+is generated, and the function
+G(h) = (1/m
+k
+)
+P
+m
+k
+i=1
+log(p
+h
+(z
+i
+, w))
+must be maximized.
+This is done by solving the equation
+∇G(h) = 0
+using fixed-point iteration, and because
+∇G(h)
+is computationally intractable, an approximation (Minka, 2003) is used (in effect, a lower bound to
+G(h)
+is found, and the lower bound is what is maximized). This approximation introduces a second
+potential problem for Gibbs-EM. A third potential problem is that, as for VI-EM, the iterations may
+get stuck near a local maximum when the likelihood surface is multimodal.
+To evaluate the performance of the VI-EM, Gibbs-EM, and serial tempering MCMC methods of
+estimating
+ˆ
+h
+, we generated small synthetic corpora according to the LDA model with the following
+specifications:
+the true hyperparameter value is
+h = (η, α) = (.8, .2)
+, the vocabulary size is
+V =
+20
+,
+the number of words in each document
+is
+n
+d
+= 80
+,
+the number of topics is
+K = 4
+and
+8
+,
+and the number of documents is
+D = 20
+,
+40
+,
+and
+100
+,
+for a total
+of
+6
+specifications.
+For
+each specification,
+we formed
+ˆ
+ˆ
+h
+ST
+,
+ˆ
+ˆ
+h
+VEM
+,
+and
+ˆ
+ˆ
+h
+GEM
+.
+For
+ˆ
+ˆ
+h
+GEM
+,
+we used the algorithm given in
+Wallach (2006), in which the Markov chain is the CGS. We took the number of cycles of the Gibbs
+sampler to be
+10,000
+—this is considerably greater than the default value of
+20
+in the MALLET
+package (McCallum,
+2002);
+and we formed
+10
+independent
+estimates,
+using
+10
+different
+initial
+values.
+Likewise,
+for VI-EM we formed
+10
+estimates using
+10
+different
+initial
+values.
+For the
+25
+G
+EORGE AND
+D
+OSS
+serial tempering estimate,
+our principal goal was to form a confidence set for
+ˆ
+h
+,
+and we did this
+as follows.
+We ran
+10
+independent
+serial
+tempering chains,
+for which the sequence
+h
+1
+, . . . , h
+J
+consisted of a
+7 × 9
+grid of
+63
+values over the region
+(η, α) ∈ [.6, .9] × [.1, .3]
+(this region was
+obtained from a small number of iterations of the iterative scheme described in Section 2.3), and the
+rest of the specifications were the same as those described in the experiments of Section 2.4; each
+chain was run for
+100,000
+iterations.
+Let
+ˆ
+ˆ
+h
+[`]
+ST
+be the estimate of
+ˆ
+h
+formed from serial tempering
+chain
+`
+, for
+` = 1, . . . , 10
+.
+According to Theorem 1 in Section 2.1 and Remark 4 in Section 2.3,
+the independent variables
+ˆ
+ˆ
+h
+[1]
+ST
+, . . . ,
+ˆ
+ˆ
+h
+[10]
+ST
+are approximately bivariate normally distributed with mean
+vector
+ˆ
+h
+.
+Therefore, they can be used to form a
+95%
+confidence ellipse for
+ˆ
+h
+, based on Hotelling’s
+T
+2
+distribution (this ellipse is simply the two-dimensional analogue of the standard
+t
+-interval, which
+is based on the
+t
+-distribution).
+The confidence set could also have been formed from a single long
+chain, using the method described in Theorem 1; the two methods use about the same computational
+resources. Figure 8 shows the results, and we make two general observations.
+1.
+From the plots in rows 1 and 3 (plots (a),
+(b),
+(c),
+(g),
+(h),
+and (i)),
+we see that
+the VI-EM
+method does not perform well:
+in each of the
+6
+cases, the estimates are far from the true value,
+arg max
+h
+m(h)
+, and also strongly depend on the starting values.
+We created plots (d), (e), (f),
+(j), (k), and (l), which are zoomed-in versions of plots (a), (b), (c), (g) (h), (i), respectively; these
+magnify a region which contains the serial tempering estimate and associated confidence ellipse.
+We see that while the plots in rows 1 and 3 show that the Gibbs-EM estimates greatly outperform
+the VI-EM estimates (they are both closer to the true value and less dependent on the starting
+value), the zoomed-in plots in rows 2 and 4 show that the Gibbs-EM points are far from being
+inside the
+95%
+confidence ellipse.
+We carried out some experiments in which we followed the
+recommendations in Fort and Moulines (2003) to increase the number of cycles in the Gibbs
+sampling inner loop. Specifically, we took
+m
+1
+= 2
+7
+and doubled the length of the Gibbs sampler
+run with every iteration,
+i.e.
+we took
+m
+n
+= 2
+(6+n)
+, n = 1, . . . , 20
+.
+Unfortunately,
+this did
+not give significant improvement.
+The Gibbs-EM estimates were never close to being inside
+the ellipse, The problem could be with our rate of increase, or that Gibbs-EM simply does not
+produce consistent estimates, or with the implementation of the maximization step (which uses
+an approximation).
+2.
+Both Gibbs-EM and VI-EM improve as the number of documents,
+D
+,
+increases.
+A possible
+explanation of this is that as
+D
+increases, generally speaking the EM algorithm converges faster
+because the likelihood surface becomes more peaked.
+Of course, the larger the value of
+D
+, the
+weaker is the effect of the choice of
+h
+—this is the Bernstein-von Mises Theorem (see Freedman
+(1999) and the references therein),
+which loosely speaking states that
+as
+D → ∞
+,
+the data
+swamp the prior.
+To assess the computational burden, we computed
+ˆ
+ˆ
+h
+VEM
+,
+ˆ
+ˆ
+h
+GEM
+, and
+ˆ
+ˆ
+h
+ST
+for the six corpora we
+considered. For
+ˆ
+ˆ
+h
+VEM
+, each run consisted of
+100
+EM iterations and in each EM iteration there were
+100
+variational inference iterations.
+For
+ˆ
+ˆ
+h
+GEM
+, each run consisted of
+50
+EM iterations and in each
+EM iteration the CGS was run for
+11,000
+cycles, of which the first
+1000
+were deleted as burn-in.
+For
+ˆ
+ˆ
+h
+ST
+, each run consisted of
+2
+tuning iterations with a chain length of
+51,000
+cycles, and a final
+iteration with a chain length of
+101,000
+cycles; and in each case, the first
+1000
+cycles were deleted
+as burn-in. Our experiments were conducted through the R programming language, using Rcpp, on
+a 3.70GHz quad core Intel Xeon Processor E5-1630V3.
+Table 1 gives the results.
+From the table,
+26
+H
+YPERPARAMETER
+S
+ELECTION IN
+LDA M
+ODEL
+α
+η
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+1.2
+0.2
+0.4
+0.6
+0.8
+1.0
+●
+(a)
+K = 4, D = 20
+α
+η
+0.0
+0.2
+0.4
+0.6
+0.8
+1.0
+1.2
+0.2
+0.4
+0.6
+0.8
+1.0
+●
+(b)
+K = 4, D = 40
+α
+η
+0.0
+0.5
+1.0
+1.5
+0.2
+0.4
+0.6
+0.8
+●
+(c)
+K = 4, D = 100
+α
+η
+0.28
+0.32
+0.36
+0.40
+0.50
+0.54
+0.58
+0.62
+●
+(d)
+K = 4, D = 20
+α
+η
+0.180
+0.190
+0.200
+0.67
+0.69
+0.71
+●
+(e)
+K = 4, D = 40
+α
+η
+0.170
+0.174
+0.178
+0.715
+0.725
+0.735
+0.745
+●
+(f)
+K = 4, D = 100
+α
+η
+0.05
+0.15
+0.25
+0.35
+0.6
+1.0
+1.4
+1.8
+●
+(g)
+K = 8, D = 20
+α
+η
+0.05
+0.10
+0.15
+0.20
+0.25
+0.30
+0.6
+0.8
+1.0
+1.2
+1.4
+●
+(h)
+K = 8, D = 40
+α
+η
+0.10
+0.15
+0.20
+0.25
+0.6
+0.7
+0.8
+0.9
+1.0
+●
+(i)
+K = 8, D = 100
+α
+η
+0.22
+0.24
+0.26
+0.28
+0.30
+0.32
+0.34
+0.65
+0.75
+●
+(j)
+K = 8, D = 20
+α
+η
+0.20
+0.24
+0.28
+0.32
+0.60
+0.70
+0.80
+●
+(k)
+K = 8, D = 40
+α
+η
+0.18
+0.20
+0.22
+0.24
+0.26
+0.65
+0.70
+0.75
+0.80
+●
+(l)
+K = 8, D = 100
+Figure 8:
+Plots of estimates of
+ˆ
+h
+for the
+6
+corpora described in text. Points marked
+×
+are estimates
+formed by Gibbs-EM, points marked
++
+are estimates formed by VI-EM. A point marked
+•
+is the average of
+10
+independent estimates of
+ˆ
+h
+formed via ST chains, and the ellipse
+is a
+95%
+confidence set for
+ˆ
+h
+formed from the
+10
+estimates.
+The three plots in row 2 are
+zoomed-in versions of the three plots in row 1, magnifying a region which contains the
+ST estimate, so the ellipse becomes visible.
+Similarly, the plots in row 4 are zoomed-in
+versions of the plots in row 3.
+27
+G
+EORGE AND
+D
+OSS
+we see that the time for
+ˆ
+ˆ
+h
+ST
+is about seven times the time for
+ˆ
+ˆ
+h
+GEM
+, and the time for
+ˆ
+ˆ
+h
+GEM
+is about
+55
+times the time for
+ˆ
+ˆ
+h
+VEM
+. These numbers are not as extreme as they look, because for both
+ˆ
+ˆ
+h
+GEM
+and
+ˆ
+ˆ
+h
+ST
+we could have gotten comparable results with much smaller chain lengths.
+K
+D
+Time for
+ˆ
+ˆ
+h
+VEM
+Time for
+ˆ
+ˆ
+h
+GEM
+Time for
+ˆ
+ˆ
+h
+ST
+8
+100
+.34
+11.64
+90.55
+8
+40
+.12
+6.08
+45.87
+8
+20
+.04
+2.96
+31.35
+4
+100
+.19
+10.73
+49.75
+4
+40
+.08
+4.88
+25.71
+4
+20
+.04
+2.23
+16.72
+Table 1:
+Length of time, in minutes, it takes to compute the VI-EM, Gibbs-EM, and serial temper-
+ing estimates of
+ˆ
+h
+for six corpora.
+5.2 Comparison of Model Fit: Empirical Bayes Choice vs. Ad-Hoc Choices of the
+Hyperparameter
+In the literature,
+the following choices for
+h = (η, α)
+have been presented:
+h
+DG
+= (0.1, 50/K)
+,
+used in Griffiths and Steyvers (2004);
+h
+DA
+= (0.1, 0.1)
+, used in Asuncion et al. (2009); and
+h
+DR
+=
+(1/K, 1/K)
+,
+used in the
+Gensim
+topic modelling package (
+ˇ
+Reh
+˚
+u
+ˇ
+rek and Sojka,
+2010),
+a well-
+known package used in the topic modelling community.
+These choices are ad-hoc, and not based
+on any particular principle.
+Criterion for Model Fit
+The criterion we use is a score that is inversely related to the so-called
+“perplexity” score which is sometimes used in the machine learning literature.
+When applied to
+the LDA context, the score is obtained as follows.
+For
+d = 1, . . . , D
+, let
+w
+(−d)
+denote the corpus
+consisting of all the documents except for document
+d
+.
+To evaluate a given model (in our case the
+LDA model indexed by a given
+h
+), in essence we see how well the model based on
+w
+(−d)
+predicts
+document
+d
+,
+the held-out document.
+We do this for
+d = 1, . . . , D
+,
+and take the geometric mean
+(Wallach et al., 2009). We formalize this as follows. The predictive likelihood of
+h
+for the held-out
+document is
+L
+d
+(h) =
+Z
+`
+w
+d
+(ψ) dν
+h,w
+(−d)
+(ψ),
+(5.1)
+where
+`
+w
+d
+(ψ)
+is the likelihood of
+ψ
+for the held-out
+document
+d
+,
+and
+ν
+h,w
+(−d)
+is the posterior
+distribution of
+ψ
+given
+w
+(−d)
+.
+We form the score
+S(h) =
+
+Q
+D
+d=1
+L
+d
+(h)
+
+1/D
+.
+Two different values
+of hyperparameter
+h
+are compared via their scores.
+Conceptually, it is easy to estimate
+L
+d
+(h)
+by
+direct Monte Carlo: let
+ψ
+1
+, ψ
+2
+, . . .
+be an ergodic Markov chain with invariant distribution
+ν
+h,w
+(−d)
+.
+We then approximate the integral by
+(1/n)
+P
+n
+i=1
+`
+w
+d
+(ψ
+i
+)
+.
+Care needs to be exercised,
+however,
+because in (5.1), the variable
+ψ
+in the term
+`
+w
+d
+(ψ)
+has a dimension that is different than that of the
+variable
+ψ
+in the rest of the integral.
+Chen (2015) gives a careful description of an MCMC scheme
+for estimating the integral in (5.1).
+28
+H
+YPERPARAMETER
+S
+ELECTION IN
+LDA M
+ODEL
+Real Datasets
+Here we compare the fit of LDA models based on various choices of the hyperpa-
+rameter, on several corpora of real documents.
+We created two sets of document corpora, one from
+the
+20
+Newsgroups dataset
+2
+, and the other from the English Wikipedia.
+The
+20
+Newsgroups dataset
+is commonly used in the machine learning literature for experiments on applications of text clas-
+sification and clustering algorithms.
+It contains approximately
+20,000
+articles that are partitioned
+relatively evenly across
+20
+different newsgroups or categories. We created the second set of corpora
+from web articles downloaded from the English Wikipedia, with the help of the MediaWiki API
+3
+.
+We created the
+20
+Newsgroups corpora as follows. We formed five subsets of the
+20
+Newsgroups
+dataset, which we call C-1–C-5, with the feature that the articles within the subsets are increasingly
+difficult to distinguish: for corpus C-1 the topics for the different articles are very different, and for
+corpus C-5 the topics for the different articles are similar.
+For each article,
+we took its true topic
+label to be the newsgroup to which the article is assigned.
+Thus, for corpora C-1–C-5, it becomes
+increasingly difficult to place the articles into the correct newsgroup.
+We built corpus C-1 from a
+random subset of articles from the
+20
+Newsgroups categories Medicine, Christianity, and Baseball;
+these three categories are highly unrelated and easily recognizable from article texts.
+We built cor-
+pus C-2 from a random subset of articles from the categories Automobiles, Motorcycles, Baseball,
+and Hockey (all four of these categories are classified under the super-category Recreation in the
+20
+Newsgroups dataset),
+and we built corpus C-3 from a random subset of articles from the cate-
+gories Cryptography,
+Electronics,
+Medicine,
+and Space (all four of these categories are classified
+under the super-category Science in the
+20
+Newsgroups dataset). Compared to the categories in cor-
+pus C-1, the categories in corpora C-2 and C-3 are moderately related.
+Lastly, we created corpus
+C-4 using articles under the categories Autos and Motorcycles,
+and corpus C-5 using articles un-
+der the categories PC Hardware and Mac Hardware.
+In corpora C-4 and C-5,
+the corresponding
+categories are closely related to each other and hard to distinguish from article texts.
+We created the Wikipedia corpora as follows. When a Wikipedia article is created, it is typically
+tagged to one or more categories,
+one of which is the “primary category.”
+For each article,
+we
+took its true topic label to be the primary category label for the article.
+We created corpus C-6
+from a subset
+of the Wikipedia articles under the categories Leopardus,
+Lynx,
+and Prionailurus
+and corpus C-7 from a subset of the Wikipedia articles under the categories Acinonyx, Leopardus,
+Prionailurus, and Puma.
+All the categories of corpora C-6 and C-7 are part of the Wikipedia super-
+category Felines. We created corpus C-8 from a subset of the Wikipedia articles under the categories
+Coyotes,
+Jackals,
+and Wolves.
+All three categories of corpus C-8 are under the Wikipedia super-
+category Canis.
+Finally,
+we created corpus C-9 from a subset of the Wikipedia articles under the
+categories Eagles,
+Falco (genus),
+Falconry,
+Falcons,
+Harriers,
+Hawks,
+Kites,
+and Owls.
+All eight
+categories of corpus C-9 are subcategories of the Wikipedia category Birds of Prey.
+For each of
+the four Wikipedia corpora that we created, the categories of the articles are closely related to each
+other, and fairly hard to distinguish from article texts.
+Table 2 gives some information on the nine corpora we created.
+In the table,
+the column la-
+beled
+V
+gives the vocabulary size for each corpus,
+the column labeled
+N
+gives the total number
+of words for each corpus, and the column labeled Categories gives newsgroup categories for each
+20
+Newsgroup corpus,
+and Wikipedia categories for each Wikipedia corpus.
+The numbers shown
+in parentheses next to the category names are the number of documents associated with the corre-
+2.
+http://qwone.com/
+˜
+jason/20Newsgroups
+3.
+http://www.mediawiki.org/wiki/API:Query
+29
+G
+EORGE AND
+D
+OSS
+sponding categories. For each corpus, we took the number of topics
+K
+to be equal to the number of
+categories for the corpus.
+Corpus
+Categories
+V
+N
+C-1
+sci.med (
+50
+), soc.religion.christian (
+50
+), rec.sport.baseball (
+50
+)
+807
+12,092
+C-2
+rec.autos (
+50
+), rec.motorcycles (
+50
+), rec.sport.baseball (
+50
+),
+1,061
+16,579
+rec.sport.hockey (
+50
+)
+C-3
+sci.crypt (
+50
+), sci.electronics (
+50
+), sci.med (
+50
+), sci.space (
+50
+)
+1,033
+15,828
+C-4
+rec.autos (
+50
+), rec.motorcycles (
+50
+)
+488
+6,602
+C-5
+comp.sys.ibm.pc.hardware (
+50
+), comp.sys.mac.hardware (
+50
+)
+502
+7,454
+C-6
+Leopardus (
+8
+), Lynx (
+8
+), Prionailurus (
+7
+)
+303
+7,788
+C-7
+Acinonyx (
+6
+), Leopardus (
+8
+), Prionailurus (
+7
+), Puma (
+8
+)
+622
+12,831
+C-8
+Coyotes (
+7
+), Jackals (
+7
+), Wolves (
+8
+)
+447
+9,212
+C-9
+Eagles (
+62
+), Falco (genus) (
+45
+), Falconry (
+52
+), Falcons (
+10
+),
+1,369
+116,135
+Harriers (
+21
+), Hawks (
+16
+), Kites (
+22
+), Owls (
+76
+)
+Table 2: Corpora created from the
+20
+Newsgroups dataset and the Wikipedia pages.
+Comparison of Model Fit
+We now compare the performance of the LDA models indexed by
+ˆ
+ˆ
+h
+ST
+,
+ˆ
+ˆ
+h
+GEM
+,
+ˆ
+ˆ
+h
+VEM
+,
+h
+DR
+,
+h
+DA
+, and
+h
+DG
+for corpora C-1–C-9, using the estimate of the score
+S(h)
+, which
+we denote by
+b
+S(h)
+, described in the beginning of this subsection.
+Details regarding how
+ˆ
+ˆ
+h
+ST
+was
+computed and regarding its accuracy are given in the supplementary document George and Doss.
+The actual values of
+ˆ
+ˆ
+h
+ST
+,
+ˆ
+ˆ
+h
+GEM
+, and
+ˆ
+ˆ
+h
+VEM
+, are also given in George and Doss.
+To compute
+b
+S(h)
+for a corpus,
+for every held-out document,
+we used Chen’s (2015) method
+with a full Gibbs sampling chain of length
+2,000
+, after discarding a short burn-in period.
+Table 3
+gives the ratios
+b
+S(h)/
+b
+S(
+ˆ
+ˆ
+h
+ST
+)
+,
+where
+h
+is
+ˆ
+ˆ
+h
+GEM
+,
+ˆ
+ˆ
+h
+VEM
+,
+h
+DR
+,
+h
+DA
+,
+and
+h
+DG
+,
+for all nine corpora.
+From the table, we make three main observations: (1) Any of the estimates of
+ˆ
+h
+are better than any
+of the ad-hoc choices, uniformly, and by wide margins. (2) Within the estimates of
+ˆ
+h
+, ST does better
+than either GEM or VEM on the whole, although not in every case, and when it is outperformed, it
+is not by much. (3) As a general pattern, the lack of fit of the models indexed by the ad-hoc choices
+of
+h
+is worse for the Wikipedia corpora than for the
+20
+Newsgroups corpora. The Wikipedia corpora
+may be considered “difficult,” in the sense that for these corpora the articles are very similar, and
+thus hard to distinguish from article texts. On the other hand, within the group of estimates of
+ˆ
+h
+, it is
+not clear what are the characteristics of a corpus which affect the fit—there may be factors, beyond
+similarity of the documents, that are relevant.
+Implementation Details
+To compute
+c
+M
+ζ
+(h)
+,
+we implemented the serial
+tempering scheme de-
+scribed in Section 2 as follows.
+The size of the subgrid was taken to be
+7 × 13 = 91
+,
+and we
+used six iterations of the iterative scheme described in Section 2.3 to form the final subgrid, using
+Markov chains of length
+10,000
+.
+For the run using the final subgrid, we used three iterations of the
+scheme given by (2.16) to obtain
+ζ
+final
+,
+with a Markov chain length of
+50,000
+per iteration (after
+a short burn-in period).
+The final run, using
+ζ
+final
+, also used a Markov chain length of
+50,000
+.
+To
+estimate the standard error of
+c
+M
+ζ
+(h)
+, we used the method of batch means, which is implemented by
+the R package
+mcmcse
+in Flegal et al. (2016).
+Diagnostics that establish that the serial tempering
+30
+H
+YPERPARAMETER
+S
+ELECTION IN
+LDA M
+ODEL
+Corpus
+ˆ
+ˆ
+h
+GEM
+ˆ
+ˆ
+h
+VEM
+h
+DR
+h
+DA
+h
+DG
+C-1
+6.78 × 10
+−01
+4.83 × 10
+−01
+3.54 × 10
+−01
+1.11 × 10
++00
+8.24 × 10
+−04
+C-2
+5.11 × 10
+−01
+8.19 × 10
+−01
+5.23 × 10
+−01
+2.52 × 10
+−02
+7.21 × 10
+−05
+C-3
+9.86 × 10
+−01
+5.58 × 10
+−01
+2.98 × 10
+−01
+1.41 × 10
+−01
+1.33 × 10
+−02
+C-4
+8.21 × 10
+−01
+7.71 × 10
+−01
+3.48 × 10
+−01
+1.22 × 10
+−01
+6.66 × 10
+−02
+C-5
+9.98 × 10
+−01
+1.62 × 10
++00
+4.58 × 10
+−01
+1.61 × 10
+−01
+9.36 × 10
+−02
+C-6
+2.48 × 10
++00
+1.12 × 10
++01
+7.31 × 10
+−03
+5.71 × 10
+−06
+6.57 × 10
+−08
+C-7
+4.39 × 10
+−01
+7.82 × 10
++00
+5.34 × 10
+−03
+1.51 × 10
+−10
+1.89 × 10
+−14
+C-8
+2.04 × 10
++00
+6.40 × 10
+−01
+9.90 × 10
+−04
+1.77 × 10
+−09
+3.29 × 10
+−12
+C-9
+1.04 × 10
++00
+1.75 × 10
+−02
+2.17 × 10
+−02
+7.04 × 10
+−03
+5.56 × 10
+−09
+Table 3:
+Ratios of the estimates of the fit criterion
+S(h)
+to estimate of
+S(
+ˆ
+ˆ
+h
+ST
+)
+for five choices of
+h
+,
+for all nine corpora. A small number indicates a lack of fit, thus a poor choice of
+h
+, and by
+this criterion, all ad-hoc choices perform poorly.
+chain mixes adequately are given in the supplementary document George and Doss.
+Table 4 gives
+the time it took to compute
+ˆ
+ˆ
+h
+VEM
+,
+ˆ
+ˆ
+h
+GEM
+, and
+ˆ
+ˆ
+h
+ST
+, for three of the real corpora used in this section.
+Corpus
+K
+ˆ
+ˆ
+h
+VEM
+ˆ
+ˆ
+h
+GEM
+ˆ
+ˆ
+h
+ST
+C-2
+4
+0.18
+7.72
+409.75
+C-4
+2
+0.10
+3.78
+195.90
+C-9
+8
+1.20
+59.12
+287.97
+Table 4:
+Execution times, in minutes, for three corpora, on a 3.70GHz quad core Intel Xeon Pro-
+cessor E5-1630V3.
+It
+is natural
+to ask why it
+has not
+been noted before that
+VI-EM and Gibbs-EM sometimes
+perform poorly.
+Evaluations have been typically done through a model
+fit
+criterion such as the
+one we used in this subsection,
+and to the best of our knowledge the literature has not given an
+assessment of how close
+ˆ
+ˆ
+h
+VEM
+and
+ˆ
+ˆ
+h
+GEM
+are to
+h
+true
+for corpora generated from an LDA model
+indexed by
+h
+true
+, as is done in Section 5.1.
+6.
+Discussion
+Inference from LDA depends heavily on the choice of hyperparameters used to fit the model.
+To
+estimate the hyperparameters, we view the analytically intractable
+ˆ
+h = arg max
+h
+m(h)
+, which is a
+function of the document corpus itself, as the gold standard, and we have developed a methodology
+for estimating
+ˆ
+h
+.
+The basis for our approach is a stable method, based on a single serial tempering
+Markov chain, for estimating the entire marginal likelihood function
+m(h)
+(up to a constant).
+For
+a given function of the parameters of the model,
+essentially the same method enables us to esti-
+mate the entire family of posterior expectations of the parameters as the hyperparameter varies, and
+31
+G
+EORGE AND
+D
+OSS
+this feature enables us to carry out an analysis of sensitivity of our inference with respect to the
+hyperparameters.
+Hyperparameter selection is a simple form of model selection and we note that, generally speak-
+ing, in carrying out model selection there are two competing goals. One goal is to select the correct
+model, and the other goal is to select the model that “provides the best inference.” These two goals
+are not the same.
+The second goal is particularly relevant when the document corpus is a real data
+set, i.e. the corpus is not necessarily generated from the LDA model, and we use LDA as a conve-
+nient model through which to make inference.
+Selection of the hyperparameter via maximization
+of the marginal likelihood is akin to maximum likelihood estimation and, as such, should have the
+standard properties of maximum likelihood estimates.
+We will avoid giving a technical explana-
+tion of this last fact, and instead state it informally as follows: for a corpus generated according to
+the LDA model indexed by
+h
+true
+,
+if the corpus is large,
+then
+ˆ
+h
+is close to
+h
+true
+.
+So the empirical
+Bayes method achieves the first goal by its very nature,
+and we have verified this empirically in
+Section 3. The evaluation in Section 5 shows (at least empirically) that the empirical Bayes method
+also accomplishes the second goal.
+A Fully Bayes Approach to Empirical Bayes Inference For serial tempering to work, it is necessary
+for the grid points
+h
+1
+, . . . , h
+J
+to cover
+H
+. Unfortunately, when
+dim(H)
+is large, the value of
+J
+that
+is needed is huge,
+and the approach breaks down.
+Here we discuss an entirely different method.
+Although there is no inherent limitation on
+dim(H)
+for the method to work,
+we view it as useful
+for the case where
+dim(H)
+is moderate: we re-iterate our caution stated in Remark 3 of Section 2.1
+that it is not advisable to use a high-dimensional
+h
+.
+Suppose
+H
+is a bounded hyper-rectangle. We put a uniform distribution on
+H
+, denoted
+u(h)
+, and
+in this fully-Bayes situation the parameter is now
+(β, θ, z, h)
+.
+The marginal posterior distribution
+of
+h
+is then
+π(h) ∝ m
+w
+(h)u(h) ∝ m
+w
+(h)
+, and we see that
+arg max
+h
+m
+w
+(h) = arg max
+h
+π(h)
+.
+Suppose that
+(β
+(1)
+, θ
+(1)
+, z
+(1)
+, h
+(1)
+), . . . , (β
+(n)
+, θ
+(n)
+, z
+(n)
+, h
+(n)
+)
+is a Markov chain whose invari-
+ant
+distribution is the posterior distribution of
+(β, θ, z, h)
+given
+w
+[see Wallach (2008)].
+From
+the marginal sequence
+h
+(1)
+, . . . , h
+(n)
+we may estimate
+π(h)
+via a multivariate density estimator,
+and hence
+arg max
+h
+π(h)
+.
+Call
+this estimate
+¯
+h
+.
+We then use (2.1),
+with
+¯
+h
+as the value of
+h
+∗
+,
+to estimate
+m
+w
+(h)
+in a small neighborhood of
+¯
+h
+,
+which is all that we need in order to estimate
+arg max
+h
+m
+w
+(h)
+.
+In effect,
+¯
+h
+is an initial coarse estimate of
+arg max
+h
+m
+w
+(h)
+,
+and (2.1) is then
+used to fine-tune it. We hope to develop this idea fully in future work.
+Acknowledgments
+We are grateful to three referees for their very helpful constructive criticism. This work is supported
+by the International Center for Automated Research at the UF Levin College of Law,
+NSF Grant
+DMS-11-06395, and NIH grant P30 AG028740.
+32
+H
+YPERPARAMETER
+S
+ELECTION IN
+LDA M
+ODEL
+Appendix
+A.1 A Likelihood Ratio Formula for the Parameters in the LDA Model
+To obtain the ratio of densities formula (2.2), we note that from the hierarchical nature of the LDA
+model we have
+ν
+h
+(ψ) = ν
+h
+(β, θ, z) = p
+(h)
+z | θ,β
+(z | θ, β) p
+(h)
+θ
+(θ) p
+(h)
+β
+(β)
+in self-explanatory notation, where
+p
+(h)
+z | θ,β
+,
+p
+(h)
+θ
+, and
+p
+(h)
+β
+are given by lines
+3
+,
+2
+, and
+1
+, respectively,
+of the LDA model.
+Let
+n
+dj
+=
+P
+n
+d
+i=1
+z
+dij
+,
+i.e.
+n
+dj
+is the number of words in document
+d
+that are
+assigned to topic
+j
+.
+Using the Dirichlet and multinomial distributions specified in lines
+1
+–
+3
+of the
+model, we obtain
+ν
+h
+(ψ) =
+"
+D
+Y
+d=1
+K
+Y
+j=1
+θ
+n
+dj
+dj
+#"
+D
+Y
+d=1
+Γ
+P
+K
+j=1
+α
+j
+
+Q
+K
+j=1
+Γ(α
+j
+)
+K
+Y
+j=1
+θ
+α
+j
+−1
+dj
+!#"
+K
+Y
+j=1
+
+Γ(V η)
+Γ(η)
+V
+V
+Y
+t=1
+β
+η−1
+jt
+
+#
+.
+(A.1)
+We now apply (A.1) to
+ν
+h
+and
+ν
+h
+∗
+and obtain (2.2).
+A.2 Proof of Theorem 1
+The convergence in (2.1) holds for each fixed
+h
+;
+0
+1/n
+2/n
+0.9
+1
+0
+1
+f
+n
+f
+Figure 9: Non-convergence of the argmax.
+however,
+arg max
+h
+B
+n
+(h)
+depends on the function
+B
+n
+(·)
+.
+Before proving Theorem 1 we provide an
+example to show that
+if
+f
+n
+and
+f
+are real-valued
+functions,
+then convergence of
+f
+n
+to
+f
+pointwise
+does not
+imply convergence of
+arg max
+h
+f
+n
+(h)
+to
+arg max
+h
+f (h)
+.
+In our example, the domain of the
+functions is the interval
+[0, 1]
+, and the functions are
+displayed in Figure 9.
+The functions
+f
+n
+and
+f
+are
+identical on the interval
+[2/n, 1]
+.
+Clearly
+f
+n
+(h) → f (h)
+for each
+h ∈ [0, 1]
+, but
+arg max
+h
+f
+n
+(h) =
+1/n
+while
+arg max
+h
+f (h) = .9
+.
+Theorem 1 refers to the regularity conditions below.
+A1
+The hyperparameter space
+H
+is compact.
+A2
+The maximizer of
+m(·)
+is unique (thus it makes sense to talk about
+arg max
+h
+m(h)
+).
+A3
+The maximizer of
+m(·)
+is in
+H
+.
+A4
+For each
+n
+, the maximizer of
+B
+n
+(·)
+is unique (thus we can talk about
+arg max
+h
+B
+n
+(·)
+).
+A5
+The point
+h
+∗
+= (η
+∗
+, α
+∗
+)
+satisfies
+2η − η
+∗
+> 0
+and
+2α
+j
+− α
+∗
+j
+> 0, j = 1, . . . , K
+for all
+h = (η, α) ∈ H
+.
+A6
+The marginal likelihood function
+m(·)
+is twice continuously differentiable in
+H
+, and the
+p × p
+Hessian matrix
+∇
+2
+h
+m(arg max
+h
+m(h))
+is nonsingular.
+Proof of Part 1
+Note the following:
+•
+In Section 4 we showed that the ACGS is uniformly ergodic. So in particular, it is Harris ergodic.
+33
+G
+EORGE AND
+D
+OSS
+•
+The LDA model is an exponential family with parameter
+(η, α)
+(Section 3.3 of Wainwright and
+Jordan (2008)).
+•
+In their Remark 1,
+Doss and Park (2018) show that if
+{ν
+h
+, h ∈ Ω}
+is an exponential family,
+where
+Ω
+is the natural parameter space, and if
+H
+is a compact subset of the interior of
+Ω
+, then
+R
+sup
+h∈H
+(ν
+h
+/ν
+h
+∗
+) dν
+h
+∗
+,w
+< ∞
+.
+(In empirical process theory,
+finiteness of this integral is the
+main condition that is needed to obtain uniformity in the Law of Large Numbers.)
+•
+In the context
+of the present
+situation,
+Theorem 3 of Doss and Park (2018) states that
+under
+Harris ergodicity of the sequence
+ψ
+1
+, ψ
+2
+, . . .
+and finiteness of
+R
+sup
+h∈H
+(ν
+h
+/ν
+h
+∗
+) dν
+h
+∗
+,w
+,
+the
+convergence in (2.1) is uniform on
+H
+, i.e. Condition C3 of Section 2.1 holds.
+•
+Suppose that
+f
+n
+, n = 1, 2, . . .
+and
+f
+are real-valued functions defined on a compact subset
+X
+of
+Euclidean space.
+Suppose further that
+f
+is continuous and that each of
+f
+n
+, n = 1, 2, . . .
+and
+f
+has a unique maximizer.
+Under these conditions, uniform convergence of
+f
+n
+to
+f
+on
+X
+implies
+arg max
+x∈
+X
+f
+n
+(x) → arg max
+x∈
+X
+f (x)
+.
+Verification of this fact is routine.
+A detailed proof is
+given in Lemma 1 of Doss and Park (2018).
+Combining these facts, we see that under A1–A4,
+arg max
+h
+B
+n
+(h) → arg max
+h
+m(h)
+with proba-
+bility one (Assumptions A5 and A6 are not needed for Part 1 of the theorem.)
+
+Proof of Part 2
+Theorem 4 of Doss and Park (2018) asserts the asymptotic normality stated in
+Part 2 of Theorem 1 under A1–A4 and A6, the condition
+for every
+h ∈ H
+there exists
+ > 0
+such that
+Z
+k∇
+h
+(ν
+h
+/ν
+h
+∗
+)k
+2+
+dν
+h
+∗
+,w
+< ∞,
+(A.2)
+where
+k · k
+is the Euclidean norm in
+R
+p
+,
+and the condition that
+the Markov chain used is geo-
+metrically ergodic.
+Using standard calculus,
+we can check that if
+2η − η
+∗
+> 0
+and
+2α
+j
+− α
+∗
+j
+>
+0, j = 1, . . . , K
+,
+then for sufficiently small
+
+the integral in (A.2) is finite.
+Thus,
+Condition A5
+implies (A.2).
+As mentioned in the proof of Part 1 of the theorem, the ACGS is uniformly ergodic;
+so in particular,
+it is geometrically ergodic.
+Thus,
+we have established the asymptotic normality
+stated in Part 2 of the theorem under A1–A6.
+
+Proof of Part 3
+The variance matrix
+Σ
+in Part 2 is analytically intractable, but fortunately is easy
+to estimate via the method of batching, as follows.
+For
+j = 1, . . . , J
+, let
+h
+[j]
+be the estimate of the
+argmax produced from batch
+j
+, and let
+h
+[ ]
+be the estimate of the argmax produced from the entire
+sequence.
+The batch-based estimate is
+b
+Σ
+n
+= (n/J)
+
+[1/(J − 1)]
+P
+J
+j=1
+h
+[j]
+− h
+[ ]
+
+h
+[j]
+− h
+[ ]
+
+>
+.
+(The quantity inside the braces is essentially the sample covariance matrix of
+h
+[1]
+, . . . , h
+[J ]
+, except
+that we use
+h
+[ ]
+instead of the average of
+h
+[1]
+, . . . , h
+[J ]
+as the centering value;
+and the term
+n/J
+is the number of samples per batch.)
+Estimates of the covariance matrix based on batching are
+consistent under very general conditions which include that
+J → ∞
+as
+n → ∞
+.
+The literature
+recommends taking
+J = n
+1/2
+; see Flegal et al. (2008) and also Jones et al. (2006).
+Invertibility of
+b
+Σ
+n
+for large
+n
+follows from positive definiteness of
+Σ
+and the convergence
+b
+Σ
+n
+a.s.
+−−→ Σ
+; in fact we
+have
+b
+Σ
+−1
+n
+a.s.
+−−→ Σ
+−1
+. Therefore, applying Part 2, we get
+n
+1/2
+arg max
+h
+B
+n
+(h) − arg max
+h
+m(h)
+
+b
+Σ
+−1
+n
+n
+1/2
+arg max
+h
+B
+n
+(h) − arg max
+h
+m(h)
+
+>
+d
+→ χ
+2
+p
+,
+which establishes the statement regarding the ellipse.
+
+34
+H
+YPERPARAMETER
+S
+ELECTION IN
+LDA M
+ODEL
+Proof of Theorem 1 for the Serial Tempering Chain
+The main change in the proof is that the
+requirement (A.2) is replaced with
+for every
+h ∈ H
+there exists
+ > 0
+such that
+Z
+k∇
+h
+(ν
+h
+/ν
+ζ
+)k
+2+
+df
+ζ
+< ∞,
+(A.3)
+where
+ν
+ζ
+= (1/J)
+P
+J
+j=1
+ν
+j
+(ψ
+i
+)/ζ
+j
+, and
+f
+ζ
+is given by (2.9).
+It is easy to see that (A.3) is satisfied
+if the stipulation on
+h
+∗
+given by (2.3) holds for
+h
+(j)
+for at least one index
+j
+.
+
+A.3 Proof of Validity of the Confidence Band for
+{I(h), h ∈ H}
+In addition to assuming that
+J → ∞
+and
+n/J → ∞
+, we will need the following conditions:
+A7
+The stipulation on
+h
+∗
+given by (2.3) holds for
+h
+(j)
+for at least one index
+j
+.
+A8
+The function
+g
+satisfies the moment condition
+for every
+h ∈ H
+there exists
+ > 0
+such that
+Z
+
+g
+ν
+h
+ν
+ζ
+
+2+
+df
+ζ
+< ∞.
+Note that A8 is automatically satisfied if A7 holds and
+g
+is bounded (for example if
+g
+is an indicator
+function, as in Section 2.4). In the following, we will assume Conditions A1, A7, and A8.
+The heart of the proof is the assertion that
+sup
+h∈H
+n
+1/2
+ˆ
+I
+st
+ζ
+(h)−I(h)
+has a limiting distribution
+as
+n → ∞
+, and we show this in three steps:
+1.
+We observe that for each
+h
+,
+n
+1/2
+ˆ
+I
+st
+ζ
+(h) − I(h)
+
+has an asymptotic normal distribution.
+2.
+We show that more can be said, and that the stochastic process
+
+n
+1/2
+ˆ
+I
+st
+ζ
+(h) − I(h)
+
+, h ∈ H
+converges in distribution to a mean-zero Gaussian process indexed by
+h
+.
+3.
+We conclude from Step 2 that
+sup
+h∈H
+n
+1/2
+ˆ
+I
+st
+ζ
+(h) − I(h)
+has a limiting distribution as
+n → ∞
+.
+We now provide the details.
+1.
+Note that
+ˆ
+I
+st
+ζ
+(h)
+,
+defined in (2.14),
+is a ratio of
+c
+M
+ζ
+(h)
+and
+b
+U
+ζ
+(h)
+,
+which are given by (2.10)
+and (2.12), respectively.
+Each of these is an average of a function of
+ψ
+1
+, . . . , ψ
+n
+, so we have a
+bivariate central limit theorem, as follows.
+For economy of notation, let
+U
+(h)
+i
+be the summands
+in (2.12) and let
+M
+(h)
+i
+be the summands in (2.10). We have
+n
+1/2
+
+
+
+
+
+
+1
+n
+n
+X
+i=1
+U
+(h)
+i
+−
+m(h)
+c
+ζ
+/J
+Z
+g dν
+h,w
+1
+n
+n
+X
+i=1
+M
+(h)
+i
+−
+m(h)
+c
+ζ
+/J
+
+
+
+
+
+
+d
+→ N
+2
+(0, Σ
+h
+),
+where
+Σ
+h
+is a covariance matrix.
+(If the
+ψ
+’s were an iid sequence,
+then
+Σ
+h
+would be simply
+the covariance matrix of the pair
+(U
+(h)
+1
+, M
+(h)
+1
+)
+; however, in the present situation,
+Σ
+h
+is the more
+complicated covariance matrix that arises in the Markov chain central limit theorem.) Therefore,
+by the delta method applied to the function
+ϕ : R
+2
+→ R
+defined by
+ϕ(u, m) = u/m
+, we have
+n
+1/2
+P
+n
+i=1
+U
+(h)
+i
+P
+n
+i=1
+M
+(h)
+i
+−
+Z
+g dν
+h,w
+!
+d
+→ N 0, (∇ϕ)
+>
+Σ
+h
+∇ϕ
+
+,
+(A.4)
+35
+G
+EORGE AND
+D
+OSS
+where the gradient
+∇ϕ
+is evaluated at
+(1/n)
+P
+n
+i=1
+U
+(h)
+i
+, (1/n)
+P
+n
+i=1
+M
+(h)
+i
+
+. Now note that the
+quantity to the left of the “
+d
+→
+” sign in (A.4) is precisely
+n
+1/2
+ˆ
+I
+st
+ζ
+(h) − I(h)
+
+.
+2.
+To extend convergence in distribution for each fixed
+h
+to convergence as a stochastic process,
+we use Part 4 of Theorem 6 of Doss and Park (2018).
+Because we assume Conditions A1, A7,
+and A8 and because the distributions of the latent parameters in the LDA model form an ex-
+ponential family,
+the regularity conditions for that theorem are satisfied,
+and we conclude that
+n
+1/2
+ˆ
+I
+st
+ζ
+(·) − I(·)
+
+d
+→ G(·)
+, where
+G(·)
+is a mean-zero Gaussian process indexed by
+h
+.
+Here,
+convergence in distribution takes place in
+C(H)
+, the space of continuous real-valued functions
+defined on
+H
+, endowed with the sup-norm topology.
+3.
+The map
+T : C(H) → [0, 1]
+defined by
+T (f ) = sup
+h∈H
+|f (h)|
+is continuous, so from Step 2 we
+conclude that
+sup
+h∈H
+n
+1/2
+ˆ
+I
+st
+ζ
+(h) − I(h)
+d
+→ sup
+h∈H
+|G(h)|
+.
+Substitution of the
+S
+j
+’s for the
+S
+j
+’s is valid under the assumption that
+J → ∞
+,
+convergence in
+probability of
+S
+[.95J ]
+to
+c
+.95
+is a consequence of the condition
+n/J → ∞
+,
+and the validity of the
+bands now follows. The literature’s recommendation of
+J = n
+1/2
+is made in the different context of
+estimating the variance of an average, not for forming globally-valid confidence bands; nevertheless,
+in our experience this choice works well also in the present situation.
+References
+Christophe Andrieu, Nando De Freitas, Arnaud Doucet, and Michael I Jordan.
+An introduction to
+MCMC for machine learning.
+Machine Learning, 50:5–43, 2003.
+Arthur Asuncion, Max Welling, Padhraic Smyth, and Yee Whye Teh.
+On smoothing and inference
+for topic models.
+In Proceedings of
+the Twenty-Fifth Conference on Uncertainty in Artificial
+Intelligence, UAI ’09, pages 27–34, Arlington, Virginia, United States, 2009. AUAI Press.
+James Bergstra and Yoshua Bengio.
+Random search for hyper-parameter optimization.
+Journal of
+Machine Learning Research, 13:281–305, 2012.
+David M.
+Blei,
+Andrew Y.
+Ng,
+and Michael
+I.
+Jordan.
+Latent
+Dirichlet
+allocation.
+Journal
+of
+Machine Learning Research, 3:993–1022, 2003.
+Zhe Chen. Inference for the Number of Topics in the Latent Dirichlet Allocation Model via Bayesian
+Mixture Modelling.
+PhD thesis, University of Florida, 2015.
+Zhe Chen and Hani
+Doss.
+Inference for the number of topics in the latent
+Dirichlet
+allocation
+model via Bayesian mixture modelling.
+Technical report, Department of Statistics, University of
+Florida, 2017.
+Persi Diaconis, Kshitij Khare, and Laurent Saloff-Coste.
+Gibbs sampling, exponential families and
+orthogonal polynomials (with discussion).
+Statistical Science, 23:151–178, 2008.
+Hani Doss and Clint P. George. Theoretical and empirical evaluation of a grouped Gibbs sampler for
+parallel computation in the LDA model. Technical report, Department of Statistics, University of
+Florida, 2017.
+36
+H
+YPERPARAMETER
+S
+ELECTION IN
+LDA M
+ODEL
+Hani Doss and Yeonhee Park.
+An MCMC approach to empirical Bayes inference and Bayesian
+sensitivity analysis via empirical processes.
+Annals of Statistics (to appear), 2018.
+James M. Flegal, Murali Haran, and Galin L. Jones.
+Markov chain Monte Carlo:
+Can we trust the
+third significant figure? Statistical Science, 23:250–260, 2008.
+James M.
+Flegal,
+John Hughes,
+and Dootika Vats.
+mcmcse:
+Monte Carlo Standard Errors for
+MCMC.
+Riverside, CA and Minneapolis, MN, 2016.
+R package version 1.2-1.
+Gersende Fort and Eric Moulines.
+Convergence of the Monte Carlo expectation maximization for
+curved exponential families.
+The Annals of Statistics, 31:1220–1259, 2003.
+David Freedman.
+Wald Lecture:
+On the Bernstein-von Mises theorem with infinite-dimensional
+parameters.
+The Annals of Statistics, 27:1119–1141, 1999.
+Claudio Fuentes, Vikneshwaran Gopal, George Casella, Clint P. George, Taylor C. Glenn, Joseph N.
+Wilson, and Paul D. Gader.
+Product partition models for Dirichlet allocation.
+Technical report,
+Department of Computer and Information Science and Engineering, University of Florida, 2011.
+Clint P. George.
+Latent Dirichlet Allocation: Hyperparameter Selection and Applications to Elec-
+tronic Discovery.
+PhD thesis, University of Florida, 2015.
+Clint P. George and Hani Doss. Supplement to “Principled selection of hyperparameters in the latent
+Dirichlet allocation model,” 2018.
+Edward I.
+George and Dean P.
+Foster.
+Calibration and empirical
+Bayes
+variable selection.
+Biometrika, 87:731–747, 2000.
+Charles J. Geyer and Elizabeth A. Thompson.
+Annealing Markov chain Monte Carlo with applica-
+tions to ancestral inference.
+Journal of the American Statistical Association, 90:909–920, 1995.
+Thomas L.
+Griffiths and Mark Steyvers.
+Finding scientific topics.
+Proceedings of
+the National
+Academy of Sciences, 101:5228–5235, 2004.
+W.
+K.
+Hastings.
+Monte Carlo sampling methods using Markov chains and their applications.
+Biometrika, 57:97–109, 1970.
+James P. Hobert and George Casella. The effect of improper priors on Gibbs sampling in hierarchical
+linear mixed models. Journal of the American Statistical Association, 91(436):1461–1473, 1996.
+Galin L. Jones, Murali Haran, Brian S. Caffo, and Ronald Neath.
+Fixed-width output analysis for
+Markov chain Monte Carlo.
+Journal of the American Statistical Association,
+101:1537–1547,
+2006.
+J. S. Liu, W. H. Wong, and A. Kong.
+Covariance structure of the Gibbs sampler with applications
+to the comparisons of estimators and augmentation schemes.
+Biometrika, 81:27–40, 1994.
+Enzo Marinari and Giorgio Parisi.
+Simulated tempering: A new Monte Carlo scheme.
+Europhysics
+Letters, 19:451–458, 1992.
+37
+G
+EORGE AND
+D
+OSS
+Andrew Kachites McCallum.
+MALLET:
+A machine learning for language toolkit.
+http://
+mallet.cs.umass.edu
+, 2002.
+Thomas P.
+Minka.
+Estimating a Dirichlet
+distribution,
+2003.
+URL
+http://research.
+microsoft.com/
+˜
+minka/papers/dirichlet/
+.
+David Newman, Arthur Asuncion, Padhraic Smyth, and Max Welling.
+Distributed algorithms for
+topic models.
+Journal of Machine Learning Research, 10:1801–1828, 2009.
+Radim
+ˇ
+Reh
+˚
+u
+ˇ
+rek and Petr Sojka.
+Software framework for topic modelling with large corpora.
+In
+Proceedings of the LREC 2010 Workshop on New Challenges for NLP Frameworks, pages 45–
+50, Valletta, Malta, 2010. ELRA.
+Christian P. Robert. The Bayesian Choice: From Decision-Theoretic Foundations to Computational
+Implementation.
+Springer-Verlag, New York, 2001.
+Y. W. Teh, M. I. Jordan, M. J. Beal, and D. M. Blei.
+Hierarchical Dirichlet processes.
+Journal of
+the American Statistical Association, 101:1566–1581, 2006.
+Martin J Wainwright and Michael I Jordan.
+Graphical models, exponential families, and variational
+inference.
+Foundations and Trends
+R
+in Machine Learning, 1(1–2):1–305, 2008.
+Hanna M. Wallach.
+Topic modeling:
+Beyond bag-of-words.
+In Proceedings of the 23rd Interna-
+tional Conference on Machine Learning, ICML ’06, pages 977–984, New York, NY, USA, 2006.
+ACM.
+Hanna M. Wallach.
+Structured Topic Models for Language.
+PhD thesis, University of Cambridge,
+2008.
+Hanna M Wallach, Iain Murray, Ruslan Salakhutdinov, and David Mimno.
+Evaluation methods for
+topic models. In Proceedings of the 26th Annual International Conference on Machine Learning,
+pages 1105–1112. ACM, 2009.
+Greg C. G. Wei and Martin A. Tanner.
+A Monte Carlo implementation of the EM algorithm and the
+poor man’s data augmentation algorithms.
+Journal of the American Statistical Association, 85:
+699–704, 1990.
+38

@@ -1,0 +1,4232 @@
+﻿694
+IEEE/ACM TRANSACTIONS ON AUDIO, SPEECH, AND LANGUAGE PROCESSING, VOL. 24, NO. 4, APRIL 2016
+Deep Sentence Embedding Using Long Short-Term
+Memory Networks: Analysis and Application
+to Information Retrieval
+Hamid Palangi, Li Deng, Yelong Shen, Jianfeng Gao, Xiaodong He, Jianshu Chen, Xinying Song, and Rabab Ward
+Abstract—This paper develops a model that addresses sentence
+embedding,
+a hot
+topic in current
+natural
+language process-
+ing research,
+using recurrent neural networks (RNN) with Long
+Short-Term Memory (LSTM)
+cells.
+The proposed LSTM-RNN
+model
+sequentially takes each word in a sentence,
+extracts its
+information, and embeds it into a semantic vector. Due to its abil-
+ity to capture long term memory,
+the LSTM-RNN accumulates
+increasingly richer information as it goes through the sentence,
+and when it reaches the last word,
+the hidden layer of the net-
+work provides a semantic representation of the whole sentence. In
+this paper, the LSTM-RNN is trained in a weakly supervised man-
+ner on user click-through data logged by a commercial web search
+engine.
+Visualization and analysis are performed to understand
+how the embedding process works.
+The model
+is found to auto-
+matically attenuate the unimportant words and detect the salient
+keywords in the sentence. Furthermore, these detected keywords
+are found to automatically activate different cells of the LSTM-
+RNN, where words belonging to a similar topic activate the same
+cell. As a semantic representation of the sentence, the embedding
+vector can be used in many different applications.
+These auto-
+matic keyword detection and topic allocation abilities enabled by
+the LSTM-RNN allow the network to perform document retrieval,
+a difficult language processing task, where the similarity between
+the query and documents can be measured by the distance between
+their corresponding sentence embedding vectors computed by the
+LSTM-RNN.
+On a web search task,
+the LSTM-RNN embedding
+is shown to significantly outperform several
+existing state of the
+art methods.
+We emphasize that the proposed model
+generates
+sentence embedding vectors that are specially useful for web doc-
+ument retrieval
+tasks.
+A comparison with a well
+known general
+sentence embedding method, the Paragraph Vector, is performed.
+The results show that the proposed method in this paper signifi-
+cantly outperforms Paragraph Vector method for web document
+retrieval task.
+Index Terms—Deep learning, long short-term memory, sentence
+embedding.
+Manuscript
+received July 05,
+2015;
+revised November 29,
+2015;
+accepted
+January 02, 2016. Date of publication January 21, 2016; date of current version
+March 02, 2016. The associate editor coordinating the review of this manuscript
+and approving it for publication was Dr. Min Zhang.
+H. Palangi and R. Ward are with the Department of Electrical and Computer
+Engineering, University of British Columbia, Vancouver, BC V6T 1Z4, Canada
+(e-mail: hamidp@ece.ubc.ca; rababw@ece.ubc.ca).
+L.
+Deng,
+Y.
+Shen,
+J.
+Gao,
+X.
+He,
+J.
+Chen,
+and X.
+Song are
+with
+Microsoft Research, Redmond, WA 98052 USA (e-mail: deng@microsoft.com;
+jfgao@microsoft.com;
+xiaohe@microsoft.com;
+yeshen@microsoft.com;
+jian-
+shuc@microsoft.com; xinson@microsoft.com).
+This paper has a supplemental
+downloadable .PDF file available at
+http://
+ieeexplore.ieee.org, provided by the authors. The Supplementary Materials con-
+tain more extensive experiments and details of step-by-step derivation of the
+proposed method. This material is 592 KB in size.
+Color versions of one or more of the figures in this paper are available online
+at http://ieeexplore.ieee.org.
+Digital Object Identifier 10.1109/TASLP.2016.2520371
+I.
+I
+NTRODUCTION
+L
+EARNING a good representation (or
+feature)
+of
+input
+data is an important
+task in machine learning.
+In text
+and language processing,
+one such problem is learning of an
+embedding vector for a sentence; that is, to train a model that
+can automatically transform a sentence to a vector that encodes
+the semantic meaning of the sentence. While word embedding
+is learned using a loss function defined on word pairs,
+sen-
+tence embedding is learned using a loss function defined on
+sentence pairs. In the sentence embedding usually the relation-
+ship among words in the sentence, i.e., the context information,
+is taken into consideration.
+Therefore,
+sentence embedding is
+more suitable for tasks that
+require computing semantic sim-
+ilarities between text strings.
+By mapping texts into a unified
+semantic representation,
+the embedding vector can be further
+used for
+different
+language processing applications,
+such as
+machine translation [1], sentiment analysis [2], and information
+retrieval
+[3].
+In machine translation,
+the recurrent
+neural
+net-
+works (RNN) with Long Short-Term Memory (LSTM) cells, or
+the LSTM-RNN,
+is used to encode an English sentence into
+a vector,
+which contains the semantic meaning of
+the input
+sentence,
+and then another LSTM-RNN is used to generate a
+French (or another target language) sentence from the vector.
+The model is trained to predict the best output sentence. In [2],
+a paragraph vector is learned in an unsupervised manner as a
+distributed representation of sentences and documents,
+which
+are then used for sentiment analysis. Sentence embedding can
+also be applied to information retrieval,
+where the contextual
+information are properly represented by the vectors in the same
+space for fuzzy text matching [3].
+In this paper,
+we propose to use an RNN to sequentially
+accept
+each word in a sentence and recurrently map it
+into a
+latent
+space together
+with the historical
+information.
+As the
+RNN reaches the last
+word in the sentence,
+the hidden acti-
+vations form a natural
+embedding vector
+for
+the contextual
+information of the sentence. We further incorporate the LSTM
+cells into the RNN model (i.e. the LSTM-RNN) to address the
+difficulty of learning long term memory in RNN. The learning
+of
+such a model
+is performed in a weakly supervised man-
+ner
+on the click-through data logged by a commercial
+web
+search engine. Although manually labelled data are insufficient
+in machine learning, logged data with limited feedback signals
+are massively available due to the widely used commercial web
+search engines.
+Limited feedback information such as click-
+through data provides a weak supervision signal that indicates
+2329-9290 © 2016 IEEE. Personal use is permitted, but republication/redistribution requires IEEE permission.
+See http://www.ieee.org/publications_standards/publications/rights/index.html for more information.
+PALANGI et al.: DEEP SENTENCE EMBEDDING USING LONG SHORT-TERM MEMORY NETWORKS
+695
+the semantic similarity between the text on the query side and
+the clicked text
+on the document
+side.
+To exploit
+such a sig-
+nal, the objective of our training is to maximize the similarity
+between the two vectors mapped by the LSTM-RNN from the
+query and the clicked document,
+respectively.
+Consequently,
+the learned embedding vectors of the query and clicked doc-
+ument are specifically useful for web document retrieval task.
+An important
+contribution of
+this paper
+is to analyse the
+embedding process of the LSTM-RNN by visualizing the inter-
+nal activation behaviours in response to different text inputs. We
+show that the embedding process of the learned LSTM-RNN
+effectively detects the keywords, while attenuating less impor-
+tant words in the sentence automatically by switching on and
+off the gates within the LSTM-RNN cells. We further show that
+different cells in the learned model indeed correspond to dif-
+ferent topics, and the keywords associated with a similar topic
+activate the same cell
+unit
+in the model.
+As the LSTM-RNN
+reads till the end of the sentence, the topic activation accumu-
+lates and the hidden vector at
+the last
+word encodes the rich
+contextual information of the entire sentence. For this reason, a
+natural application of sentence embedding is web search rank-
+ing, in which the embedding vector from the query can be used
+to match the embedding vectors of the candidate documents
+according to the maximum cosine similarity rule. Evaluated on
+a real web document ranking task, our proposed method signifi-
+cantly outperforms many of the existing state of the art methods
+in NDCG scores. Please note that when we refer to document
+in the paper we mean the title (headline) of the document.
+II.
+R
+ELATED
+W
+ORK
+Inspired by the word embedding method [4], [5], the authors
+in [2] proposed an unsupervised learning method to learn a
+paragraph vector as a distributed representation of sentences
+and documents, which are then used for sentiment analysis with
+superior performance.
+However,
+the model is not designed to
+capture the fine-grained sentence structure.
+In [6],
+an unsu-
+pervised sentence embedding method is proposed with great
+performance on large corpus of contiguous text
+corpus,
+e.g.,
+the BookCorpus [7].
+The main idea is to encode the sentence
+s(t)
+and then decode previous and next sentences, i.e.,
+s(t − 1)
+and
+s(t + 1)
+,
+using two separate decoders.
+The encoder and
+decoders are RNNs with Gated Recurrent
+Unit
+(GRU)
+[8].
+However, this sentence embedding method is not designed for
+document retrieval task having a supervision among queries and
+clicked and unclicked documents.
+In [9],
+a Semi-Supervised
+Recursive Autoencoder (RAE) is proposed and used for sen-
+timent prediction. Similar to our proposed method, it does not
+need any language specific sentiment parsers. A greedy approx-
+imation method is proposed to construct a tree structure for the
+input sentence. It assigns a vector to each word. It can become
+practically problematic for
+large vocabularies.
+It
+also works
+both on unlabeled data and supervised sentiment data.
+Similar to the recurrent models in this paper, The DSSM [3]
+and CLSM [10] models,
+developed for information retrieval,
+can
+also
+be
+interpreted
+as
+sentence
+embedding
+methods.
+However,
+DSSM treats the input
+sentence as a bag-of-words
+and does not model word dependencies explicitly. CLSM treats
+a sentence as a bag of n-grams, where n is defined by a window,
+and can capture local word dependencies. Then a Max-pooling
+layer is used to form a global feature vector.
+Methods in [11]
+are also convolutional
+based networks for Natural
+Language
+Processing (NLP).
+These models,
+by design,
+cannot
+capture
+long distance dependencies,
+i.e.,
+dependencies among words
+belonging to non-overlapping n-grams.
+In [12]
+a Dynamic
+Convolutional
+Neural
+Network (DCNN) is proposed for sen-
+tence embedding. Similar to CLSM, DCNN does not rely on a
+parse tree and is easily applicable to any language.
+However,
+different
+from CLSM where a regular
+max-pooling is used,
+in DCNN a dynamic
+k
+-max-pooling is used.
+This means that
+instead of just keeping the largest entries among word vectors
+in one vector,
+k
+largest entries are kept in
+k
+different vectors.
+DCNN has shown good performance in sentiment
+prediction
+and question type classification tasks. In [13], a convolutional
+neural
+network architecture is proposed for sentence match-
+ing. It has shown great performance in several matching tasks.
+In [14],
+a Bilingually-constrained Recursive Auto-encoders
+(BRAE) is proposed to create semantic vector representation
+for phrases. Through experiments it is shown that the proposed
+method has great performance in two end-to-end SMT tasks.
+Long short-term memory networks were developed in [15] to
+address the difficulty of capturing long term memory in RNN.
+It has been successfully applied to speech recognition,
+which
+achieves state-of-art
+performance [16],
+[17].
+In text
+analysis,
+LSTM-RNN treats a sentence as a sequence of words with inter-
+nal structures,
+i.e.,
+word dependencies.
+It encodes a semantic
+vector of a sentence incrementally which differs from DSSM
+and CLSM.
+The encoding process is performed left-to-right,
+word-by-word. At each time step, a new word is encoded into
+the semantic vector,
+and the word dependencies embedded in
+the vector are “updated”. When the process reaches the end of
+the sentence,
+the semantic vector has embedded all the words
+and their dependencies.
+Therefore,
+it can be viewed as a fea-
+ture vector representation of the whole sentence. In the machine
+translation work [1], an input English sentence is converted into
+a vector representation using LSTM-RNN,
+and then another
+LSTM-RNN is used to generate an output French sentence. The
+model is trained to maximize the probability of predicting the
+correct output sentence.
+In [18],
+there are two main composi-
+tion models, ADD model that is bag of words and BI model that
+is a summation over bi-gram pairs plus a non-linearity. In our
+proposed model,
+instead of simple summation,
+we have used
+LSTM model with letter tri-grams which keeps valuable infor-
+mation over long intervals (for long sentences) and throws away
+useless information.
+In [19],
+an encoder-decoder approach is
+proposed to jointly learn to align and translate sentences from
+English to French using RNNs.
+The concept of “attention” in
+the decoder,
+discussed in this paper,
+is closely related to how
+our proposed model
+extracts keywords in the document
+side.
+For
+further
+explanations please see Section V-A2.
+In [20]
+a
+set of visualizations are presented for RNNs with and without
+LSTM cells and GRUs. Different from our work where the tar-
+get
+task was sentence embedding for document
+retrieval,
+the
+target tasks in [20] were character level sequence modelling for
+text characters and source codes. Interesting observations about
+interpretability of some LSTM cells and statistics of gates acti-
+vations are presented. In Section V-A we show that some of the
+results of our visualization are consistent with the observations
+696
+IEEE/ACM TRANSACTIONS ON AUDIO, SPEECH, AND LANGUAGE PROCESSING, VOL. 24, NO. 4, APRIL 2016
+reported in [20].
+We also present
+more detailed visualization
+specific to the document retrieval task using click-through data.
+Visualizations about how our proposed model can be used for
+keyword detection are also presented.
+Different from the aforementioned studies, the method devel-
+oped in this paper trains the model so that sentences that are
+paraphrase of each other are close in their semantic embed-
+ding vectors—see the description in Section IV further ahead.
+Another reason that
+LSTM-RNN is particularly effective for
+sentence embedding,
+is its robustness to noise.
+For example,
+in the web document ranking task,
+the noise comes from two
+sources:
+(i)
+Not
+every word in query /
+document
+is equally
+important, and we only want to “remember” salient words using
+the limited “memory”. (ii) A word or phrase that is important
+to a document
+may not
+be relevant
+to a given query,
+and we
+only want to “remember” related words that are useful to com-
+pute the relevance of the document for a given query. We will
+illustrate robustness of LSTM-RNN in this paper.
+The struc-
+ture of LSTM-RNN will also circumvent the serious limitation
+of using a fixed window size in CLSM. Our experiments show
+that this difference leads to significantly better results in web
+document retrieval task. Furthermore, it has other advantages.
+It allows us to capture keywords and key topics effectively. The
+models in this paper also do not
+need the extra max-pooling
+layer,
+as required by the CLSM,
+to capture global
+contextual
+information and they do so more effectively.
+III.
+S
+ENTENCE
+E
+MBEDDING
+U
+SING
+RNN
+S
+WITH AND
+W
+ITHOUT
+LSTM C
+ELLS
+In this section,
+we introduce the model of recurrent neural
+networks and its long short-term memory version for learning
+the sentence embedding vectors. We start with the basic RNN
+and then proceed to LSTM-RNN.
+A.
+The Basic Version of RNN
+The RNN is a type of deep neural networks that are “deep”
+in temporal dimension and it has been used extensively in time
+sequence modelling [21]–[29].
+The main idea of using RNN
+for sentence embedding is to find a dense and low dimensional
+semantic representation by sequentially and recurrently pro-
+cessing each word in a sentence and mapping it
+into a low
+dimensional
+vector.
+In this model,
+the global
+contextual
+fea-
+tures of the whole text will be in the semantic representation of
+the last word in the text sequence—see Fig. 1, where
+x(t)
+is the
+t
+-th word, coded as a 1-hot vector,
+W
+h
+is a fixed hashing opera-
+tor similar to the one used in [3] that converts the word vector to
+a letter tri-gram vector,
+W
+is the input weight matrix,
+W
+rec
+is
+the recurrent weight matrix,
+y(t)
+is the hidden activation vector
+of the RNN, which can be used as a semantic representation of
+the
+t
+-th word, and
+y(t)
+associated to the last word
+x(m)
+is the
+semantic representation vector of the entire sentence. Note that
+this is very different from the approach in [3] where the bag-of-
+words representation is used for the whole text and no context
+information is used. This is also different from [10] where the
+sliding window of a fixed size (akin to an FIR filter) is used
+to capture local
+features and a max-pooling layer on the top
+Fig. 1.
+The basic architecture of the RNN for sentence embedding, where tem-
+poral recurrence is used to model the contextual information across words in
+the text string. The hidden activation vector corresponding to the last word is
+the sentence embedding vector (blue).
+Fig. 2.
+The basic LSTM architecture used for sentence embedding.
+to capture global features. In the RNN there is neither a fixed-
+sized window nor a max-pooling layer; rather the recurrence is
+used to capture the context information in the sequence (akin to
+an IIR filter).
+The mathematical formulation of the above RNN model for
+sentence embedding can be expressed as
+l(t) = W
+h
+x(t)
+y(t) = f(Wl(t) + W
+rec
+y(t − 1) + b)
+(1)
+where
+W
+and
+W
+rec
+are the input and recurrent matrices to be
+learned,
+W
+h
+is a fixed word hashing operator,
+b
+is the bias
+vector and
+f (·)
+is assumed to be
+tanh(·)
+. Note that the architec-
+ture proposed here for sentence embedding is slightly different
+from traditional
+RNN in that
+there is a word hashing layer
+that convert the high dimensional input into a relatively lower
+dimensional letter tri-gram representation. There is no per word
+supervision during training,
+instead,
+the whole sentence has a
+label. This is explained in more detail in Section IV.
+B.
+The RNN with LSTM Cells
+Although RNN performs the transformation from the sen-
+tence to a vector in a principled manner, it is generally difficult
+to learn the long term dependency within the sequence due to
+vanishing gradients problem. One of the effective solutions for
+PALANGI et al.: DEEP SENTENCE EMBEDDING USING LONG SHORT-TERM MEMORY NETWORKS
+697
+this problem in RNNs is using memory cells instead of neu-
+rons originally proposed in [15] as Long Short-Term Memory
+(LSTM) and completed in [30] and [31] by adding forget gate
+and peephole connections to the architecture.
+We
+use
+the
+architecture
+of
+LSTM illustrated in Fig.
+2
+for the proposed sentence embedding method.
+In this figure,
+i(t), f (t), o(t), c(t)
+are input gate, forget gate, output gate and
+cell state vector respectively,
+W
+p1
+, W
+p2
+and
+W
+p3
+are peephole
+connections,
+W
+i
+,
+W
+reci
+and
+b
+i
+,
+i = 1, 2, 3, 4
+are input
+con-
+nections,
+recurrent
+connections and bias values,
+respectively,
+g(·)
+and
+h(·)
+are
+tanh(·)
+function and
+σ(·)
+is the sigmoid func-
+tion. We use this architecture to find
+y
+for each word, then use
+the
+y(m)
+corresponding to the last word in the sentence as the
+semantic vector for the entire sentence.
+Considering Fig. 2, the forward pass for LSTM-RNN model
+is as follows:
+y
+g
+(t) = g(W
+4
+l(t) + W
+rec4
+y(t − 1) + b
+4
+)
+i(t) = σ(W
+3
+l(t) + W
+rec3
+y(t − 1) + W
+p3
+c(t − 1) + b
+3
+)
+f(t) = σ(W
+2
+l(t) + W
+rec2
+y(t − 1) + W
+p2
+c(t − 1) + b
+2
+)
+c(t) = f (t) ◦ c(t − 1) + i(t) ◦ y
+g
+(t)
+o(t) = σ(W
+1
+l(t) + W
+rec1
+y(t − 1) + W
+p1
+c(t) + b
+1
+)
+y(t) = o(t) ◦ h(c(t))
+(2)
+where
+◦
+denotes Hadamard (element-wise) product. Diagram of
+the proposed model with more details is presented in Section VI
+of Supplementary Materials.
+IV.
+L
+EARNING
+M
+ETHOD
+To learn a good semantic representation of the input
+sen-
+tence,
+our
+objective is
+to make the embedding vectors
+for
+sentences of similar meaning as close as possible,
+and mean-
+while, to make sentences of different meanings as far apart as
+possible. This is challenging in practice since it is hard to collect
+a large amount of manually labelled data that give the seman-
+tic similarity signal between different sentences. Nevertheless,
+the widely used commercial web search engine is able to log
+massive amount of data with some limited user feedback sig-
+nals.
+For example,
+given a particular query,
+the click-through
+information about the user-clicked document among many can-
+didates is usually recorded and can be used as a weak (binary)
+supervision signal to indicate the semantic similarity between
+two sentences (on the query side and the document side). In this
+section,
+we explain how to leverage such a weak supervision
+signal to learn a sentence embedding vector that achieves the
+aforementioned training objective. Please also note that above
+objective to make sentences with similar meaning as close as
+possible is similar to machine translation tasks where two sen-
+tences belong to two different languages with similar meanings
+and we want to make their semantic representation as close as
+possible.
+We now describe how to train the model to achieve the above
+objective using the click-through data logged by a commercial
+search engine. For a complete description of the click-through
+data please refer
+to Section II
+in [32].
+To begin with,
+we
+adopt the cosine similarity between the semantic vectors of two
+sentences as a measure for their similarity:
+Fig.
+3.
+The click-through signal
+can be used as a (binary) indication of the
+semantic similarity between the sentence on the query side and the sentence
+on the document side.
+The negative samples are randomly sampled from the
+training data.
+Fig. 4.
+Query: “hotelsinshanghai”. Since the sentence ends at the third word,
+all the values to the right of it are zero (green color). (a)
+i(t)
+(b)
+c(t)
+(c)
+o(t)
+(d)
+y(t)
+.
+R(Q, D) =
+y
+Q
+(T
+Q
+)
+T
+y
+D
+(T
+D
+)
+y
+Q
+(T
+Q
+) · y
+D
+(T
+D
+)
+(3)
+where
+T
+Q
+and
+T
+D
+are the lengths
+of
+the sentence
+Q
+and
+sentence
+D
+, respectively. In the context of training over click-
+through data,
+we will
+use
+Q
+and
+D
+to denote “query” and
+“document”,
+respectively.
+In Fig.
+3,
+we show the sentence
+embedding vectors corresponding to the query,
+y
+Q
+(T
+Q
+)
+,
+and
+all the documents,
+{y
+D
++
+(T
+D
++
+), y
+D
+−
+1
+(T
+D
+−
+1
+), . . . , y
+D
+−
+n
+(T
+D
+−
+n
+)}
+,
+where the subscript
+D
++
+denotes the (clicked)
+positive sam-
+ple among the documents,
+and the subscript
+D
+−
+j
+denotes the
+j
+-th (un-clicked) negative sample.
+All
+these embedding vec-
+tors are generated by feeding the sentences into the RNN or
+LSTM-RNN model
+described in Section III
+and take the
+y
+corresponding to the last word—see the blue box in Fig. 1.
+We want
+to maximize the likelihood of the clicked docu-
+ment
+given query,
+which can be formulated as the following
+optimization problem:
+L(Λ) = min
+Λ
+
+− log
+N
+
+r=1
+P (D
++
+r
+|Q
+r
+)
+
+= min
+Λ
+N
+
+r=1
+l
+r
+(Λ)
+(4)
+698
+IEEE/ACM TRANSACTIONS ON AUDIO, SPEECH, AND LANGUAGE PROCESSING, VOL. 24, NO. 4, APRIL 2016
+Fig.
+5.
+Document:
+“shanghai
+hotels accommodation hotel
+in shanghai
+dis-
+count and reservation”. Since the sentence ends at the ninth word, all the values
+to the right of it are zero (green color). (a)
+i(t)
+(b)
+c(t)
+(c)
+o(t)
+(d)
+y(t)
+.
+Fig.
+6.
+Activation values,
+y(t)
+,
+of 10 most active cells for Query: “hotels in
+shanghai” and Document:
+“shanghai
+hotels accommodation hotel
+in shang-
+hai
+discount
+and reservation”(a)
+y(t)
+top 10 for query (b)
+y(t)
+top 10 for
+document.
+where
+Λ
+denotes the collection of the model
+parameters;
+in
+regular
+RNN case,
+it
+includes
+W
+rec
+and
+W
+in Fig.
+1,
+and
+in LSTM-RNN case, it includes
+W
+1
+,
+W
+2
+,
+W
+3
+,
+W
+4
+,
+W
+rec1
+,
+W
+rec2
+,
+W
+rec3
+,
+W
+rec4
+,
+W
+p1
+,
+W
+p2
+,
+W
+p3
+,
+b
+1
+,
+b
+2
+,
+b
+3
+and
+b
+4
+in
+Fig. 2.
+D
++
+r
+is the clicked document for
+r
+-th query,
+P (D
++
+r
+|Q
+r
+)
+is the probability of clicked document given the
+r
+-th query,
+N
+is number of query/clicked-document pairs in the corpus and
+l
+r
+(Λ) = − log
+⎛
+⎝
+e
+γR(Q
+r
+,D
++
+r
+)
+e
+γR(Q
+r
+,D
++
+r
+)
++
+
+n
+i=j
+e
+γR(Q
+r
+,D
+−
+r,j
+)
+⎞
+⎠
+= log
+⎛
+⎝
+1 +
+n
+
+j=1
+e
+−γ·Δ
+r,j
+⎞
+⎠
+(5)
+where
+Δ
+r,j
+= R(Q
+r
+, D
++
+r
+) − R(Q
+r
+, D
+−
+r,j
+)
+,
+R(·, ·)
+was defined
+earlier in (3),
+D
+−
+r,j
+is the
+j
+-th negative candidate document for
+r
+-th query and
+n
+denotes the number of negative samples used
+during training.
+The expression in (5) is a logistic loss over
+Δ
+r,j
+.
+It upper-
+bounds the pairwise accuracy,
+i.e.,
+the 0 – 1 loss.
+Since the
+similarity measure is the cosine function,
+Δ
+r,j
+∈ [−2, 2]
+.
+To
+have a larger range for
+Δ
+r,j
+,
+we use
+γ
+for scaling.
+It helps to
+penalize the prediction error more. Its value is set empirically
+by experiments on a held out dataset.
+To train the RNN and LSTM-RNN, we use Back Propagation
+Through Time (BPTT). The update equations for parameter
+Λ
+at epoch
+k
+are as follows:
+ΔΛ
+k
+= Λ
+k
+− Λ
+k−1
+ΔΛ
+k
+= μ
+k−1
+ΔΛ
+k−1
+− 
+k−1
+∇L(Λ
+k−1
++ μ
+k−1
+ΔΛ
+k−1
+)
+(6)
+where
+∇L(·)
+is the gradient
+of the cost
+function in (4),
+
+is
+the learning rate and
+μ
+k
+is a momentum parameter determined
+by the scheduling scheme used for training.
+Above equations
+are equivalent to Nesterov method in [33]. To see why, please
+refer to appendix A.1 of [34] where Nesterov method is derived
+as a momentum method.
+The gradient
+of
+the cost
+function,
+∇L(Λ)
+, is:
+∇L(Λ) = −
+N
+
+r=1
+n
+
+j=1
+T
+
+τ=0
+α
+r,j
+∂Δ
+r,j,τ
+∂Λ
+
+one large update
+(7)
+where
+T
+is the number of time steps that we unfold the network
+over time and
+α
+r,j
+=
+−γe
+−γΔ
+r,j
+1 +
+
+n
+j=1
+e
+−γΔ
+r,j
+.
+(8)
+∂Δ
+r,j,τ
+/∂Λ
+in (7) and error signals for different
+parameters
+of RNN and LSTM-RNN that
+are necessary for training are
+presented in Appendix A.
+Full derivation of gradients in both
+models is presented in Section III of supplementary materials.
+To accelerate training by parallelization, we used mini-batch
+training and one large update instead of incremental
+updates
+during back propagation through time.
+To resolve the gradi-
+ent explosion problem we use gradient re-normalization method
+described in [35], [24]. To accelerate the convergence, we use
+Nesterov method [33] and found it
+effective in training both
+RNN and LSTM-RNN for sentence embedding.
+We used a simple yet
+effective scheduling for
+μ
+k
+for both
+RNN and LSTM-RNN models,
+in the first and last 2% of all
+parameter updates
+μ
+k
+= 0.9
+and for the other 96% of all param-
+eter updates
+μ
+k
+= 0.995
+.
+We have used a fixed step size for
+training RNN and a fixed step size for training LSTM-RNN.
+A summary of training method for LSTM-RNN is presented
+in Algorithm 1.
+V.
+A
+NALYSIS OF THE
+S
+ENTENCE
+E
+MBEDDING
+P
+ROCESS
+AND
+P
+ERFORMANCE
+E
+VALUATION
+To understand how the
+LSTM-RNN performs
+sentence
+embedding, we use visualization tools to analyze the semantic
+vectors generated by our model.
+We would like to answer the
+following questions: (i) How are word dependencies and con-
+text information captured? (ii) How does LSTM-RNN attenuate
+unimportant
+information and detect
+critical
+information from
+the input sentence? Or,
+how are the keywords embedded into
+PALANGI et al.: DEEP SENTENCE EMBEDDING USING LONG SHORT-TERM MEMORY NETWORKS
+699
+Algorithm 1. Training LSTM-RNN for Sentence Embedding
+Inputs:
+Fixed step size “
+
+”,
+Scheduling for “
+μ
+”,
+Gradient
+clip
+threshold
+“
+th
+G
+”,
+Maximum number
+of
+Epochs
+“
+nEpoch
+”, Total number of query / clicked-document pairs
+“
+N
+”,
+Total number of un-clicked (negative) documents for
+a given query “
+n
+”, Maximum sequence length for truncated
+BPTT “
+T
+”.
+Outputs: Two trained models, one in query side “
+Λ
+Q
+”, one
+in document side “
+Λ
+D
+”.
+Initialization:
+Set
+all
+parameters in
+Λ
+Q
+and
+Λ
+D
+to small
+random numbers,
+i = 0
+,
+k = 1
+.
+procedure LSTM-RNN
+Λ
+Q
+,
+Λ
+D
+while
+i ≤ nEpoch
+do
+for “first minibatch”
+→
+“last minibatch” do
+r ← 1
+while
+r ≤ N
+do
+for
+j = 1 → n
+do
+Compute
+α
+r,j
+
+use (8)
+Compute
+
+T
+τ=0
+α
+r,j
+∂Δ
+r,j,τ
+∂Λ
+k,Q
+
+use (14) to (44) in appendix A
+Compute
+
+T
+τ=0
+α
+r,j
+∂Δ
+r,j,τ
+∂Λ
+k,D
+
+use (14) to (44) in appendix A
+sum above terms for
+Q
+and
+D
+over
+j
+end for
+sum above terms for
+Q
+and
+D
+over
+r
+r ← r + 1
+end while
+Compute
+∇L(Λ
+k,Q
+)
+
+use (7)
+Compute
+∇L(Λ
+k,D
+)
+
+use (7)
+if
+∇L(Λ
+k,Q
+) > th
+G
+then
+∇L(Λ
+k,Q
+) ← th
+G
+·
+∇L(Λ
+k,Q
+)
+∇L(Λ
+k,Q
+)
+end if
+if
+∇L(Λ
+k,D
+) > th
+G
+then
+∇L(Λ
+k,D
+) ← th
+G
+·
+∇L(Λ
+k,D
+)
+∇L(Λ
+k,D
+)
+end if
+Compute
+ΔΛ
+k,Q
+
+use (6)
+Compute
+ΔΛ
+k,D
+
+use (6)
+Update:
+Λ
+k,Q
+← ΔΛ
+k,Q
++ Λ
+k−1,Q
+Update:
+Λ
+k,D
+← ΔΛ
+k,D
++ Λ
+k−1,D
+k ← k + 1
+end for
+i ← i + 1
+end while
+end procedure
+the semantic vector? (iii) How are the global topics identified
+by LSTM-RNN?
+To answer these questions,
+we trained the RNN with and
+without
+LSTM cells on the click-through dataset
+which are
+logged by a commercial
+web search engine.
+The training
+method has been described in Section IV.
+Description of the
+corpus is as follows. The training set includes 200,000 positive
+query / document pairs where only the clicked signal is used
+as a weak supervision for training LSTM. The relevance judge-
+ment set (test set) is constructed as follows.
+First,
+the queries
+TABLE I
+K
+EY
+W
+ORDS FOR
+Q
+UERY
+: “Hotels in Shanghai”
+are sampled from a year of search engine logs.
+Adult,
+spam,
+and bot queries are all removed. Queries are de-duped so that
+only unique queries remain. To reflex a natural query distribu-
+tion, we do not try to control the quality of these queries. For
+example,
+in our query sets,
+there are around 20% misspelled
+queries,
+and around 20% navigational queries and 10% trans-
+actional queries,
+etc.
+Second,
+for each query,
+we collect Web
+documents to be judged by issuing the query to several
+pop-
+ular search engines (e.g.,
+Google,
+Bing) and fetching top-10
+retrieval
+results from each.
+Finally,
+the query-document
+pairs
+are judged by a group of well-trained assessors.
+In this study
+all the queries are preprocessed as follows.
+The text is white-
+space tokenized and lower-cased, numbers are retained, and no
+stemming/inflection treatment is performed. Unless stated oth-
+erwise,
+in the experiments we used 4 negative samples,
+i.e.,
+n = 4
+in Fig. 3.
+We now proceed to perform a comprehensive analysis by
+visualizing the trained RNN and LSTM-RNN models. In par-
+ticular, we will visualize the on-and-off behaviors of the input
+gates,
+output
+gates,
+cell
+states,
+and the semantic vectors in
+LSTM-RNN model, which reveals how the model extracts use-
+ful information from the input sentence and embeds it properly
+into the semantic vector according to the topic information.
+Although giving the full learning formula for all the model
+parameters in the previous section,
+we will remove the peep-
+hole connections and the forget
+gate from the LSTM-RNN
+model
+in the current
+task.
+This is because the length of each
+sequence, i.e., the number of words in a query or a document,
+is known in advance, and we set the state of each cell to zero
+in the beginning of a new sequence. Therefore, forget gates are
+not
+a great
+help here.
+Also,
+as long as the order of words is
+kept,
+the precise timing in the sequence is not
+of great
+con-
+cern. Therefore, peephole connections are not that important as
+well. Removing peephole connections and forget gate will also
+reduce the amount of training time, since a smaller number of
+parameters need to be learned.
+A.
+Analysis
+In this section we would like to examine how the information
+in the input
+sentence is sequentially extracted and embedded
+into the semantic vector over time by the LSTM-RNN model.
+1)
+Attenuating Unimportant
+Information:
+First,
+we exam-
+ine the evolution of the semantic vector and how unimportant
+words are attenuated. Specifically, we feed the following input
+sentences from the test
+dataset
+into the trained LSTM-RNN
+model:
+•
+Query: “hotels in shanghai”
+•
+Document:
+“shanghai
+hotels
+accommodation hotel
+in
+shanghai discount and reservation”
+700
+IEEE/ACM TRANSACTIONS ON AUDIO, SPEECH, AND LANGUAGE PROCESSING, VOL. 24, NO. 4, APRIL 2016
+TABLE II
+K
+EY
+W
+ORDS FOR
+D
+OCUMENT
+: “Shanghai Hotels Accommodation Hotel in Shanghai Discount and Reservation”
+TABLE III
+K
+EYWORDS
+A
+SSIGNED TO
+E
+ACH
+C
+ELL OF
+LSTM-RNN
+FOR
+D
+IFFERENT
+Q
+UERIES OF
+T
+WO
+T
+OPICS
+, “F
+OOD
+”
+AND
+“H
+EALTH
+”
+Activations of
+input
+gate,
+output
+gate,
+cell
+state and the
+embedding vector for each cell
+for query and document
+are
+shown in Fig.
+4 and Fig.
+5,
+respectively.
+The vertical
+axis is
+the cell index from 1 to 32, and the horizontal axis is the word
+index from 1 to 10 numbered from left to right in a sequence of
+words and color codes show activation values. From Figs. 4–5,
+we make the following observations:
+•
+Semantic representation
+y(t)
+and cell
+states
+c(t)
+are
+evolving over
+time.
+Valuable
+context
+information is
+gradually absorbed into
+c(t)
+and
+y(t)
+,
+so that the infor-
+mation in these two vectors becomes richer over time, and
+the semantic information of the entire input
+sentence is
+embedded into vector
+y(t)
+, which is obtained by applying
+output gates to the cell states
+c(t)
+.
+•
+The input
+gates evolve in such a way that
+it
+attenuates
+the unimportant
+information and detects the important
+information from the input
+sentence.
+For
+example,
+in
+Fig. 5(a), most of the input gate values corresponding to
+word 3, word 7 and word 9 have very small values (light
+green-yellow color)
+1
+,
+which corresponds to the words
+1
+If this is not clearly visible, please refer to Fig. 1 in Section I of supplemen-
+tary materials. We have adjusted color bar for all figures to have the same range,
+“accommodation”, “discount” and “reservation”, respec-
+tively, in the document sentence. Interestingly, input gates
+reduce the effect of these three words in the final seman-
+tic representation,
+y(t)
+, such that the semantic similarity
+between sentences from query and document sides are not
+affected by these words.
+2)
+Keywords Extraction:
+In this section, we show how the
+trained LSTM-RNN extracts the important
+information,
+i.e.,
+keywords, from the input sentences. To this end, we backtrack
+semantic representations,
+y(t)
+, over time. We focus on the 10
+most
+active cells in final
+semantic representation.
+Whenever
+there is a large enough change in cell activation value (
+y(t)
+), we
+assume an important keyword has been detected by the model.
+We illustrate the result
+using the above example (“hotels in
+shanghai”).
+The evolution of the 10 most
+active cells activa-
+tion,
+y(t)
+, over time are shown in Fig. 6 for the query and the
+document sentences.
+2
+From Fig. 6, we also observe that differ-
+ent words activate different cells.
+In Tables I–II,
+we show the
+for this reason the structure might
+not
+be clearly visible.
+More visualization
+examples could also be found in Section IV of Supplementary Materials
+2
+Likewise, the vertical axis is the cell index and horizontal axis is the word
+index in the sentence.
+PALANGI et al.: DEEP SENTENCE EMBEDDING USING LONG SHORT-TERM MEMORY NETWORKS
+701
+TABLE IV
+C
+OMPARISONS OF
+NDCG P
+ERFORMANCE
+M
+EASURES
+(
+THE
+H
+IGHER THE
+B
+ETTER
+)
+OF
+P
+ROPOSED
+M
+ODELS AND A
+S
+ERIES OF
+B
+ASELINE
+M
+ODELS
+,
+W
+HERE
+nhid R
+EFERS TO THE
+N
+UMBER OF
+H
+IDDEN
+U
+NITS
+, ncell R
+EFERS
+TO
+N
+UMBER OF
+C
+ELLS
+, win R
+EFERS TO
+W
+INDOW
+S
+IZE
+,
+AND
+n
+IS THE
+N
+UMBER OF
+N
+EGATIVE
+S
+AMPLES
+W
+HICH IS SET TO
+4 U
+NLESS
+O
+THERWISE
+S
+TATED
+. U
+NLESS
+S
+TATED
+O
+THERWISE
+,
+THE
+RNN
+AND
+LSTM-RNN M
+ODELS ARE
+C
+HOSEN TO HAVE THE
+S
+AME
+N
+UMBER OF
+M
+ODEL
+P
+ARAMETERS AS THE
+DSSM
+AND
+CLSM
+MODELS
+: 14.4 M,
+WHERE
+1M = 10
+6
+. T
+HE BOLDFACE NUMBERS ARE THE BEST RESULTS
+number of cells each word activates.
+3
+We used Bidirectional
+LSTM-RNN to get the results of these tables where in the first
+row, LSTM-RNN reads sentences from left to right and in the
+second row it reads sentences from right to left. In these tables
+we labelled a word as a keyword if more than 40% of top 10
+active cells in both directions declare it as keyword. The bold-
+face numbers in the table show that the number of cells assigned
+to that
+word is more than 4,
+i.e.,
+40% of top 10 active cells.
+From the tables, we observe that the keywords usually activate
+more cells than the unimportant words, meaning that they are
+selectively embedded into the semantic vector.
+3)
+Topic Allocation:
+Now, we further show that the trained
+LSTM-RNN model
+not
+only detects the keywords,
+but
+also
+allocates them properly to different cells according to the top-
+ics they belong to.
+To do this,
+we go through the test dataset
+using the trained LSTM-RNN model
+and search for the key-
+words that are detected by a specific cell. For simplicity, we use
+the following simple approach: for each given query we look
+3
+Note that before presenting the first word of the sequence, activation values
+are initially zero so that there is always a considerable change in the cell states
+after presenting the first word. For this reason, we have not indicated the num-
+ber of cells detecting the first word as a keyword. Moreover, another keyword
+extraction example can be found in Section IV of supplementary materials.
+Fig. 7.
+LSTM-RNN compared to RNN during training: The vertical axis is log-
+arithmic scale of the training cost,
+L(Λ)
+, in (4). Horizontal axis is the number
+of epochs during training.
+into the keywords that are extracted by the 5 most active cells
+of LSTM-RNN and list
+them in Table III.
+Interestingly,
+each
+cell collects keywords of a specific topic. For example, cell 26
+in Table III extracts keywords related to the topic “food” and
+cells 2 and 6 mainly focus on the keywords related to the topic
+“health”.
+B.
+Performance Evaluation
+1)
+Web Document Retrieval Task:
+In this section, we apply
+the proposed sentence embedding method to an important web
+document
+retrieval
+task for a commercial
+web search engine.
+Specifically,
+the RNN models (with and without LSTM cells)
+embed the sentences from the query and the document
+sides
+into their corresponding semantic vectors, and then compute the
+cosine similarity between these vectors to measure the semantic
+similarity between the query and candidate documents.
+Experimental results for this task are shown in Table IV using
+the standard metric mean Normalized Discounted Cumulative
+Gain (NDCG) [36] (the higher the better) for evaluating the
+ranking performance of the RNN and LSTM-RNN on a stan-
+dalone human-rated test dataset. We also trained several strong
+baselines,
+such as DSSM [3]
+and CLSM [10],
+on the same
+training dataset
+and evaluated their performance on the same
+task. For fair comparison, our proposed RNN and LSTM-RNN
+models are trained with the same number of parameters as the
+DSSM and CLSM models (14.4 M parameters).
+Besides,
+we
+also include in Table IV two well-known information retrieval
+(IR)
+models,
+BM25 and PLSA,
+for
+the sake of
+benchmark-
+ing.
+The BM25 model
+uses the bag-of-words representation
+for queries and documents,
+which is a state-of-the-art
+docu-
+ment ranking model based on term matching,
+widely used as
+a baseline in IR society. PLSA (Probabilistic Latent Semantic
+Analysis) is a topic model proposed in [37],
+which is trained
+using the Maximum A Posterior estimation [38] on the doc-
+uments side from the same training dataset.
+We performed
+experiments with a varying number of topics from 100 to 500
+for PLSA,
+which gives similar performance,
+and we report in
+Table IV the results of using 500 topics. Results for a language
+model
+based method,
+uni-gram language model
+(ULM) with
+Dirichlet smoothing, are also presented in the table.
+702
+IEEE/ACM TRANSACTIONS ON AUDIO, SPEECH, AND LANGUAGE PROCESSING, VOL. 24, NO. 4, APRIL 2016
+To compare the performance of the proposed method with
+general
+sentence embedding methods in document
+retrieval
+task,
+we also performed experiments using two general
+sen-
+tence embedding methods:
+1.
+In the first experiment, we used the method proposed in
+[2] that generates embedding vectors known as Paragraph
+Vectors. It is also known as doc2vec. It maps each word to
+a vector and then uses the vectors representing all words
+inside a context
+window to predict
+the vector represen-
+tation of the next word. The main idea in this method is
+to use an additional paragraph token from previous sen-
+tences in the document inside the context window.
+This
+paragraph token is mapped to vector space using a differ-
+ent matrix from the one used to map the words. A primary
+version of this method is known as word2vec proposed
+in [39].
+The only difference is that
+word2vec does not
+include the paragraph token.
+To use doc2vec on our dataset, we first trained doc2vec
+model on both train set (about 200,000 query-document
+pairs) and test set (about 900,000 query-document pairs).
+This gives us an embedding vector for every query and
+document in the dataset. We used the following parame-
+ters for training:
+• min −count = 1
+:
+minimum number of words per
+sentence,
+sentences with words less than this will
+be ignored.
+We set it to 1 to make sure we do not
+throw away anything.
+• window = 5
+:
+fixed window size explained in [2].
+We used different window sizes, it resulted in about
+just 0.4% difference in final NDCG values.
+• size = 100
+: feature vector dimension. We used 400
+as well but did not get significantly different NDCG
+values.
+• sample = 1e − 4
+:
+this is the down sampling ratio
+for the words that are repeated a lot in corpus.
+• negative = 5
+:
+the
+number
+of
+noise
+words,
+i.e.,
+words used for negative sampling as explained in
+[2].
+•
+We used 30 epochs of training.
+We ran an exper-
+iment
+with 100 epochs but
+did not
+observe much
+difference in the results.
+•
+We used gensim [40] to perform experiments.
+To make sure that
+a meaningful
+model
+is trained,
+we
+used the trained doc2vec model
+to find the most
+sim-
+ilar
+words
+to two sample words
+in our
+dataset,
+e.g.,
+the words “pizza” and “infection”.
+The resulting words
+and corresponding scores
+are presented in Section V
+of Supplementary Materials.
+As it
+is observed from the
+resulting words, the trained model is a meaningful model
+and can recognise semantic similarity.
+Doc2vec also assigns an embedding vector for each
+query and document
+in our
+test
+set.
+We used these
+embedding vectors to calculate the cosine similarity score
+between each query-document
+pair
+in the test
+set.
+We
+used these scores to calculate NDCG values reported in
+Table IV for the Doc2Vec model.
+Comparing the results of doc2vec model with our pro-
+posed method for document retrieval task shows that the
+proposed method in this paper significantly outperforms
+doc2vec. One reason for this is that we have used a very
+general sentence embedding method, doc2vec, for docu-
+ment retrieval task.
+This experiment shows that it is not
+a good idea to use a general sentence embedding method
+and using a better task oriented cost function, like the one
+proposed in this paper, is necessary.
+2.
+In the second experiment,
+we used the Skip-Thought
+vectors proposed in [6].
+During training,
+skip-thought
+method gets a tuple
+(s(t − 1), s(t), s(t + 1))
+where it
+encodes the sentence
+s(t)
+using one encoder, and tries to
+reconstruct the previous and next sentences, i.e.,
+s(
+t − 1)
+and
+s(t + 1)
+,
+using two separate decoders.
+The model
+uses
+RNNs
+with Gated Recurrent
+Unit
+(GRU)
+which
+is shown to perform as good as LSTM.
+In the paper,
+authors have emphasized that:
+“Our model
+depends on
+having a training corpus of contiguous text”. Therefore,
+training it
+on our
+training set
+where we barely have
+more than one sentence in query or
+document
+title is
+not fair. However, since their model is trained on 11,038
+books from BookCorpus dataset [7] which includes about
+74 million sentences, we can use the trained model as an
+off-the-shelf sentence embedding method as authors have
+concluded in the conclusion of the paper.
+To
+do
+this
+we
+downloaded
+their
+trained
+models
+and
+word embeddings (its size was more than 2 GB)
+available
+from “https://github.com/ryankiros/skip-thoughts”.
+Then we
+encoded each query and its corresponding document title in our
+test set as vector.
+We used the combine-skip sentence embedding method,
+a
+vector of size
+4800 × 1
+, where it is concatenation of a uni-skip,
+i.e., a unidirectional encoder resulting in a
+2400 × 1
+vector, and
+a bi-skip,
+i.e.,
+a bidirectional encoder resulting in a
+1200 × 1
+vector
+by forward encoder
+and another
+1200 × 1
+vector
+by
+backward encoder. The authors have reported their best results
+with the combine-skip encoder.
+Using the
+4800 × 1
+embedding vectors for each query and
+document we calculated the scores and NDCG for the whole
+test set which are reported in Table IV.
+The proposed method in this paper
+is performing signif-
+icantly better
+than the off-the-shelf
+skip-thought
+method for
+document
+retrieval
+task.
+Nevertheless,
+since we used skip-
+thought
+as an off-the-shelf
+sentence embedding method,
+its
+result is good. This result also confirms that learning embedding
+vectors using a model and cost function specifically designed
+for document retrieval task is necessary.
+As shown in Table IV, the LSTM-RNN significantly outper-
+forms all
+these models,
+and exceeds the best
+baseline model
+(CLSM) by 1.3% in NDCG@1 score,
+which is a statistically
+significant
+improvement.
+As we pointed out
+in Section V-A,
+such an improvement
+comes from the LSTM-RNN’s ability
+to embed the contextual and semantic information of the sen-
+tences into a finite dimension vector.
+In Table IV,
+we have
+also presented the results when different
+number of negative
+samples,
+n
+,
+is used.
+Generally,
+by increasing
+n
+we expect the
+performance to improve.
+This is because more negative sam-
+ples result
+in a more accurate approximation of the partition
+function in (5). The results of using Bidirectional LSTM-RNN
+PALANGI et al.: DEEP SENTENCE EMBEDDING USING LONG SHORT-TERM MEMORY NETWORKS
+703
+are also presented in Table IV. In this model, one LSTM-RNN
+reads queries and documents from left to right,
+and the other
+LSTM-RNN reads queries and documents from right
+to left.
+Then the embedding vectors from left to right and right to left
+LSTM-RNNs are concatenated to compute the cosine similarity
+score and NDCG values.
+A comparison between the value of the cost function during
+training for LSTM-RNN and RNN on the click-through data
+is shown in Fig. 7. From this figure, we conclude that LSTM-
+RNN is optimizing the cost
+function in (4) more effectively.
+Please note that
+all
+parameters of both models are initialized
+randomly.
+VI.
+C
+ONCLUSIONS AND
+F
+UTURE
+W
+ORK
+This paper addresses deep sentence embedding. We propose
+a model based on long short-term memory to model the long
+range context
+information and embed the key information of
+a sentence in one semantic vector.
+We show that
+the seman-
+tic vector evolves over time and only takes useful information
+from any new input. This has been made possible by input gates
+that detect useless information and attenuate it. Due to general
+limitation of available human labelled data,
+we proposed and
+implemented training the model with a weak supervision sig-
+nal using user click-through data of a commercial web search
+engine.
+By performing a detailed analysis on the model, we showed
+that: 1) The proposed model is robust to noise,
+i.e.,
+it mainly
+embeds keywords in the final semantic vector representing the
+whole sentence and 2) In the proposed model, each cell is usu-
+ally allocated to keywords from a specific topic. These findings
+have been supported using extensive examples.
+As
+a con-
+crete sample application of the proposed sentence embedding
+method, we evaluated it on the important language processing
+task of web document retrieval. We showed that, for this task,
+the proposed method outperforms all
+existing state of the art
+methods significantly.
+This work has been motivated by the earlier successes of
+deep learning methods in speech [41]–[45]
+and in semantic
+modelling [3],
+[10],
+[46],
+[47],
+and it
+adds further
+evidence
+for the effectiveness of these methods.
+Our future work will
+further extend the methods to include 1) Using the proposed
+sentence embedding method for other important language pro-
+cessing tasks for which we believe sentence embedding plays a
+key role, e.g., the question / answering task. 2) Exploiting the
+prior information about the structure of the different matrices
+in Fig.
+2 to develop a more effective cost function and learn-
+ing method. 3) Exploiting attention mechanism in the proposed
+model to improve the performance and find out which words in
+the query are aligned to which words of the document.
+A
+PPENDIX
+A
+E
+XPRESSIONS FOR THE
+G
+RADIENTS
+In this appendix we present
+the final
+gradient
+expressions
+that are necessary to use for training the proposed models. Full
+derivations of these gradients are presented in Section III of
+supplementary materials.
+A.
+RNN
+For the recurrent parameters,
+Λ = W
+rec
+(we have omitted
+r
+subscript for simplicity):
+∂Δ
+j,τ
+∂W
+rec
+=
+
+δ
+D
++
+y
+Q
+(t − τ )y
+T
+Q
+(t − τ − 1)
++δ
+D
++
+y
+D
+(t − τ )y
+T
+D
++
+(t − τ − 1)
+
+−
+
+δ
+D
+−
+j
+y
+Q
+(t − τ )y
+T
+Q
+(t − τ − 1)
++δ
+D
+−
+j
+y
+D
+(t − τ )y
+T
+D
+−
+j
+(t − τ − 1)
+
+(9)
+where
+D
+−
+j
+means
+j
+-th candidate document that is not clicked
+and
+δ
+y
+Q
+(t − τ − 1) = (1 − y
+Q
+(t − τ − 1))
+◦(1 + y
+Q
+(t − τ − 1)) ◦ W
+T
+rec
+δ
+y
+Q
+(t − τ )
+(10)
+and the same as (10) for
+δ
+y
+D
+(t − τ − 1)
+with
+D
+subscript for
+document side model. Please also note that:
+δ
+y
+Q
+(T
+Q
+) = (1 − y
+Q
+(T
+Q
+)) ◦ (1 + y
+Q
+(T
+Q
+))
+◦ (b.c.y
+D
+(T
+D
+) − a.b
+3
+.c.y
+Q
+(T
+Q
+)),
+δ
+y
+D
+(T
+D
+) = (1 − y
+D
+(T
+D
+)) ◦ (1 + y
+D
+(T
+D
+))
+◦ (b.c.y
+Q
+(T
+Q
+) − a.b.c
+3
+.y
+D
+(T
+D
+))
+(11)
+where
+a = y
+Q
+(t = T
+Q
+)
+T
+y
+D
+(t = T
+D
+)
+b =
+1
+y
+Q
+(t = T
+Q
+)
+, c =
+1
+y
+D
+(t = T
+D
+)
+(12)
+For the input parameters,
+Λ = W
+:
+∂Δ
+j,τ
+∂W
+=
+
+δ
+D
++
+y
+Q
+(t − τ )l
+T
+Q
+(t − τ )
++ δ
+D
++
+y
+D
+(t − τ )l
+T
+D
++
+(t − τ )
+
+−
+
+δ
+D
+−
+j
+y
+Q
+(t − τ )l
+T
+Q
+(t − τ )
++ δ
+D
+−
+j
+y
+D
+(t − τ )l
+T
+D
+−
+j
+(t − τ )
+
+(13)
+A full derivation of BPTT for RNN is presented in Section III
+of supplementary materials.
+B.
+LSTM-RNN
+Starting with the cost function in (4),
+we use the Nesterov
+method described in (6) to update LSTM-RNN model param-
+eters.
+Here,
+Λ
+is
+one
+of
+the
+weight
+matrices
+or
+bias
+vectors
+{W
+1
+, W
+2
+, W
+3
+, W
+4
+, W
+rec1
+, W
+rec2
+, W
+rec3
+, W
+rec4
+,
+W
+p1
+, W
+p2
+, W
+p3
+, b
+1
+, b
+2
+, b
+3
+, b
+4
+}
+in the LSTM-RNN architec-
+ture.
+The general
+format
+of the gradient
+of the cost
+function,
+∇L(Λ)
+, is the same as (7). By definition of
+Δ
+r,j
+, we have:
+∂Δ
+r,j
+∂Λ
+=
+∂R(Q
+r
+, D
++
+r
+)
+∂Λ
+−
+∂R(Q
+r
+, D
+r,j
+)
+∂Λ
+(14)
+704
+IEEE/ACM TRANSACTIONS ON AUDIO, SPEECH, AND LANGUAGE PROCESSING, VOL. 24, NO. 4, APRIL 2016
+We
+omit
+r
+and
+j
+subscripts
+for
+simplicity
+and
+present
+∂R(Q, D)/∂Λ
+for different parameters of each cell of LSTM-
+RNN in the following subsections.
+This
+will
+complete the
+process of calculating
+∇L(Λ)
+in (7) and then we can use (6)
+to update LSTM-RNN model
+parameters.
+In the subsequent
+subsections vectors
+v
+Q
+and
+v
+D
+are defined as:
+v
+Q
+= (b.c.y
+D
+(t = T
+D
+) − a.b
+3
+.c.y
+Q
+(t = T
+Q
+))
+v
+D
+= (b.c.y
+Q
+(t = T
+Q
+) − a.b.c
+3
+.y
+D
+(t = T
+D
+))
+(15)
+where
+a, b
+and
+c
+are defined in (12).
+Full
+derivation of trun-
+cated BPTT for LSTM-RNN model is presented in Section III
+of supplementary materials.
+1)
+Output Gate:
+For recurrent connections we have:
+∂R(Q, D)
+∂W
+rec1
+= δ
+rec1
+y
+Q
+(t).y
+Q
+(t − 1)
+T
++ δ
+rec1
+y
+D
+(t).y
+D
+(t − 1)
+T
+(16)
+where
+δ
+rec1
+y
+Q
+(t) = o
+Q
+(t) ◦ (1 − o
+Q
+(t)) ◦ h(c
+Q
+(t)) ◦ v
+Q
+(t)
+(17)
+and the same as (17) for
+δ
+rec1
+y
+D
+(t)
+with subscript
+D
+for doc-
+ument
+side model.
+For input
+connections,
+W
+1
+,
+and peephole
+connections,
+W
+p1
+, we will have:
+∂R(Q, D)
+∂W
+1
+= δ
+rec1
+y
+Q
+(t).l
+Q
+(t)
+T
++ δ
+rec1
+y
+D
+(t).l
+D
+(t)
+T
+(18)
+∂R(Q, D)
+∂W
+p1
+= δ
+rec1
+y
+Q
+(t).c
+Q
+(t)
+T
++ δ
+rec1
+y
+D
+(t).c
+D
+(t)
+T
+(19)
+The derivative for output gate bias values will be:
+∂R(Q, D)
+∂b
+1
+= δ
+rec1
+y
+Q
+(t) + δ
+rec1
+y
+D
+(t)
+(20)
+2)
+Input Gate:
+For the recurrent connections we have:
+∂R(Q, D)
+∂W
+rec3
+= diag(δ
+rec3
+y
+Q
+(t)).
+∂c
+Q
+(t)
+∂W
+rec3
++ diag(δ
+rec3
+y
+D
+(t)).
+∂c
+D
+(t)
+∂W
+rec3
+(21)
+where
+δ
+rec3
+y
+Q
+(t) = (1 − h(c
+Q
+(t))) ◦ (1 + h(c
+Q
+(t))) ◦ o
+Q
+(t) ◦ v
+Q
+(t)
+∂c
+Q
+(t)
+∂W
+rec3
+= diag(f
+Q
+(t)).
+∂c
+Q
+(t − 1)
+∂W
+rec3
++ b
+i,Q
+(t).y
+Q
+(t − 1)
+T
+b
+i,Q
+(t) = y
+g,Q
+(t) ◦ i
+Q
+(t) ◦ (1 − i
+Q
+(t))
+(22)
+In equation (21),
+δ
+rec3
+y
+D
+(t)
+and
+∂c
+D
+(t)/∂W
+rec3
+are the same as
+(22) with
+D
+subscript. For the input connections we will have
+the following:
+∂R(Q, D)
+∂W
+3
+= diag(δ
+rec3
+y
+Q
+(t)).
+∂c
+Q
+(t)
+∂W
+3
++ diag(δ
+rec3
+y
+D
+(t)).
+∂c
+D
+(t)
+∂W
+3
+(23)
+where
+∂c
+Q
+(t)
+∂W
+3
+= diag(f
+Q
+(t)).
+∂c
+Q
+(t − 1)
+∂W
+3
++ b
+i,Q
+(t).x
+Q
+(t)
+T
+(24)
+For the peephole connections we will have:
+∂R(Q, D)
+∂W
+p3
+= diag(δ
+rec3
+y
+Q
+(t)).
+∂c
+Q
+(t)
+∂W
+p3
++ diag(δ
+rec3
+y
+D
+(t)).
+∂c
+D
+(t)
+∂W
+p3
+(25)
+where
+∂c
+Q
+(t)
+∂W
+p3
+= diag(f
+Q
+(t)).
+∂c
+Q
+(t − 1)
+∂W
+p3
++ b
+i,Q
+(t).c
+Q
+(t − 1)
+T
+(26)
+For bias values,
+b
+3
+, we will have:
+∂R(Q, D)
+∂b
+3
+= diag(δ
+rec3
+y
+Q
+(t)).
+∂c
+Q
+(t)
+∂b
+3
++ diag(δ
+rec3
+y
+D
+(t)).
+∂c
+D
+(t)
+∂b
+3
+(27)
+where
+∂c
+Q
+(t)
+∂b
+3
+= diag(f
+Q
+(t)).
+∂c
+Q
+(t − 1)
+∂b
+3
++ b
+i,Q
+(t)
+(28)
+3)
+Forget Gate:
+For the recurrent connections we will have:
+∂R(Q, D)
+∂W
+rec2
+= diag(δ
+rec2
+y
+Q
+(t)).
+∂c
+Q
+(t)
+∂W
+rec2
++ diag(δ
+rec2
+y
+D
+(t)).
+∂c
+D
+(t)
+∂W
+rec2
+(29)
+where
+δ
+rec2
+y
+Q
+(t) = (1 − h(c
+Q
+(t))) ◦ (1 + h(c
+Q
+(t))) ◦ o
+Q
+(t) ◦ v
+Q
+(t)
+∂c
+Q
+(t)
+∂W
+rec2
+= diag(f
+Q
+(t)).
+∂c
+Q
+(t − 1)
+∂W
+rec2
++ b
+f,Q
+(t).y
+Q
+(t − 1)
+T
+b
+f,Q
+(t) = c
+Q
+(t − 1) ◦ f
+Q
+(t) ◦ (1 − f
+Q
+(t))
+(30)
+For input connections to forget gate we will have:
+∂R(Q, D)
+∂W
+2
+= diag(δ
+rec2
+y
+Q
+(t)).
+∂c
+Q
+(t)
+∂W
+2
++ diag(δ
+rec2
+y
+D
+(t)).
+∂c
+D
+(t)
+∂W
+2
+(31)
+where
+∂c
+Q
+(t)
+∂W
+2
+= diag(f
+Q
+(t)).
+∂c
+Q
+(t − 1)
+∂W
+2
++ b
+f,Q
+(t).x
+Q
+(t)
+T
+(32)
+For peephole connections we have:
+∂R(Q, D)
+∂W
+p2
+= diag(δ
+rec2
+y
+Q
+(t)).
+∂c
+Q
+(t)
+∂W
+p2
++ diag(δ
+rec2
+y
+D
+(t)).
+∂c
+D
+(t)
+∂W
+p2
+(33)
+where
+∂c
+Q
+(t)
+∂W
+p2
+= diag(f
+Q
+(t)).
+∂c
+Q
+(t − 1)
+∂W
+p2
++ b
+f,Q
+(t).c
+Q
+(t − 1)
+T
+(34)
+PALANGI et al.: DEEP SENTENCE EMBEDDING USING LONG SHORT-TERM MEMORY NETWORKS
+705
+For forget gate’s bias values we will have:
+∂R(Q, D)
+∂b
+2
+= diag(δ
+rec2
+y
+Q
+(t)).
+∂c
+Q
+(t)
+∂b
+2
++ diag(δ
+rec2
+y
+D
+(t)).
+∂c
+D
+(t)
+∂b
+2
+(35)
+where
+∂c
+Q
+(t)
+∂b
+2
+= diag(f
+Q
+(t)).
+∂c
+Q
+(t − 1)
+∂b
+3
++ b
+f,Q
+(t)
+(36)
+4)
+Input Without Gating
+(y
+g
+(t))
+:
+For recurrent connections
+we will have:
+∂R(Q, D)
+∂W
+rec4
+= diag(δ
+rec4
+y
+Q
+(t)).
+∂c
+Q
+(t)
+∂W
+rec4
++ diag(δ
+rec4
+y
+D
+(t)).
+∂c
+D
+(t)
+∂W
+rec4
+(37)
+where
+δ
+rec4
+y
+Q
+(t) = (1 − h(c
+Q
+(t))) ◦ (1 + h(c
+Q
+(t))) ◦ o
+Q
+(t) ◦ v
+Q
+(t)
+∂c
+Q
+(t)
+∂W
+rec4
+= diag(f
+Q
+(t)).
+∂c
+Q
+(t − 1)
+∂W
+rec4
++ b
+g,Q
+(t).y
+Q
+(t − 1)
+T
+b
+g,Q
+(t) = i
+Q
+(t) ◦ (1 − y
+g,Q
+(t)) ◦ (1 + y
+g,Q
+(t))
+(38)
+For input connection we have:
+∂R(Q, D)
+∂W
+4
+= diag(δ
+rec4
+y
+Q
+(t)).
+∂c
+Q
+(t)
+∂W
+4
++ diag(δ
+rec4
+y
+D
+(t)).
+∂c
+D
+(t)
+∂W
+4
+(39)
+where
+∂c
+Q
+(t)
+∂W
+4
+= diag(f
+Q
+(t)).
+∂c
+Q
+(t − 1)
+∂W
+4
++ b
+g,Q
+(t).x
+Q
+(t)
+T
+(40)
+For bias values we will have:
+∂R(Q, D)
+∂b
+4
+= diag(δ
+rec4
+y
+Q
+(t)).
+∂c
+Q
+(t)
+∂b
+4
++ diag(δ
+rec4
+y
+D
+(t)).
+∂c
+D
+(t)
+∂b
+4
+(41)
+where
+∂c
+Q
+(t)
+∂b
+4
+= diag(f
+Q
+(t)).
+∂c
+Q
+(t − 1)
+∂b
+4
++ b
+g,Q
+(t)
+(42)
+5)
+Error Signal
+Backpropagation:
+Error signals are back
+propagated through time using following equations:
+δ
+rec1
+Q
+(t − 1)
+= [o
+Q
+(t − 1) ◦ (1 − o
+Q
+(t − 1)) ◦ h(c
+Q
+(t − 1))]
+◦ W
+T
+rec1
+.δ
+rec1
+Q
+(t)
+(43)
+δ
+rec
+i
+Q
+(t − 1) = [(1 − h(c
+Q
+(t − 1))) ◦ (1 + h(c
+Q
+(t − 1)))
+◦o
+Q
+(t − 1)] ◦ W
+T
+rec
+i
+.δ
+rec
+i
+Q
+(t), f ori ∈ {2, 3, 4}
+(44)
+R
+EFERENCES
+[1]
+I.
+Sutskever,
+O.
+Vinyals,
+and Q.
+V.
+Le,
+“Sequence to sequence learn-
+ing with neural networks,” Proc.
+Adv.
+Neural Inf.
+Process.
+Syst.,
+2014,
+pp. 3104–3112.
+[2]
+Q.
+V.
+Le and T.
+Mikolov,
+“Distributed representations of sentences and
+documents,” Proc. 31st Int. Conf. Mach. Learn., 2014, pp. 1188–1196.
+[3]
+P.-S. Huang, X. He, J. Gao, L. Deng, A. Acero, and L. Heck, “Learning
+deep structured semantic models for web search using clickthrough data,”
+Proc. 22Nd ACM Int. Conf. Inf. Knowl. Manage., 2013, pp. 2333–2338,
+ser. CIKM ’13. ACM.
+[4]
+T.
+Mikolov,
+I.
+Sutskever,
+K.
+Chen,
+G.
+S.
+Corrado,
+and J.
+Dean,
+“Distributed representations of words and phrases and their composition-
+ality,” Proc. Adv. Neural Inf. Process. Syst., 2013, pp. 3111–3119.
+[5]
+T. Mikolov, K. Chen, G. Corrado, and J. Dean, “Efficient estimation of
+word representations in vector space,” arXiv:1301.3781, 2013.
+[6]
+R. Kiros, Y. Zhu, R. Salakhutdinov, R. S. Zemel, A. Torralba, R. Urtasun,
+and S.
+Fidler,
+“Skip-thought
+vectors,” Adv.
+Neural
+Inf.
+Process.
+Syst.
+(NIPS), 2015.
+[7]
+Y. Zhu, R. Kiros, R. Zemel, R. Salakhutdinov, R. Urtasun, A. Torralba,
+and S.
+Fidler,
+“Aligning books and movies:
+Towards story-like visual
+explanations by watching movies and reading books,” arXiv:1506.06724,
+2015.
+[8]
+J.
+Chung,
+C.
+Gulcehre,
+K.
+Cho,
+and Y.
+Bengio,
+“Empirical
+evaluation
+of gated recurrent neural networks on sequence modeling,” NIPS Deep
+Learn. Workshop, 2014.
+[9]
+R.
+Socher,
+J.
+Pennington,
+E.
+H.
+Huang,
+A.
+Y.
+Ng,
+and C.
+D.
+Manning,
+“Semi-supervised recursive autoencoders for predicting sentiment distri-
+butions,” Proc. Conf. Empir. Meth. Nat. Lang. Process., 2011, pp. 151–
+161, ser. EMNLP’11.
+[10]
+Y.
+Shen,
+X.
+He,
+J.
+Gao,
+L.
+Deng,
+and G.
+Mesnil,
+“A latent
+semantic
+model
+with convolutional-pooling structure for
+information retrieval,”
+Proc. CIKM, Nov. 2014.
+[11]
+R. Collobert and J. Weston, “A unified architecture for natural language
+processing:
+Deep neural
+networks with multitask learning,” Proc.
+Int.
+Conf. Mach. Learn. (ICML), 2008.
+[12]
+N. Kalchbrenner, E. Grefenstette, and P. Blunsom, “A convolutional neu-
+ral network for modelling sentences,” Proc. 52nd Annu. Meeting Assoc.
+Comput. Linguist., Jun. 2014.
+[13]
+B. Hu, Z. Lu, H. Li, and Q. Chen, “Convolutional neural network architec-
+tures for matching natural language sentences,” Adv. Neural Inf. Process.
+Syst. 27, 2014, pp. 2042–2050.
+[14]
+J. Zhang, S. Liu, M. Li, M. Zhou, and C. Zong, “Bilingually-constrained
+phrase embeddings for machine translation,” Proc. 52nd Annu. Meeting
+Assoc.
+Comput.
+Linguist.
+(ACL) (Vol.
+1: Long Papers),
+Baltimore,
+MD,
+USA, 2014, pp. 111–121.
+[15]
+S.
+Hochreiter and J.
+Schmidhuber,
+“Long short-term memory,” Neural
+Comput., vol. 9, no. 8, pp. 1735–1780, Nov. 1997.
+[16]
+A. Graves, A. Mohamed, and G. Hinton, “Speech recognition with deep
+recurrent neural networks,” Proc. ICASSP, Vancouver, BC, Canada, May
+2013, pp. 6645–6649.
+[17]
+H. Sak, A. Senior, and F. Beaufays, “Long short-term memory recurrent
+neural
+network architectures for large scale acoustic modeling,” Proc.
+Annu. Conf. Int. Speech Commun. Assoc. (INTERSPEECH), 2014.
+[18]
+K. M. Hermann and P. Blunsom, “Multilingual models for compositional
+distributed semantics,” arXiv:1404.4641, 2014.
+[19]
+D.
+Bahdanau,
+K.
+Cho,
+and Y.
+Bengio,
+“Neural
+machine translation by
+jointly learning to align and translate,” Proc.
+ICLR’15,
+2015,
+Online.
+[Available]: http://arxiv.org/abs/1409.0473.
+[20]
+A. Karpathy, J. Johnson, and L. Fei-Fei, “Visualizing and understanding
+recurrent networks,” arXiv:1506.02078, 2015.
+[21]
+J.
+L.
+Elman,
+“Finding structure in time,” Cognitive Sci.,
+vol.
+14,
+no.
+2,
+pp. 179–211, 1990.
+[22]
+A.
+J.
+Robinson,
+“An application of recurrent
+nets to phone probability
+estimation,” IEEE Trans. Neural Netw., vol. 5, no. 2, pp. 298–305, Aug.
+1994.
+[23]
+L.
+Deng,
+K.
+Hassanein,
+and M.
+Elmasry,
+“Analysis
+of
+the correla-
+tion structure for a neural
+predictive model
+with application to speech
+recognition,” Neural Netw., vol. 7, no. 2, pp. 331–339, 1994.
+[24]
+T.
+Mikolov,
+M.
+Karafiát,
+L.
+Burget,
+J.
+Cernocký,
+and S.
+Khudanpur,
+“Recurrent
+neural
+network
+based
+language
+model,”
+Proc.
+INTERSPEECH, Makuhari, Japan, Sep. 2010, pp. 1045–1048.
+[25]
+A. Graves, “Sequence transduction with recurrent neural networks,” Proc.
+Representat. Learn. Workshp, ICML, 2012.
+[26]
+Y.
+Bengio,
+N.
+Boulanger-Lewandowski,
+and R.
+Pascanu,
+“Advances in
+optimizing recurrent networks,” Proc. ICASSP, Vancouver, BC, Canada,
+May 2013, pp. 8624–8628.
+706
+IEEE/ACM TRANSACTIONS ON AUDIO, SPEECH, AND LANGUAGE PROCESSING, VOL. 24, NO. 4, APRIL 2016
+[27]
+J. Chen and L. Deng, “A primal-dual method for training recurrent neural
+networks constrained by the echo-state property,” Proc. Int. Conf. Learn.
+Representat. (ICLR), 2014.
+[28]
+G.
+Mesnil,
+X.
+He,
+L.
+Deng,
+and Y.
+Bengio,
+“Investigation of recurrent-
+neural-network architectures and learning methods for spoken language
+understanding,” Proc. INTERSPEECH, Lyon, France, Aug. 2013.
+[29]
+L. Deng and J. Chen, “Sequence classification using high-level features
+extracted from deep neural networks,” Proc.
+ICASSP,
+2014,
+pp.
+6844–
+6848.
+[30]
+F.
+A.
+Gers,
+J.
+Schmidhuber,
+and F.
+Cummins,
+“Learning to forget:
+Continual prediction with LSTM,” Neural Comput.,
+vol.
+12,
+pp.
+2451–
+2471, 1999.
+[31]
+F.
+A.
+Gers,
+N.
+N.
+Schraudolph,
+and J.
+Schmidhuber,
+“Learning precise
+timing with LSTM recurrent
+networks,” J.
+Mach.
+Learn.
+Res.,
+vol.
+3,
+pp. 115–143, Mar. 2003.
+[32]
+J. Gao, W. Yuan, X. Li, K. Deng, and J.-Y. Nie, “Smoothing clickthrough
+data for web search ranking,” Proc.
+32Nd Int.
+ACM SIGIR Conf.
+Res.
+Develop.
+Inf.
+Retrieval,
+New York,
+NY,
+USA,
+2009,
+pp.
+355–362,
+ser.
+SIGIR ’09, ACM.
+[33]
+Y. Nesterov, “A method of solving a convex programming problem with
+convergence rate o (1/k2),” Soviet Math. Doklady, vol. 27, pp. 372–376,
+1983.
+[34]
+I. Sutskever, J. Martens, and G. E. Dahl, G. E. Hinton, “On the importance
+of initialization and momentum in deep learning,” Proc.
+ICML (3)’13,
+2013, pp. 1139–1147.
+[35]
+R.
+Pascanu,
+T.
+Mikolov,
+and Y.
+Bengio,
+“On the difficulty of training
+recurrent neural networks,” Proc. ICML 2013, ser. JMLR, 2013, vol. 28,
+pp. 1310–1318, JMLR.org..
+[36]
+K.
+Järvelin and J.
+Kekäläinen,
+“Ir
+evaluation methods for
+retrieving
+highly relevant documents,” Proc. 23rd Annu. Int. ACM SIGIR Conf. Res.
+Develop. Inf. Retrieval, 2000, pp. 41–48, ser. SIGIR. ACM.
+[37]
+T. Hofmann, “Probabilistic latent semantic analysis,” Proc. Uncert. Artif.
+Intell. (UAI’99), 1999, pp. 289–296.
+[38]
+J. Gao, K. Toutanova, and W.-t. Yih, “Clickthrough-based latent semantic
+models for web search,” Proc. Annu. Int. ACM SIGIR Conf. Res. Develop.
+Inf. Retrieval, 2011, pp. 675–684, ser. SIGIR ‘11. ACM.
+[39]
+T. Mikolov, K. Chen, G. Corrado, and J. Dean, “Efficient estimation of
+word representations in vector space,” Proc. Int. Conf. Learn. Represent.
+(ICLR), 2013, arXiv:1301.3781.
+[40]
+R.
+ˇ
+Reh˚
+u
+ˇ
+rek
+and
+P.
+Sojka,
+“Software
+framework
+for
+topic
+mod-
+elling with large corpora,” Proc.
+LREC Workshop New Challenges
+for
+NLP
+Frameworks,
+Valletta,
+Malta,
+May
+2010,
+pp.
+45–50,
+http://is.muni.cz/publication/884893/en, ELRA.
+[41]
+G. E. Dahl, D. Yu, L. Deng, and A. Acero, “Large vocabulary continuous
+speech recognition with context-dependent
+DBN-HMMs,” Proc.
+IEEE
+ICASSP, Prague, Czech, May 2011, pp. 4688–4691.
+[42]
+D.
+Yu and L.
+Deng,
+“Deep learning and its applications to signal
+and
+information processing [exploratory DSP],” IEEE Signal Process. Mag.,
+vol. 28, no. 1, pp. 145–154, Jan. 2011.
+[43]
+G. Dahl, D. Yu, L. Deng, and A. Acero, “Context-dependent pre-trained
+deep neural
+networks for
+large-vocabulary speech recognition,” IEEE
+Trans. Audio, Speech, Lang. Process., vol. 20, no. 1, pp. 30–42, Jan. 2012.
+[44]
+G. Hinton, L. Deng, D. Yu, G. E. Dahl, A. Mohamed, N. Jaitly, A. Senior,
+V. Vanhoucke, P. Nguyen, T. N. Sainath, and B. Kingsbury, “Deep neu-
+ral
+networks for acoustic modeling in speech recognition:
+The shared
+views of four research groups,” IEEE Signal Process. Mag., vol. 29, no. 6,
+pp. 82–97, Nov. 2012.
+[45]
+L. Deng, D. Yu and J. Platt, “Scalable stacking and learning for building
+deep architectures,” Proc. ICASSP
+, Mar. 2012, pp. 2133–2136.
+[46]
+J.
+Gao,
+P.
+Pantel,
+M.
+Gamon,
+X.
+He,
+L.
+Deng,
+and Y.
+Shen,
+“Modeling
+interestingness with deep neural networks,” Proc. EMNLP, 2014.
+[47]
+J.
+Gao,
+X.
+He,
+W.
+tau Yih,
+and L.
+Deng,
+“Learning continuous phrase
+representations for translation modeling,” Proc. ACL, 2014.
+Hamid Palangi
+(S’12) is a Ph.D.
+Candidate in the
+Electrical and Computer Engineering Department at
+the University of British Columbia (UBC),
+Canada.
+Before joining UBC in Jan.
+2012,
+he received his
+M.Sc.
+degree in 2010 from Sharif
+University of
+Technology,
+Iran,
+and B.Sc.
+degree in 2007 from
+Shahid Rajaee University,
+Iran,
+both in electrical
+engineering.
+Since Jan.
+2012,
+he has been a mem-
+ber of Image and Signal Processing Lab at UBC. His
+main research interests are machine learning,
+deep
+learning and neural networks, linear inverse problems
+and compressive sensing, and applications in natural language and image data.
+Li
+Deng received a Ph.D.
+from the University of
+Wisconsin-Madison.
+He was an assistant
+and then
+tenured full Professor at the University of Waterloo,
+Ontario,
+Canada,
+during 1989–1999.
+Immediately
+afterward he joined Microsoft
+Research,
+Redmond,
+USA,
+as a Principal Researcher,
+where he currently
+directs the R&D of its Deep Learning Technology
+Center he founded in early 2014. Dr. Deng’s current
+activities are centered on business-critical
+applica-
+tions involving big data analytics,
+natural
+language
+text,
+semantic modeling,
+speech,
+image,
+and multi-
+modal signals. Outside his main responsibilities, Dr. Deng’s research interests
+lie in solving fundamental problems of machine learning, artificial and human
+intelligence,
+cognitive and neural
+computation with their biological
+connec-
+tions,
+and multimodal
+signal/information processing.
+In addition to over 70
+granted patents and over 300 scientific publications in leading journals and
+conferences,
+Dr.
+Deng has authored or co-authored 5 books including 2 lat-
+est books: Deep Learning: Methods and Applications (NOW Publishers, 2014)
+and Automatic Speech Recognition:
+A Deep-Learning Approach (Springer,
+2015),
+both with English and Chinese editions.
+Dr.
+Deng is a Fellow of the
+IEEE,
+the Acoustical
+Society of America,
+and the ISCA.
+He served on the
+Board of Governors of the IEEE Signal
+Processing Society.
+More recently,
+he was the Editor-In-Chief
+for
+the IEEE Signal
+Processing Magazine and
+for the IEEE/ACM T
+RANSACTIONS ON
+A
+UDIO
+,
+S
+PEECH
+,
+AND
+L
+ANGUAGE
+P
+ROCESSING
+; he also served as a general chair of ICASSP and area chair of
+NIPS.
+Dr.
+Deng’s technical work in industry-scale deep learning and AI has
+impacted various areas of information processing, especially Microsoft speech
+products and text-
+and big-data related products/services.
+His work helped
+initiate the resurgence of (deep) neural networks in the modern big-data, big-
+compute era,
+and has been recognized by several awards,
+including the 2013
+IEEE SPS Best Paper Award and the 2015 IEEE SPS Technical Achievement
+Award for outstanding contributions to deep learning and to automatic speech
+recognition.
+Yelong Shen received the Ph.D.
+degree in com-
+puter
+science from Kent
+State University in Ohio
+in 2015 and the Master’s degree in computer
+sci-
+ence from BeiHang University in 2011.
+He is cur-
+rently a Research and Software Engineer in Microsoft
+Research,
+Redmond.
+His
+main
+research
+interest
+includes deep learning,
+language understanding and
+graph analysis.
+Jianfeng Gao is a Principal Researcher of Microsoft
+Research,
+Redmond,
+WA,
+USA.
+His research inter-
+ests include Web search and information retrieval,
+natural
+language processing and statistical
+machine
+learning.
+Dr.
+Gao is the primary contributor of sev-
+eral key modeling technologies that help significantly
+boost
+the relevance of the Bing search engine.
+His
+research has also been applied to other
+MS prod-
+ucts including Windows,
+Office and Ads.
+In bench-
+mark evaluations,
+he and his colleagues have devel-
+oped entries that
+obtained No.
+1 place in the 2008
+NIST Machine Translation Evaluation in Chinese-English translation.
+He
+was Associate Editor of ACM Transactions on Asian Language Information
+Processing,
+(2007 to 2010),
+and was
+Member
+of
+the editorial
+board of
+Computational Linguistics (2006 2008). He also served as area chairs for ACL-
+IJCNLP2015,
+SIGIR2016,
+SIGIR2015,
+SIGIR2014,
+IJCAI2013,
+ACL2012,
+EMNLP2010, ACL-IJCNLP 2009, etc. He received an outstanding paper award
+from ACL-2015. Dr. Gao recently joined Deep Learning Technology Center at
+MSR-NExT, working on Enterprise Intelligence.
+Xiaodong He (M’03–SM’08) is a Senior Researcher
+in the Deep Learning Technology Center of Microsoft
+Research,
+Redmond,
+WA,
+USA.
+He
+is
+also
+an
+Affiliate Professor
+in the Department
+of
+Electrical
+Engineering at the University of Washington (Seattle)
+serving in the Ph.D. reading committee. His research
+interests
+are
+mainly in the
+machine
+intelligence
+areas,
+including deep learning,
+speech,
+natural
+lan-
+guage,
+computer
+vision,
+information retrieval,
+and
+knowledge representation and management.
+He has
+received several
+awards including the Outstanding
+PALANGI et al.: DEEP SENTENCE EMBEDDING USING LONG SHORT-TERM MEMORY NETWORKS
+707
+Paper Award of ACL 2015.
+He is a frequent
+tutorial
+and keynote speaker at
+major conferences in these areas. He and colleagues developed the MSR-NRC-
+SRI
+entry and the MSR entry that
+won No.
+1 in the 2008 NIST Machine
+Translation Evaluation and the 2011 IWSLT Evaluation (Chinese-to-English),
+respectively, and the MSR image captioning system that won the 1st Prize at the
+MS COCO Captioning Challenge 2015. He has held editorial positions on sev-
+eral IEEE Journals, served as an area chair for NAACL-HLT 2015, and served
+on the organizing committee/program committee of major speech and language
+processing conferences. He is an elected member of the IEEE SLTC for the term
+of 2015–2017. He is a senior member of IEEE and a member of ACL.
+Jianshu Chen (S’10–M’15)
+received
+his
+Ph.D.
+degree in electrical engineering from the University
+of
+California,
+Los
+Angeles
+(UCLA)
+in 2014.
+He
+received his
+B.S.
+and M.S.
+degrees
+in electronic
+engineering from Harbin Institute
+of
+Technology
+in 2005 and Tsinghua University in 2009,
+respec-
+tively.
+Between 2009 and 2014,
+he was
+a mem-
+ber of the Adaptive Systems Laboratory at
+UCLA.
+And between 2014 and 2015,
+he was a postdoctoral
+researcher
+at
+Microsoft
+Research,
+Redmond,
+WA.
+He is currently a Researcher at Microsoft Research,
+Redmond,
+WA.
+His research interests include statistical
+signal
+processing,
+stochastic approximation,
+distributed optimization,
+machine learning,
+rein-
+forcement learning, and smart grids.
+Xinying Song received the Ph.D.,
+M.S.,
+and B.A.
+degrees in Computer Science from Harbin Institute
+of
+Technology,
+China.
+He is currently a Research
+Software Engineer in Microsoft Research, Redmond.
+His main research interests include deep learning,
+natural language processing, and web data mining.
+Rabab
+Ward
+is
+a
+Professor
+Emeritus
+in
+the
+Electrical and Computer Engineering Department at
+the University of British Columbia (UBC),
+Canada.
+Her
+research
+interests
+are
+mainly
+in
+the
+areas
+of
+signal,
+image
+and video processing.
+She
+has
+made contributions in the areas of signal
+detection,
+image encoding,
+image recognition,
+restoration and
+enhancement,
+and their
+applications to multimedia
+and medical
+imaging,
+face recognition,
+infant
+cry
+signals, and brain computer interfaces. She has pub-
+lished around 500 refereed journal
+and conference
+papers and holds six patents related to cable television,
+picture monitoring,
+measurement
+and noise reduction.
+She is a Fellow of the Royal
+Society of
+Canada,
+the IEEE,
+the Canadian Academy of Engineers and the Engineering
+Institute of Canada.
+She has received many top awards such as the “Society
+Award of the IEEE Signal Processing Society, the Career Achievement Award
+of CUFA BC,
+The Paradigm Shifter Award from The Society for Canadian
+Women in Science and Technology and British Columbia’s APEGBC top
+engineering award “The RA McLachlan Memorial Award” and UBC Killam
+Research Prize and Killam Senior
+Mentoring Award.
+She is presently the
+President of the IEEE Signal Processing Society.
+She was the General Chair
+of IEEE ICIP 2000 and Co-Chair of IEEE ICASSP 2013.

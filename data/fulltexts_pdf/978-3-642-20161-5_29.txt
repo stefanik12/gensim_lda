@@ -1,0 +1,221 @@
+﻿Subspace Tracking for Latent Semantic Analysis
+Radim
+ˇ
+Reh˚uˇrek
+NLP lab, Masaryk University in Brno
+radimrehurek@seznam.cz
+Abstract.
+Modern applications
+of
+Latent
+Semantic Analysis
+(LSA)
+must deal
+with enormous (often practically inﬁnite) data collections,
+calling for a single-pass matrix decomposition algorithm that operates
+in constant memory w.r.t.
+the collection size.
+This paper introduces a
+streamed distributed algorithm for incremental
+SVD updates. Apart from
+the theoretical
+derivation, we present experiments measuring numerical
+accuracy and runtime performance of
+the algorithm over several
+data
+collections, one of which is the whole of the English Wikipedia.
+1
+Introduction
+The purpose of
+Latent Semantic Analysis (LSA)
+is to ﬁnd hidden (
+latent
+) struc-
+ture in a collection of texts represented in the Vector Space Model [10]. LSA was
+introduced in [4]
+and has since become a standard tool
+in the ﬁeld of Natural
+Language Processing and Information Retrieval.
+At the heart of
+LSA lies the
+Singular Value Decomposition
+(SVD) algorithm, which makes LSA (sometimes
+also called Latent Semantic Indexing, or LSI) really just another member of the
+broad family of applications that make use of SVD’s robust and mathematically
+well-founded approximation capabilities
+1
+. In this way, although we will discuss
+our results in the perspective and terminology of
+LSA and Natural
+Language
+Processing,
+our results are in fact applicable to a wide range of problems and
+domains across much of the ﬁeld of Computer Science.
+In this paper, we will be dealing with the practical issues of computing SVD
+eﬃciently in a distributed manner. For a more gentle introduction to SVD and
+LSA,
+its history,
+pros and cons and comparisons to other methods,
+see else-
+where [4,5,7].
+1.1
+SVD Characteristics
+In terms of
+practical
+ways of
+computing SVD,
+there is an enormous volume
+of
+literature [12,3,5,14].
+The algorithms are well-studied and enjoy favourable
+numerical properties and stability, even in the face of badly conditioned input.
+They diﬀer in their focus on what role SVD performs—batch algorithms vs.
+online updates, optimizing FLOPS vs. number of passes, accuracy vs. speed etc.
+1
+Another member of
+that family is the discrete Karhunen–Lo`eve Transform,
+from
+Image Processing;
+or Signal
+Processing,
+where SVD is commonly used to separate
+signal
+from noise.
+SVD is also used in solving shift-invariant diﬀerential
+equations,
+in Geophysics, in Antenna Array Processing, . . .
+P. Clough et al. (Eds.): ECIR 2011, LNCS 6611, pp. 289–300, 2011.
+c
+ Springer-Verlag Berlin Heidelberg 2011
+290
+R.
+ˇ
+Reh˚uˇrek
+Table 1. Selected SVD algorithms for truncated (partial) factorization and their char-
+acteristics. In the table, “—” stands for no/not found. See text for details.
+Algorithm
+Distribu- Incremental
+Matrix
+Subspace Implementations
+table
+docs
+terms
+structure tracking
+Krylov subspace meth-
+ods (Lanczos)
+yes
+—
+—
+sparse
+—
+PROPACK,
+ARPACK,
+SVDPACK, MAHOUT,
+Halko et al. [8]
+yes
+—
+—
+sparse
+—
+redsvd, our own
+Gorrell & Webb [6]
+—
+—
+—
+sparse
+—
+LingPipe, our own
+Zha & Simon [14]
+—
+yes
+yes
+dense
+yes
+—, our own
+Levy & Lindenbaum [9]
+—
+yes
+—
+dense
+yes
+—, our own
+Brand [2]
+—
+yes
+yes
+dense
+—
+—, our own
+this paper
+yes
+yes
+—
+sparse
+yes
+our own, open-sourced
+In Table 1, we enumerate several such interesting characteristics, and evaluate
+them for a selected set of known algorithms.
+Distributable.
+Can the algorithm run in a distributed manner (without major
+modiﬁcations or further research)? Here, we only consider distribution of a
+very coarse type, where each computing node works autonomously. This type
+of parallelization is suitable for clusters of commodity computers connected
+via standard, high-latency networks, as opposed to specialized hardware or
+supercomputers.
+Incremental Updates.
+Is the algorithm capable of
+updating its decomposi-
+tion as new data arrives, without recomputing everything from scratch? The
+new data may take form of new observations (documents), or new features
+(variables).
+Note that this changes the shape of the
+A
+matrix.
+With LSA,
+we are more interested in whether we can eﬃciently add new documents,
+rather than new features. The reason is that vocabulary drift (adding new
+words; old words acquiring new meanings) is a relativaly slow phenomena in
+natural languages, while new documents appear all the time.
+Matrix Structure.
+Does the algorithm make use of the structure of the input
+matrix? In particular, does the algorithm beneﬁt from sparse input? Algo-
+rithms that can be expressed in terms of
+Basic Linear Algebra Subprograms
+(BLAS)
+routines over the input matrix are relatively easily adapted to any
+type of input structure.
+Subspace Tracking.
+In online streaming environments, new observations come
+in asynchronously and the algorithm cannot in general
+store all
+the input
+documents in memory (not even out-of-core memory). The incoming obser-
+vations must be immediate processed and then discarded
+2
+.
+Being online has implication on the decomposition itself, because we cannot
+even aﬀord to keep the truncated right singular vectors
+V
+in memory. The
+size of
+V
+n×m
+is
+O
+(
+n
+),
+linear in the number of
+input documents,
+which is
+prohibitive.
+Therefore, only the
+U, S
+matrices are retained and the decom-
+position is used as a
+predictive
+(rather than descriptive) model. We call the
+2
+This is in contrast to oﬄine, batch algorithms, where the whole dataset is presented
+at once and the algorithm is allowed to go back and forth over the dataset many
+times.

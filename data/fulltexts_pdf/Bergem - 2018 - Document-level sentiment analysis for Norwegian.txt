@@ -1,0 +1,9343 @@
+﻿Document-level sentiment analysis for Norwegian
+Eivind Alexander Bergem
+Thesis submitted for the degree of
+Master in Informatics: Language and Communication
+60 credits
+Department of Informatics
+Faculty of mathematics and natural sciences
+UNIVERSITY OF OSLO
+Spring 2018
+Document-level sentiment
+analysis for Norwegian
+Eivind Alexander Bergem
+© 2018 Eivind Alexander Bergem
+Document-level sentiment analysis for Norwegian
+http://www.duo.uio.no/
+Printed: Reprosentralen, University of Oslo
+i
+Abstract
+This thesis develops document-level sentiment analysis for Norwegian.
+First we
+present the Norwegian Review Corpus (NoReC) – the first publicly available senti-
+ment dataset for Norwegian, consisting of over 35,000 reviews rated on a six-point
+scale across multiple domains including films, music, restaurants and products. In
+addition to describing each step of the dataset creation, we perform extensive data
+exploration and analysis.
+Using ratings as a proxy to the overall sentiment of a
+review, we run a large number of rating inference experiments, first using tradi-
+tional machine learning methods, then using convolutional neural networks and
+pre-trained word embeddings.
+We analyze the performance of the models with
+regards to ratings, categories, language standard and training set size, and perform
+a thorough hyperparameter search on the convolutional neural network architec-
+ture using Bayesian hyperparameter optimization. We demonstrate that our con-
+volution architecture outperforms the traditional machine learning methods, and
+show that task-specific tuning can be necessary in order to train high performing
+models.
+iii
+Acknowledgements
+First of all,
+I would like to thank my two supervisors,
+Erik Velldal
+and Lilja
+Øvrelid.
+They have gone above and beyond what is required of them and taken
+time to sit with me every week from the beginning, giving me detailed notes and
+feedback.
+I
+would also like to thanks
+the Language Technology Group (LTG)
+for
+including me and for all the early lunches we have shared. Special thanks goes to
+Emanuelle Lapponi and Samia Touileb for advice and help with academic writing.
+Thanks
+to everyone in the double espresso mafia,
+for
+helping me get
+caffeinated and procrastinate twice a day at Escape.
+And,
+to Dina for always supporting and believing in me,
+and to Ada for
+helping me take my mind off work.
+v
+Contents
+1
+Introduction
+1
+1.1
+Overview .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+2
+2
+Background
+3
+2.1
+Sentiment analysis
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+3
+2.1.1
+Use cases
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+3
+2.1.2
+Datasets .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+4
+2.1.3
+Traditional approaches
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+5
+2.1.4
+Sentiment analysis for Norwegian .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+5
+2.2
+Regression vs classification .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+6
+2.2.1
+Linear regression .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+6
+2.2.2
+Logistic regression .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+7
+2.2.3
+Ordinal regression .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+7
+2.3
+Neural networks for natural language processing
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+7
+2.3.1
+Feed-forward networks .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+8
+2.3.2
+Input representation .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+10
+2.3.3
+Convolutional neural networks
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+11
+2.4
+Related work
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+13
+3
+NoReC: Norwegian Review Corpus
+17
+3.1
+Raw data
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+18
+3.2
+Extracting reviews
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+20
+3.2.1
+Identifying reviews
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+20
+3.2.2
+Converting content to canonical HTML .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+21
+3.3
+Pre-processing .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+22
+3.3.1
+Identifying language varieties .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+22
+3.3.2
+Linguistic enrichments and CoNLL-U .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+24
+3.3.3
+UDpipe configuration
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+24
+3.3.4
+CoNLL-U files
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+25
+3.4
+Metadata and thematic categories
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+26
+3.4.1
+Thematic categories .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+28
+3.4.2
+Ratings
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+29
+3.5
+Training, development and testing splits .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+30
+4
+Computational environment
+37
+4.1
+The Abel computer cluster
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+37
+4.1.1
+Filesystem challenges
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+38
+vi
+CONTENTS
+4.1.2
+GPU .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+39
+4.1.3
+Singularity .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+39
+4.2
+Experimental pipeline .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+40
+5
+Data exploration and baselines
+41
+5.1
+Design choices and challenges .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+41
+5.1.1
+Rating distribution
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+41
+5.1.2
+Binary or graded classification .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+43
+5.1.3
+Evaluation .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+44
+5.1.4
+Document representation .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+45
+5.2
+Baselines
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+46
+5.2.1
+Pre-processing .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+46
+5.2.2
+Document representations .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+46
+5.2.3
+Rating inference
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+47
+5.2.4
+Results
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+47
+5.2.5
+Class balancing .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+49
+5.3
+Data exploration .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+49
+5.4
+Summary .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+54
+6
+Convolutional neural network models
+55
+6.1
+Implementation details
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+55
+6.1.1
+PyTorch
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+56
+6.1.2
+Word embeddings
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+56
+6.1.3
+Classification .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+57
+6.1.4
+Neural network architecture
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+57
+6.1.5
+Pooling strategies .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+58
+6.1.6
+Class balancing .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+58
+6.1.7
+Using multiple filters
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+59
+6.1.8
+Hyperparameter search .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+59
+6.1.9
+Hyperparameter search space .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+60
+6.2
+Hyperparameter tuning and analysis
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+61
+6.2.1
+Regularization
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+62
+6.2.2
+The number of feature maps
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+62
+6.2.3
+Region size .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+62
+6.2.4
+Pooling strategy
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+65
+6.2.5
+Class balancing .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+65
+6.2.6
+Static vs non-static word embeddings .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+67
+6.2.7
+Learning curve
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+67
+6.3
+Final evaluation .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+69
+6.4
+Summary and future directions .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+70
+7
+Conclusion and future work
+73
+7.1
+Future work .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+75
+vii
+List of Figures
+2.1
+Illustration of simple feed-forward neural network .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+8
+2.2
+Comparison of
+some common activation functions for neural
+networks. .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+9
+2.3
+Illustration of narrow convolution
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+12
+3.1
+Raw data from P3.no review .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+19
+3.2
+HTML image reference indicating the rating .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+20
+3.3
+The canonical version of the raw HTML from Figure 3.1.
+.
+.
+.
+.
+.
+22
+3.4
+Text extracted from canonical HTML from Figure 3.3.
+.
+.
+.
+.
+.
+.
+.
+25
+3.5
+Two CoNLL-U formatted sentences.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+27
+3.6
+Number of reviews across ratings.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+30
+3.7
+Number of reviews over time.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+31
+3.8
+Distribution of ratings over time.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+32
+3.9
+Distribution of categories over time.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+32
+3.10 Distribution of source over time.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+33
+3.11 Distribution of ratings across splits.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+33
+3.12 Distribution of categories across splits. .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+34
+3.13 Distribution of sources across splits.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+35
+5.1
+Distribution of relative rating frequencies across categories.
+.
+.
+.
+.
+42
+5.2
+Distribution of relative rating frequencies across sources.
+.
+.
+.
+.
+.
+.
+42
+5.3
+Evaluation of
+BOW
++
+LOGREG
+per category.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+49
+5.4
+Evaluation of
+BOW
++
+LOGREG
+per source. .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+50
+5.5
+Evaluation of
+BOW
++
+LOGREG
+for the two written varieties of
+Norwegian .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+51
+5.6
+Normalized confusion matrices for B
+OW
+and B
+OW
+B
+ALANCED
+from table 5.2 .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+52
+5.7
+Learning curves for B
+OW
+B
+ALANCED
+logistic regression classifier
+from table 5.2 .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+53
+6.1
+Experiment results with MAE
+M
+plotted against F
+1
+. .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+61
+6.2
+Experiment results with accuracy plotted against F
+1
+. .
+.
+.
+.
+.
+.
+.
+.
+.
+62
+6.3
+Experiment results with the dropout level plotted against F
+1
+.
+.
+.
+.
+63
+6.4
+Experiment results with the L2 regularization plotted against F
+1
+. .
+63
+6.5
+Experiment
+results
+with the number of
+feature maps
+plotted
+against F
+1
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+64
+6.6
+Experiment results with region size plotted against F
+1
+.
+.
+.
+.
+.
+.
+.
+.
+64
+6.7
+Experiment results with pooling strategy plotted against F
+1
+. .
+.
+.
+.
+65
+viii
+LIST OF FIGURES
+6.8
+Experiment results with pool size plotted against F
+1
+for models
+using max-average pooling.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+66
+6.9
+Experiment results with class balancing plotted against F
+1
+.
+.
+.
+.
+.
+.
+66
+6.10 Experiment results with pooling strategy plotted against F
+1
+. .
+.
+.
+.
+67
+6.11 Comparison of learning curves .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+68
+ix
+List of Tables
+3.1
+Number of raw documents and extracted reviews across sources.
+.
+18
+3.2
+ID number series for each source.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+21
+3.3
+Evaluation of
+langid.py
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+23
+3.4
+Percentage of
+reviews written in Bokmål
+and Nynorsk across
+sources.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+24
+3.5
+Basic corpus counts.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+26
+3.6
+Description of metadata attributes.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+28
+3.7
+Number of reviews across categories.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+29
+5.1
+Baseline models using different
+document
+representations and
+rating inference methods. .
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+48
+5.2
+Logistic regression with and without class balancing. .
+.
+.
+.
+.
+.
+.
+.
+.
+48
+6.1
+The hyperparameter search space.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+60
+6.2
+Hyperparameters and evaluation scores
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+69
+6.3
+Evaluation of
+baseline models as seen in tables 5.1 and 5.2 in
+section 5.2.4 and the two CNN models described in table 6.2. .
+.
+.
+70
+1
+Chapter 1
+Introduction
+Sentiment
+analysis is the process of
+automatically identifying and extracting
+opinions or attitudes from text.
+In the world of online news and social media,
+there is an ever increasing amount of textual data on the internet,
+and a large
+portion of it – if not most – expresses subjective opinions. Sentiment analysis has
+many end-user applications such as monitoring news and social media to look for
+biased opinions, monitor attitudes towards political candidates or controversial
+topics during an election, or keeping track of company reputation and consumer
+response.
+Sentiment analysis can also be useful
+for researchers in other fields
+such as political science and media studies by providing a quantitative method
+of analyzing public opinion.
+There are generally few available language technology resources for Norwe-
+gian, and sentiment analysis is no exception. In the last few years there has been a
+lot of activity in the field of sentiment analysis, and because the machine learning
+architectures used are largely language independent,
+the most important piece
+missing for sentiment analysis for Norwegian is the availability of public lan-
+guage resources. This thesis is a part of the Sentiment Analysis for Norwegian Text
+(SANT)
+project at the Language Technology Group at the University of Oslo.
+The SANT project aims to develop and make available data and tools for per-
+forming sentiment analysis for the Norwegian language.
+During the summer of
+2017, fellow master student Cathrine Stadsnes and myself were hired as research
+assistants to work on creating the Norwegian Review Corpus (NoReC) – the first
+publicly available sentiment dataset for Norwegian – consisting of over 35,000 re-
+views rated on a six-point scale across multiple domains including films, music,
+restaurants and products. I continued working on NoReC during the fall as a part
+of this thesis.
+While we present the full process of creating NoReC here, this in-
+cludes both work done while working as research assistant in collaboration with
+Cathrine Stadsnes and work done as the part of the thesis.
+The thesis work goes
+beyond just dataset creation, and includes data exploration and analysis.
+In this
+thesis
+we seek to develop document-level
+sentiment
+analysis
+for
+Norwegian.
+This includes data in the form of the NoReC dataset, and models
+trained on NoReC using both traditional
+machine learning methods
+and a
+convolutional
+neural
+network architecture with pre-trained word embeddings.
+We start with describing the creation of
+NoReC,
+detailing every step of
+the
+process
+of
+turning raw database dumps
+from many different
+sources
+into a
+2
+CHAPTER 1.
+INTRODUCTION
+uniform and structured dataset.
+As NoReC is a new dataset,
+we also perform
+data exploration,
+providing an in-depth description and quantitative analysis
+of the dataset.
+We then continue with two rounds of experimentation where
+we perform not
+simply binary polarity classification,
+but
+full-fledged rating
+inference. All the experiments are run on a high-performance computing cluster.
+Before starting with the experiments, we discuss how to evaluate rating inference
+and explore various evaluation metrics.
+In the first round we use a range of
+traditional machine learning approaches such as logistic regression and bag-of-
+words representation to establish strong baselines – providing the first results
+for NoReC – and perform a detailed analysis of the model performance to shed
+more light on the dataset.
+In the second round we develop a convolutional
+neural
+network architecture for
+document-level
+sentiment
+analysis
+and run
+a large number of
+experiments
+to analyze the effects
+of
+tuning the various
+hyperparameters on model performance.
+1.1
+Overview
+Chapter 2 provides an overview of sentiment analysis and the use of neural
+networks for natural
+language processing.
+It details the methods and datasets
+used in previous works, and outlines the basics of a convolutional neural network
+architecture for rating inference on sentences and documents.
+Chapter 3 introduces and describes the NoReC dataset,
+going through each
+step in the extraction and processing of the data from raw database dumps into
+a structured and linguistically pre-processed dataset.
+It also looks at how the
+distribution of ratings, categories and source changes over time and motivates our
+pre-defined splits for training, development and testing.
+Chapter 4 describes
+the high-performance computing environment
+and the
+experimental pipeline used to run the experiments in chapter 5 and chapter 6.
+Chapter 5 establishes baseline models based on traditional
+machine learning
+methods for rating inference on the NoReC dataset.
+Additionally, we perform
+data exploration and analysis to shed more light on the dataset.
+Chapter
+6 describes
+the
+implementation of
+convolutional
+neural
+network
+models.
+We perform a thorough hyperparameter search and subsequent analysis
+of the effect of hyperparameter values on performance, and finally evaluate all the
+models from chapters 5 and 6 on the held-out test set.
+Chapter 7 provides a summary and conclusion of the thesis, as well as laying out
+the direction of future work.
+3
+Chapter 2
+Background
+“Read the book, forget the movie!”
+1
+Based on reading the one-line movie review above, it is obvious that the author
+is negative towards the movie.
+However,
+if we look at each word is it not so
+obvious why it is negative.
+While the word “forget” in this context has negative
+connotations, it is not a negative word by itself, not in the way that the word “bad”
+can be said to be negative.
+Identifying that this is a negative review also requires
+us to know that it is a movie review. This review also plays on the notion that the
+book is better than the movie based on the book.
+So even though it is easy for a
+human speaker to say if a review is positive or negative, it is non-trivial to design
+a computational system that can do the same.
+2.1
+Sentiment analysis
+Sentiment analysis – also known as opinion mining – is the process of automatically
+identifying and extracting the subjective opinions from text.
+It is considered a
+subfield of the broader study of subjectivity analysis. In 2001 research on sentiment
+analysis started taking off due to the availability of huge amounts of data on the
+internet and the increased popularity of machine learning algorithms in natural
+language processing (NLP) and information retrieval (IR) (Pang and Lee, 2008).
+Under the umbrella of
+sentiment
+analysis
+are numerous
+aspects
+relating
+to subjectivity.
+In this overview we will
+be focusing on sentiment polarity –
+classification into positive and negative – and rating inference – rating on a
+multi-point scale.
+Other aspects include identification of opinion holders and
+determining whether a document or sentence is subjective or not (Pang and Lee,
+2008).
+2.1.1
+Use cases
+The internet is growing by the minute and most of the content is in the form of
+unstructured text. A lot of this data, like blogs, social media and product reviews,
+are subjective and opinionated.
+1
+Movie review taken from the Large Movie Review Dataset (Maas et al., 2011).
+4
+CHAPTER 2.
+BACKGROUND
+Market analysis is one of the most prominent use cases of SA.
+Companies
+can use sentiment analysis to keep track of customer relationships,
+company
+reputation, consumer response to products and more. Another use is intelligence,
+where governments can monitor and flag potential threats to national security.
+There are also many political uses, like identifying ideological shifts on social
+media or identifying which topics engage the public. Sentiment analysis has been
+used to analyze twitter for public opinion on presidential candidates for the U.S.
+election (H. Wang et al., 2012). Sentiment analysis can also be used to analyze the
+plot of fiction, tracking how emotions change throughout the story (Mohammad,
+2011). In addition to end-user applications, there are also numerous downstream
+uses where sentiment analysis serves as features in other NLP tasks.
+2.1.2
+Datasets
+As with all
+applications of machine learning,
+sentiment analysis starts with a
+dataset. When doing sentiment polarity and rating inference we are dealing with
+a form of supervised learning,
+so the datasets are labeled.
+Since most internet
+reviews come with a rating,
+they are essentially pre-labeled,
+saving researchers
+the laborious task of manual annotation.
+There are many publicly available datasets. They vary in both granularity and
+labeling, with the main differences being between document and sentence level,
+and polarity and rating. Some datasets worth mentioning are:
+Cornell Movie-review Datasets
+This is not a single dataset, but a collection of
+datasets introduced and revised in several papers over some years. They are:
+• Polarity dataset with 1000 positive and 1000 negative reviews taken from
+IMDB (Pang, Lee, and Vaithyanathan, 2002;
+Pang and Lee, 2004).
+There
+is also a sentence polarity dataset with 5331 positive and 5331 negative
+snippets from Rotten Tomatoes (Pang and Lee, 2005).
+• Scale dataset with subjective extracts of reviews by four different authors.
+Each extract has been rated by comparing pairs of extracts. These rankings
+have then been used to classify each extract in three classes and four classes
+giving two separate ratings for each one (Pang and Lee, 2005).
+• Subjectivity dataset
+containing 5000 subjective and 5000 objective sen-
+tences. The subjective sentences are movie review snippets taken from Rot-
+ten Tomatoes, while the objective sentences are plot summaries taken from
+IMDB (Pang and Lee, 2004). The Stanford Sentiment Treebank is based on
+this dataset, adding syntactic structure to each review providing informa-
+tion on how words affect each other (Socher et al., 2013).
+Multiple-aspect Restaurant Reviews
+The dataset consists of 4488 restaurant
+reviews.
+Each review is rated on a 1-to-5 scale for five different aspects – food,
+ambiance, service, value, and overall experience (Snyder and Barzilay, 2007).
+2.1.
+SENTIMENT ANALYSIS
+5
+Multi-domain Sentiment Dataset
+Dataset consisting of product reviews from
+different product categories, all taken from Amazon.com.
+Some of the reviews
+have 1-5 star ratings, while the rest are unlabeled (Blitzer, Dredze, and Pereira,
+2007).
+Large Movie Review Dataset
+Collection of 25,000 positive and 25,000 negative
+movie reviews taken form IMDB. Also known as the IMDB dataset (Maas et al.,
+2011).
+In addition the above mentioned dataset there are numerous others capturing
+other aspects of sentiment analysis,
+like opinion holders and subjectivity iden-
+tification. A collection of datasets going in this direction can be found under the
+umbrella of MPQA
+2
+. We will not go into further detail on these, as we are pri-
+marily concerned with polarity and rating inference.
+2.1.3
+Traditional approaches
+The simplest forms of SA are lexicon based approaches.
+They work by having
+a set of sentiment bearing reference words – typically archetypical positive and
+negative words like “good” and “bad” – and using them to build a sentiment
+lexicon which can then be used to classify text.
+One method of doing this is
+by using Pointwise Mutual Information to compare phrases with the reference
+words (Turney, 2002).
+Various machine learning methods have also been used for SA,
+including
+Naive Bayes,
+Maximum Entropy and Support Vector Machines.
+Unigrams are
+often used as the features of the model, but bigrams, trigrams and POS tags have
+also been used.
+However,
+it has not been clear whether higher order n-grams
+improve performance (Pang, Lee, and Vaithyanathan, 2002).
+While linear surface features are often sufficient,
+there are certain language
+phenomena that require the modeling of deeper syntactic structures. Negation is
+a good example of this.
+By including the word “not” the sentiment of a sentence
+can be reversed.
+Modeling negation can improve sentiment analysis, but because
+it is difficult to assess the span of the negation, this is in itself a non-trivial task
+dependent on a deeper processing of the sentence, like syntactic parsing (Pang and
+Lee, 2008).
+2.1.4
+Sentiment analysis for Norwegian
+As evident by the datasets mentioned in the previous section, most of the work
+on sentiment analysis has been done for English.
+While there have been some
+efforts to do sentiment analysis for Norwegian (Bai et al., 2014; Gulla et al., 2016;
+Bakken et al., 2016), there are some problems with the data used for evaluation. In
+lieu of a publically availble sentiment dataset for Norwegian, they have scraped
+content from websites, using Norwegian tweets (Gulla et al., 2016), paragraphs
+from the “political news” section of the online news sources (Bakken et al., 2016)
+and user generated reviews from the online stores (Bai et al., 2014). There are two
+main problems with this.
+First, there is a lack of detail regarding how the data
+2
+http://mpqa.cs.pitt.edu/
+6
+CHAPTER 2.
+BACKGROUND
+was collected, bringing in to question whether they are representative samples.
+Second, as these datasets are not publicly available, there is no way to reproduce
+the experiments.
+This demonstrates the need for a publicly available Norwegian
+sentiment dataset.
+2.2
+Regression vs classification
+Machine learning tasks can be divided into many subgroups, two of them being
+regression and classification.
+A regression model
+predicts a real
+value,
+while
+classification predicts one from a set of classes.
+Not all problems fall neatly into
+one category, but can be viewed both as a regression problem and a classification
+problem.
+Rating inference is
+such a problem,
+seeing that
+the rating labels
+are discrete but not independent classes.
+A hybrid between classification and
+regression is ordinal regression that predicts a discrete label at the same time as
+being sensitive to the relative ordering of the labels.
+2.2.1
+Linear regression
+Linear regression is a model that attempts to find a linear function that can predict
+a real value y ∈ R from a vector
+~
+x ∈ R
+n
+.
+The model is given by
+~
+w
++
+θ where
+~
+w ∈ R is a set of weights and θ ∈ R is a bias term, describing a straight line in an
+n-dimensional space.
+Given a dataset consisting of a set of inputs
+~
+x ∈ R
+m×n
+and a set of outputs
+y ∈ R
+m
+where m is the number of training examples, and n the dimensionality
+of the input we want to find a linear function that gives the best fit given the
+dataset, more formally
+ˆ
+y
+=
+~
+w
+T
+~
+x
++
+θ
+(2.1)
+where
+~
+w ∈ R
+m×n
+and θ ∈ R – the parameters of the model. To find the line with
+the best fit, we use Least Squares to define the error – or loss
+S
+=
+m
+X
+i
+=
+1
+(
+y
+i
+−
+ˆ
+y
+i
+)
+2
+=
+m
+X
+i
+=
+1
+
+y
+i
+−
+~
+w
+T
+~
+x
++
+θ
+
+2
+(2.2)
+A lower loss is better, 0 meaning a perfect fit.
+We then optimize this function to
+find the parameters resulting in the smallest loss
+arg min
+~
+w,θ
+m
+X
+i
+=
+1
+
+y
+i
+−
+~
+w
+T
+~
+x
++
+θ
+
+2
+(2.3)
+This equation can be solved analytically,
+but it involves matrix inverses which
+does not scale well to larger datasets, so more typically it is solved using an iterative
+algorithm such as Stochastic Gradient Descent.
+Linear regression can be prone to
+overfitting. A common strategy to prevent overfitting is to use L2 regularization
+L2
+=
+λ
+n
+X
+i
+=
+1
+w
+2
+i
+(2.4)
+2.3.
+NEURAL NETWORKS FOR NATURAL LANGUAGE PROCESSING
+7
+giving us the loss function
+arg min
+~
+w,θ
+m
+X
+i
+=
+1
+
+y
+i
+−
+~
+w
+T
+~
+x
++
+θ
+
+2
++
+λ
+n
+X
+i
+=
+1
+w
+2
+i
+(2.5)
+Linear regression with regularization is also known as Ridge regression,
+while
+weight
+penalty regularization such as L2 is also known as weight
+decay and
+Tikhonov regularization.
+2.2.2
+Logistic regression
+While linear regression outputs a real value, logistic regression builds on linear
+regression to create a classifier. While a regression model can be seen as a straight
+line mapping the relationship between the input and the output,
+in a binary
+logistic regression model the line marks the separation boundary between two
+classes, with negative values being on one side and positive values on the other
+side.
+We then use a decision function to decide which of the two classes should
+be predicted
+ˆ
+y
+=
+¨
+1
+if
+~
+w
+T
+~
+x
++
+θ > 0
+0
+otherwise
+(2.6)
+Logistic regression can be extended from binary to multi-class using a one-vs-all
+setup where one classifier is trained for each class.
+2.2.3
+Ordinal regression
+The logistic ordinal
+regression model
+was first described by McCullagh (1980)
+and is an extension to the logistic regression classifier.
+For multi-class logistic
+regression we train a classifier for each label, each defined by a vector
+~
+w describing
+a hyperplane separating each class from the rest.
+In ordinal regression there are
+also multiple decision boundaries,
+but in contrast with logistic regression they
+are all parallel to each other.
+The model is parameterized as a vector
+~
+w and a set
+of threshold values θ ∈ R
+k−1
+where k is the number of labels and with the added
+constraint that θ
+1
+≤ θ
+2
+≤ · · · ≤ θ
+k−1
+.
+This gives us k − 1 parallel hyperplanes
+splitting the space into k ordered classes.
+There are several
+possible loss
+functions
+that
+can be used with ordinal
+regression,
+two of them being Immediate-Threshold (IT)
+and All-Threshold (AT)
+with the difference being that IT only checks to see that θ
+y−1
+<
+ˆ
+y < θ
+y
+, while
+AT looks at the distance between y and
+ˆ
+y giving a smaller penalty for smaller
+differences.
+Not surprisingly, AT is found to perform better of the two (Rennie
+and Srebro,
+2005).
+Both of these types are implemented by the
+mord
+3
+Python
+package.
+2.3
+Neural networks for natural language processing
+Since around the mid-2000s
+Artificial
+Neural
+Networks
+(ANNs)
+have enjoyed
+ever increasing popularity, after years of being sidelined by statistical methods.
+3
+http://pythonhosted.org/mord/
+8
+CHAPTER 2.
+BACKGROUND
+Input #1
+Input #2
+Input #3
+Input #4
+Output
+Hidden
+layer
+Input
+layer
+Output
+layer
+Figure 2.1: Illustration of simple feed-forward neural network.
+4
+The network has
+four inputs, one hidden layer with 5 neurons, and a single output neuron.
+Recently ANNs have increasingly been used in NLP applications in favor of
+statistical models like naive Bayes and support vector machines (SVM). The reason
+for this shift can be attributed to increased access to huge datasets, improvements
+in training speed for neural
+networks
+due to the use of
+GPUs
+for parallel
+computation, and breakthroughs in the field of image recognition using very deep
+networks.
+2.3.1
+Feed-forward networks
+Artificial neural networks are inspired by the biological neural networks in the
+brain.
+The word inspired must be stressed,
+ANNs are computational models,
+not a simulation of
+the brain.
+The artificial
+neuron was first defined in the
+1940s long before the advent of
+modern neuroscience (McCulloch and Pitts,
+1943).
+Nonetheless,
+after nearly 75 years they have proved to be a powerful
+computational model.
+In figure 2.1 we see a simple neural network with one hidden layer. Networks
+like this are said to be fully-connected because each node is connected to every
+node in the next layer,
+and they are feed-forward because connections always
+go to the next layer.
+While diagrams like the one in figure 2.1 can be useful for
+understanding simple networks, they do not scale well to larger networks.
+The following section is heavily inspired by “A primer on neural network
+models
+for natural
+language processing” (Goldberg,
+2016).
+A feed-forward
+network can be seen as a non-linear function that takes a d
+i n
+-dimensional real-
+valued vector as input and outputs a d
+o u t
+-dimensional real-valued vector
+f
+:
+x 7→ y
+x ∈ R
+d
+i n
+, y ∈ R
+d
+o u t
+(2.7)
+4
+Source:
+http://www.texample.net/tikz/examples/neural-network/
+2.3.
+NEURAL NETWORKS FOR NATURAL LANGUAGE PROCESSING
+9
+−6
+−4
+−2
+0
+2
+4
+6
+0
+0.2
+0.4
+0.6
+0.8
+1
+(a) Sigmoid
+−6
+−4
+−2
+0
+2
+4
+6
+−1
+−0.5
+0
+0.5
+1
+(b) TanH
+−6
+−4
+−2
+0
+2
+4
+6
+0
+1
+2
+3
+4
+5
+(c) RelU
+Figure 2.2:
+Comparison of
+some common activation functions
+for
+neural
+networks.
+Both sigmoid and TanH saturate for very high and very low values,
+which can lead to the vanishing gradient problem. For this reason, ReLU is often
+used for deeper neworks.
+In its simplest form a neural network is just a linear transformation:
+f
+(
+x
+) =
+W
+T
+x
++
+b
+x ∈ R
+d
+i n
+,W ∈ R
+d
+i n
+×d
+o u t
+, b ∈ R
+d
+o u t
+(2.8)
+where W is a matrix of weights and b is a bias term. This function is linear, so we
+have to introduce a non-linear transformation to extend it to a non-linear model.
+Traditionally the sigmoid function has been used:
+sigmoid
+(
+t
+) =
+y
+=
+1
+1
++
+e
+−t
+(2.9)
+which returns a value between 0 and 1.
+There are many choices for activation
+functions
+– a few examples
+can be seen in figure 2.2 – in addition to the
+sigmoid, one of them being the very similar hyperbolic tangent (TanH) whose main
+difference from the sigmoid is that its output is between −1 and 1. However, both
+suffer from the problem of vanishing gradients because they saturate for very high
+and low values.
+For this reason the rectified linear unit (RelU)
+has become the
+recommended activation function:
+RelU
+(
+x
+) =
+max
+(
+0, x
+)
+(2.10)
+A two layer network with the sigmoid activation function after the first layer
+looks like this:
+f
+(
+x
+) =
+W
+T
+2
+g
+(
+W
+T
+1
+x
++
+b
+)
+(2.11)
+Now we have a linear transformation followed by a non-linear transformation. A
+multi-layer neural network consists of a sequence of linear and non-linear transfor-
+mation and provides a powerful computational model capable of approximating
+a wide range of functions.
+We call each pair of linear and non-linear transforma-
+tions a layer.
+The final layer is called the output layer, while the other layers are
+called hidden layers.
+The inputs can also be referred to as the input layer.
+The
+network described by equation 2.11 has one hidden layer.
+We can have as many
+10
+CHAPTER 2.
+BACKGROUND
+layers as we want, but for fully connected feed-forward networks two hidden lay-
+ers are usually sufficient. For the output layer, a different transformation is often
+applied. A common one is softmax:
+softmax
+(
+x
+i
+) =
+y
+i
+=
+e
+x
+i
+P
+k
+j
+=
+1
+e
+x
+j
+x ∈ R
+k
+, y ∈ R
+k
+k
+X
+i
+=
+1
+y
+i
+=
+1
+(2.12)
+The result is a vector of non-negative real numbers that sum to one, giving us a
+probability distribution over k possible outcomes.
+2.3.2
+Input representation
+The shift to using ANNs for NLP has been accompanied by a shift in the choice
+of input representation.
+While high-dimensional sparse vectors was the norm
+for machine learning techniques like naive Bayes and SVMs, the preferred input
+representation for use with ANNs are low-dimensional dense vectors (Goldberg,
+2016). Using a sparse representation, each value in the vector represents a discrete
+feature.
+In dense representations,
+we instead represent each feature as a vector
+of its own, with the information about the feature being spread out throughout
+the vector.
+This distributed representation have many advantages over discrete
+features,
+not only reducing dimensionality,
+but also enabling models to better
+generalize beyond what has been seen during training.
+Word embeddings
+The distributional hypothesis states that “words which are similar in meaning occur
+in similar contexts” (Rubenstein and Goodenough,
+1965) and the study of the
+distributional nature of language goes back to the work of Zelig Harris (Harris,
+1954).
+The field of
+distributional
+semantics
+concerns itself
+with quantifying
+semantic relationships between words by analyzing large corpora.
+In it’s basic form, a distributional model of semantics gives us a sparse word
+vectors.
+Dense word vectors – also known as word embeddings – can be created
+using available tools,
+with the most prominent ones being word2vec (Mikolov
+et
+al.,
+2013),
+GloVe (Pennington,
+Socher,
+and Manning,
+2014),
+and fastText
+(Bojanowski
+et
+al.,
+2016).
+The resulting word embeddings encode relations
+between words so that words that have similar meaning also have similar vectors.
+There are two distinct methods of creating word embeddings.
+The first one
+starts with a word-word matrix of word co-occurrences followed by dimensional-
+ity reduction, and is called a count based method because it counts co-occurrences.
+The other method are based on the idea of word prediction similar to language
+models. They work by trying to predict the current word based on the surround-
+ing context, typically a window around the word.
+The result is that words with
+similar contexts end up with similar vectors.
+word2vec and FastText are predic-
+tion based,
+while GloVe is somewhere in the middle,
+using both counting and
+prediction.
+2.3.
+NEURAL NETWORKS FOR NATURAL LANGUAGE PROCESSING 11
+Variable length input
+Feed-forward networks assume a fixed dimensional input. Sometimes the number
+of features are not known in advance, and requires us to find some kind of fixed
+size vector representation of an unbound number of features. One way to do this
+is using the continuous bag of words representation
+CBOW
+(
+f
+1
+. . . f
+k
+) =
+1
+k
+k
+X
+i
+=
+1
+v
+(
+f
+i
+)
+(2.13)
+which simply takes the average of several feature vectors (Goldberg, 2016).
+2.3.3
+Convolutional neural networks
+While recurrent neural
+networks
+are the most common application of ANNs
+in NLP, convolutional neural networks (CNNs)
+(LeCun et al., 1998) – originally
+developed for image analysis – are also used and have proved useful in a wide array
+of NLP tasks including sentence and document classification (Goldberg, 2016).
+If we want to do sentiment classification using neural networks we could use
+a CBOW representation. The problem with this, however, is that the ordering of
+the words is lost.
+A traditional way of solving this problem is to use bigrams or
+higher order n-grams instead of unigrams,
+but this also increases data sparsity
+and is not able to generalize beyond n-grams seen during training.
+Just like
+with n-gram models,
+convolutional models are sensitive to local relationships.
+In image analysis this is used to detect edges,
+while in NLP it can be used to
+capture relationships between words.
+And just like edges can be put together to
+form more complex shapes, words can be combined into phrases and sentences.
+Paragraphs and documents also fit into this framework, as larger units composed
+of smaller ones.
+Convolutional neural networks are also called a convolution-and-pooling ar-
+chitecture because it consists of
+two basic operations,
+convolution and pool-
+ing.
+In image analysis two-dimensional convolution is used reflecting the two-
+dimensional nature of images, while for language one-dimensional convolution is
+used because we are working with sequences of words. The convolution operator
+can be thought of as feature detector that is applied in a sliding window across the
+whole input sequence and the pooling operator picks out the most distinguishing
+of these features.
+In figure 2.3 we see an illustration of
+narrow convolution working on a
+sequence of word vectors.
+The convolution is applied as a sliding window over
+each n-gram.
+The 1-max pooling then picks the max values and puts them in a
+new vector.
+While the illustration only shows the application of one filter, there
+can be many filters of different sizes, resulting in several output vectors from the
+pooling layer.
+The following part is heavily inspired by Goldberg (2016).
+One-dimensional
+convolution works on a window of k words.
+Convolutional can be wide – with
+padding of k − 1 before and after the sentence – or narrow with no padding. The
+convolutional filter is a vector w ∈ R
+k·d
+e mb
+where d
+e mb
+is the dimensionality of
+the word embeddings.
+The filter is applied to a concatenation of k words in a
+sliding window. For convenience, the input X ∈ R
+n×d
+e mb
+where n is the length of
+12
+CHAPTER 2.
+BACKGROUND
+read
+the
+book
+forget
+the
+movie
+convolution
+pooling
+Figure 2.3:
+Illustration of narrow convolution with window size two followed
+by 1-max pooling. There are three convolutional filters resulting in three feature
+maps, which each are reduced to one value by the 1-max pooling operator.
+the sequence is converted to a matrix where each row represent a sliding window
+S ∈ R
+m×p
+(2.14)
+where m
+=
+n − k
++
+1 for narrow convolution and m
+=
+n
++
+k
++
+1 for wide
+convolution, and p
+=
+k d
+e mb
+which is the size of the sliding window. We usually
+have several filters that we put in a matrix W ∈ R
+p×d
+c onv
+with d
+c onv
+being the
+number of filters. The convolutional layer is then given by
+C
+i j
+=
+g
+
+p
+X
+l
+=
+1
+S
+i l
+W
+l j
+
+(2.15)
+where g is a non-linear activation function, typically RelU. This operation can be
+vectorized, giving us
+C
+=
+g
+(
+SW
+)
+(2.16)
+Note that there should also be a bias term for each filter, but it is omitted here
+for the sake of clarity.
+The result is a matrix C ∈ R
+m×d
+c onv
+where each column
+holds a feature map.
+The convolutional operator is followed by pooling.
+The
+simplest and most common of the pooling operators is 1-max pooling which for
+each feature map picks the most indicative value:
+p
+j
+=
+m
+max
+i
+=
+1
+C
+i j
+(2.17)
+A problem with 1-max pooling over the whole sequence is that the positional
+information is lost. There are many other pooling operators addressing this issue.
+One alternative is k-max pooling which retains not only the the best value in each
+dimension but the k best values while at the same time preserving the order in
+which they appeared in the text (Kalchbrenner, Grefenstette, and Blunsom, 2014).
+For instance, applying 2-max pooling on a matrix gives us:
+max-pooling
+2
+
+
+
+
+
+
+
+
+
+
+
+
+1
+2
+3
+9
+6
+5
+2
+3
+1
+7
+8
+1
+3
+4
+1
+
+
+
+
+
+
+
+
+
+
+
+
+=
+
+9
+6
+3
+7
+8
+5
+
+(2.18)
+2.4.
+RELATED WORK
+13
+Another simple pooling operator is average pooling which returns the mean
+average of the input vectors
+p
+j
+=
+1
+m
+m
+X
+i
+=
+1
+C
+i j
+(2.19)
+Yet
+another variant
+is
+hierarchical
+pooling that
+works
+by having a series
+of
+convolutional and pooling layers. The result is a process in which simpler features
+in the early layers become part of more complex features in successive layers,
+resembling the compositional structure of sentences.
+When using CNNs for NLP,
+pooling has often been done over the entire
+data, while for images it has been more common to use pooling regions, which are
+multiple pooling units working on separate areas.
+For variable-sized input with
+a fixed size of each pooling region, the output of the pooling operator is variable-
+sized.
+In images analysis this is solved by resizing the images, but for text this is
+not possible. A possible solution to this is to use a fixed number of pooling units
+with a dynamic pooling region size (Johnson and T. Zhang, 2015).
+2.4
+Related work
+Shallow models
+While there is much promise in deeper models for modeling
+sentence composition,
+they are often outperformed by deceivingly simple and
+shallow models.
+A method often used as a baseline for sentence and document
+classification is averaging the word embeddings and using this document repre-
+sentation with a classifier such as logistic regression or a fully-connected neural
+net (Socher et al., 2013). Le and Mikolov (2014) introduced the paragraph vector –
+also known as doc2vec – which works similarly to word2vec (Mikolov et al., 2013),
+providing an unsupervised method of learning representations. The model works
+for sentences as well as documents. These vectors are then used with a simple clas-
+sifier – they used logistic regression – which is reported to outperform both earlier
+models like naive Bayes and support vector machines, as well as deeper models like
+the recursive neural tensor network, and have become a default benchmark for a
+wide range of sentence and document level classification tasks.
+Another shallow model is the fastText classifier described by Joulin et al. (2016)
+which works by averaging together word embeddings that are also trained in the
+same model.
+Since simple bag of words models are invariant to word order, they
+use bag of n-grams to capture partial information about local word ordering. The
+model was tested on several classification tasks – including sentiment analysis –
+as well as a tag prediction task.
+Performance was competitive, though not state-
+of-the-art, but what makes fastText stand out is the speed of training the model.
+The authors claim it only took 10 minutes to train the model on more than one
+billion words using a standard multi-core CPU, while models with comparable
+performance take hours with some requiring expensive GPUs.
+Convolutional networks
+One of the earliest examples of using convolutional
+neural networks on text can be found in Collobert et al. (2011) where they were
+used for part-of-speech tagging, chunking, named entity recognition and semantic
+14
+CHAPTER 2.
+BACKGROUND
+role labeling.
+The network consisted of
+a single convolutional
+layer with 1-
+max pooling over the whole sequence,
+followed by two fully connected layers.
+Collobert et al. found that even with minimal task-specific feature engineering
+their network achieved results comparable to state-of-the art methods.
+They
+attribute this to the networks ability to learn internal representations that are
+useful for the given task.
+The first work using convolutional neural networks for sentiment classifica-
+tion was done by Kalchbrenner,
+Grefenstette,
+and Blunsom (2014) introducing
+dynamic k-max pooling.
+The dynamic k-max operator lets the value of k be a
+function of sentence length and the depth of the network.
+They found that the
+dynamic CNN induced an internal feature graph over the input.
+This contrasts
+convolutional models with CBOW in which vectors are simply summed together,
+recurrent neural networks that are sequential, and recursive neural networks that
+works on a parse tree provided by a parser.
+The model was aimed to be an im-
+provement on time-delay neural networks (TDNN) – or more specifically a model
+they call Max-TDNN that employs max pooling – which is another name for a
+convolutional network applied over the time dimension.
+The resulting model which they call dynamic convolutional neural network
+(DCNN) was tested on three different datasets: The Stanford Sentiment Treebank
+(Socher et al., 2013), TREC (Li and Roth, 2002) and Stanford Twitter Sentiment
+(Go,
+Bhayani,
+and Huang,
+2009).
+All of the datasets are on the sentence-level,
+or tweet-level
+for the twitter dataset.
+The performance on TREC – which
+is a six class question type classification task – is good,
+but falls short of the
+best performing algorithm.
+On the two sentiment tasks, however, the DCNN
+outperforms every other algorithm by a substantial amount.
+The reason why
+the model performs better on sentiment analysis compared to topic classification
+could be explained by the fact that since the pooling operator picks the most
+salient features,
+one word can have a large impact.
+For sentiment analysis this
+works well, while for topic classification average pooling might be a better fit.
+Using a model with a similar architecture to the Max-TDNN also described
+by Kalchbrenner, Grefenstette, and Blunsom (2014), Kim (2014) achieved results
+on par with the more complex DCNN,
+something they attributed to their
+model having more capacity than Max-TDNN, using multiple filter widths and
+feature maps.
+The model
+was tested on several
+different
+datasets,
+including
+both sentiment and topic classification, all sentence- or phrase-level.
+Again, the
+convolution-and-pooling architecture performed better on the sentiment task
+compared to topic classification.
+Testing was
+done on both static and non-static word embeddings,
+with
+the non-static embeddings being updated during training.
+For instance,
+word
+embeddings created with distributional models usually fail to encode antonymic
+relationships, making the vectors for “good” and “bad” similar to each other.
+In
+the non-static model, for the updated word embeddings, this was no longer the
+case.
+Kim (2014) also found that the publicly available word embeddings trained
+by word2vec on the Google News dataset were far superior to word embeddings
+trained by Collobert et al. (2011) on Wikipedia, but it’s unclear whether this is
+because of the large size of the Google News dataset or because of the word2vec’s
+architecture.
+2.4.
+RELATED WORK
+15
+Recursive
+neural
+networks
+In addition to convolutional
+networks,
+there
+are other neural
+architectures
+aiming to model
+deep sentence structure and
+compositionality.
+Socher et
+al.
+(2013)
+introduced the recursive neural
+tensor
+network for fine-grained sentiment analysis on sentence and subsentence level.
+Taking a binary parse tree with word embeddings as leafs as input, the network
+learns a composition function for combining two child nodes into a parent
+node.
+In a simple recurrent network, the composition operation is identical to
+convolution with window size 2, with the difference being that the same set of
+weights are reused for every node in the tree, while for a regular convolutional
+network there is usually a set
+of
+weights for each convolutional
+layer.
+The
+network described by Socher et al. (2013) is a slightly more complicated version
+of this, but they both have a single learned composition function that is used for
+all nodes in the tree. The model is tested on the Stanford sentiment treebank (SST)
+dataset that is introduced in the same paper and is compared to more shallow
+baseline classifiers including support vector machines,
+naive Bayes and a very
+simple model averaging together word embeddings for sentence representation.
+Their model outperforms all the baselines,
+and more so,
+it provides sentiment
+prediction on every level in the parse tree and captures the scope of negation.
+Other models
+As showed by Lai
+et al.
+(2015),
+recurrent and convolutional
+networks can be combined into a hybrid architecture.
+They use a bi-directional
+recurrent network with max pooling over the output at every time-step.
+The
+model
+is
+tested on both document
+and sentence classification tasks
+and is
+compared to shallow baseline models and selected models from other papers.
+Performance is good for topic classification, while it fails to improve on paragraph
+vectors for sentiment classification on the Stanford sentiment task. Compared to
+(Socher et al., 2013) which takes 3-5 hours to train, their model only takes several
+minutes on a single CPU.
+Using a complex combination of
+CNNs,
+long-short
+term memory (LSTM)
+networks and gated recurrent units (GRUs) Tang, Qin, and T. Liu (2015) tries to
+model documents by sentence composition. The model uses a CNN or an LSTM
+to create a fixed-size sentence representation from a sequence of word embeddings,
+and then uses a bi-directional GRU and averaging the output from every time step
+over the sentences to create the document representations used for classification.
+The model is tested on many sentiment datasets including the Yelp and IMDB.
+The best performance is achieved using an LSTM for the sentence representations
+and was considerably better compared to other methods.
+Yang et al.
+(2016) uses a recurrent neural
+network with attention to learn
+which parts of
+the text
+are more important
+in regards to the task at
+hand.
+The attention mechanism works by the network learning which parts of the
+input
+contain relevant
+information and giving it
+more weight.
+The model
+takes a sequence of word embeddings into a bi-directional gated recurrent unit
+concatenating the outputs at each time step.
+Then, an attention function is used
+on this output,
+giving a weight for each word,
+and then using these weights to
+calculate a weighted sum resulting in a fixed-size vector representation of the
+sentence.
+The same is done for documents using the sentence representations
+as input.
+The attention scores also proves useful
+for visualization,
+making it
+16
+CHAPTER 2.
+BACKGROUND
+possible to see which words and sentences contributed the most to the overall
+representation.
+The model is tested on six different document-level sentiment
+datasets with promising results, beating Tang, Qin, and T. Liu (2015) on the Yelp
+and IMDB datasets.
+17
+Chapter 3
+NoReC: Norwegian Review
+Corpus
+The Norwegian Review Corpus
+(NoReC)
+1
+is a dataset consisting of more than
+35,000 reviews collected from several
+major Norwegian media groups (Velldal
+et al.,
+2018).
+Each review is rated on a scale from 1 to 6.
+NoReC has been
+constructed
+2
+as a part of the SANT project
+3
+– a joint effort by the Language
+Technology Group at the University of Oslo, and media partners NRK, Schibsted
+and Aller Media.
+SANT aims to create and provide sentiment analysis resources
+for Norwegian in the form of publicly available datasets, pre-trained models, tools
+and services.
+English is the dominant
+language of
+the world and the field of
+language
+resources is no exception.
+While there are numerous sentiment datasets for
+English, there are few for other languages and for the majority of languages there
+are none.
+This was also the case for Norwegian until now.
+The release of the
+NoReC dataset marks the first publicly available sentiment analysis dataset for
+Norwegian,
+including both written standards – Bokmål
+and Nynorsk.
+This
+dataset not only provides the opportunity to create sentiment tools and services
+for Norwegian language users, but enables researchers all over the world to test
+models on an additional language.
+This chapter describes how the reviews where extracted from the raw data
+and then further processed into the published dataset. The process can be divided
+into three stages described below:
+1
+https://github.com/ltgoslo/norec
+2
+During the summer of 2017 I was hired as a research assistant – together with Cathrine Stadsnes
+– and assigned the task of creating the NoReC dataset from the raw data dumps provided by the
+media partners. The dataset was described in the article “NoReC: The Norwegian Review Corpus”
+by Velldal et al. (2018).
+This chapter borrows from the article,
+but extends it providing a more
+detailed description of the data extraction process and gives additional statistics and visualizations
+of the dataset.
+The work regarding the data extraction was performed both by Cathrine Stadsnes
+and myself.
+3
+http://www.mn.uio.no/ifi/english/research/projects/sant/
+18
+CHAPTER 3.
+NOREC: NORWEGIAN REVIEW CORPUS
+Source
+# Raw documents
+# Extracted reviews
+VG
+675,892
+11,888
+Dagbladet
+8197
+5300
+Stavanger Aftenblad
+8612
+5146
+P3.no
+5021
+5017
+DinSide.no
+3252
+2944
+Fædrelandsvennen
+3446
+2296
+Bergens Tidene
+4514
+1675
+Aftenposten
+1237
+923
+Table 3.1:
+Number of raw documents and extracted reviews across sources.
+The
+number of raw documents for VG is very high because it is a full dump of their
+entire online archive.
+The low extraction rate for some of the sources is partly
+due to duplicates and articles without a rating, but it might be possible to extract
+more reviews from the raw data in a future effort.
+Data extraction
+The reviews were extracted from the raw data and normal-
+ized into a common format – this includes the review text
+and metadata.
+Pre-processing
+Linguistic pre-processing was
+applied,
+using UDPipe,
+creating files in the CoNLL-U format. The metadata was
+normalized,
+including defining a set of broad categories
+and identifying the language variety.
+Dataset splits
+The dataset
+was
+split
+into training,
+development
+and
+testing.
+In
+the following sections we will go into more detail of each step of the processes.
+3.1
+Raw data
+The dataset
+was
+assembled from raw data provided by the media partners,
+consisting of database dumps from their online content going back to the mid
+1990s.
+The data came in various formats, because it came from different sources
+and because the data ranges back to the mid 1990s and the websites might have
+transitioned through a number of different content management systems and
+sometimes losing metadata and changing formats along the way.
+In order to
+convert the raw data into a finished dataset to be published, a substantial amount
+of processing and normalization was required. The data, for the most part, came
+as a mix of JSON and HTML.
+The process can be divided up into a number
+of steps that are described in more detail in this section, with some parts being
+straight forward data extraction while others required a larger degree of heuristics
+3.1.
+RAW DATA
+19
+<strong>Dette er en bittersøt skildring av en mann som må takle
+både sorg, sinne og sine to døtre på samme tid.</strong>
+Alexander Paynes film er riktignok ikke på høyde med hans
+karrierebeste, <em>Sideways</em>. Den bommer av og til på tone og
+stemning, men har også flere positive elementer, med George
+Clooney som det beste.
+LES OGSÅ: <a
+href="http://p3.no/filmpolitiet/2010/09/topp-5-george-clooney/">
+Topp 5: George Clooney!</a>
+<h5>Utro kone for døden</h5>
+Han spiller Matt King, som er i ferd med å miste kona. Hun ligger
+hjernedød på sykehus etter en båtulykke.
+Figure 3.1:
+Raw data from P3.no review (ID: 003906).
+Note the lack of
+p
+-tags
+around paragraphs and link leading to another review.
+and source-specific ad-hoc scripting in order to extract the data.
+With the data
+at
+times being very unstructured,
+it
+was sometimes difficult
+to fully extract
+the relevant data without including non-relevant content such as links to other
+articles or non-prose such as tables and figures.
+Table 3.1 shows the number of reviews extracted across sources as well as the
+number of raw documents provided by the media partners. There are a total of 8
+different sources – five from Schibsted:
+Verdens Gang (VG), Stavanger Aftenblad
+(SA),
+Fædrelandsvennen (FVN),
+Bergen Tidende (BT)
+and Aftenposten (AP)
+– two
+from Aller Media: Dagbladet and DinSide – and one from NRK: P3.no. As we can
+see from the table, the number of reviews from each source is highly variable. The
+extraction ratio also varies a lot from source to source. In the case of VG, reviews
+were not marked in the metadata so they provided us with their full database
+dump of all online content. While we do not know how many reviews are present
+in the VG dump, we are satisfied with the number of extracted reviews.
+There were some problems with the extraction of reviews from Stavanger
+Aftenblad (SA),
+Fædrelandsvennen (FVN),
+Bergen Tidende (BT),
+Aftenposten (AP)
+and Dagbladet,
+as evident by the number of extracted items compared to the
+number of items in the raw dump.
+Some of the discarded articles are duplicates
+and unpublished items, but they only account for a portion of the discarded data.
+It might be worth looking into whether some of it can be salvaged in a future
+effort.
+Figure 3.1 shows an extract from a raw HTML file as provided by P3.no.
+Although the document is organized in blocks of text,
+there are no paragraph
+tags to mark the document structure. Inserted into the running text are also links
+to other reviews and articles suggested to the reader.
+20
+CHAPTER 3.
+NOREC: NORWEGIAN REVIEW CORPUS
+<img src="http://www.vg.no/spill/bilder/infoboks2/terning-1.gif">
+Figure 3.2: HTML image reference indicating the rating, taken from a VG review
+without the rating in metadata. The rating – in this case 1 – can be read out from
+the filename.
+3.2
+Extracting reviews
+The first step was extracting the reviews and associated metadata from the raw
+data.
+Before extracting the reviews,
+we first had to identify the reviews in the
+raw data from the media partners. After the reviews were identified, the text was
+converted to a uniform HTML-like format,
+while the metadata was converted
+into a fixed set of attributes as a JSON-file.
+3.2.1
+Identifying reviews
+Most of the data we received consisted only of reviews,
+but for some sources
+an explicit labeling of reviews was lacking.
+In these cases we received not only
+reviews, but the whole archive of articles from the database.
+This required us to
+identify the reviews among all the articles.
+In a lot of cases there was metadata
+encoding the rating, but for many of the older reviews the rating was present only
+in the form of a url to an image of a die or as a number in the text.
+Identifying
+the die images was relatively easy as the same image file was being used for each
+rating across reviews for a given source. In Figure 3.2 we see a typical use of a die
+image in a VG review.
+Note that we can read out the rating from the filename.
+Identifying reviews on the basis of a rating in the running text proved to be very
+difficult, caused by a large number of different ways of describing the rating – for
+instance “terningkast 6”, “terningkast seks”, “denne får seksern” and “vi gir den
+en 6-er”
+4
+– and the presence of references to other reviews – “X fikk terningkast
+5”
+5
+.
+In some cases,
+a given article contained not only one review,
+but grouped
+together several reviews of similar items each with their own rating.
+This was
+typical for products where for instance a number of different laptops are review
+together.
+We decided to treat each of these reviews as a separate review, which
+required us to identify articles containing multiple reviews and segmenting the
+article into the separate reviews.
+Because of a lack of consistent use of markup,
+segmenting the reviews was not trivial and required the use of many different
+heuristics looking at headers, text styles, images and other markup.
+In addition
+to identifying the boundaries of the reviews,
+we had to identify the title and
+the rating of each sub-review.
+While extraction of the rating was fairly straight
+forward – usually being present in the form of an image – correctly identifying
+the title was non-trivial
+as there was no consistent use of markup with some
+4
+These phrases all approximately translates to “rating 6”
+5
+Translation: “X received rating 5””
+3.2.
+EXTRACTING REVIEWS
+21
+Source
+Series
+P3.no
+000,000 to 099,999
+VG
+100,000 to 199,999
+DinSide
+200,000 to 299,999
+Dagbladet
+300,000 to 399,999
+Aftenposten
+400,000 to 499,999
+Bergens Tidende
+500,000 to 599,999
+Fædrelandsvenen
+600,000 to 699,999
+Stavanger Aftenblad
+700,000 to 799,999
+Table 3.2: ID number series for each source.
+documents correctly using header tags while others used paragraph tags with
+additional styling so that they look like headers.
+In total, 35,189 distinct reviews were extracted from the data provided by the
+media partners.Each review is given a global
+ID number – the NoReC ID.
+To
+ensure that the NoReC ID is persistent – so that even if there are changes to the
+extraction pipeline or reviews are removed, an ID number will always be assigned
+to the same article – all ID numbers are stored in a separate ID bank.
+All of the
+original documents also have a unique ID relative to the source – hereby called the
+source ID. If there was a one-to-one relationship between documents and reviews,
+we could simply map from source ID to NoReC ID, but because there can be
+more than one review in one document this is not sufficient. In order to give each
+review a unique identifier we combine the source ID with the review title. This is
+very robust for one-review documents, but is somewhat brittle for multi-review
+documents because improvements in the extraction procedures might change the
+title of a sub-review.
+However, in any case an ID number is only assigned to one
+review and is then reserved for that review only.
+Each ID number is a 6 digit
+number where the most significant number denotes the series.
+Each source is
+assigned a series – as shown in Table 3.2 – which makes it easy to identify which
+source a review comes from.
+3.2.2
+Converting content to canonical HTML
+The running text came mostly as HTML, but also as JSON. While the format var-
+ied from source to source, each with their own conventions for formatting and
+artifacts from the content management system, they conceptually shared a com-
+mon underlying structure consisting of paragraphs and sub-headers. However, in
+between relevant text there was also non-textual content like images and tables,
+and non-relevant content like links to other articles. To normalize the data for fur-
+ther downstream processing we defined a canonical HTML format that consisted
+of a sequence of paragraphs and headers for all the relevant text, while identify-
+ing and marking non-relevant items.
+For the purpose of marking non-relevant
+content we introduced a new HTML tag –
+remove
+– in which we enclosed the
+22
+CHAPTER 3.
+NOREC: NORWEGIAN REVIEW CORPUS
+<p><strong>Dette er en bittersøt skildring av en mann som må takle
+både sorg, sinne og sine to døtre på samme tid.</strong></p>
+<p>Alexander Paynes film er riktignok ikke på høyde med hans
+karrierebeste, <em>Sideways</em>. Den bommer av og til på tone og
+stemning, men har også flere positive elementer, med George
+Clooney som det beste.</p>
+<REMOVE>LES OGSÅ: <a
+href="http://p3.no/filmpolitiet/2010/09/topp-5-george-clooney/">
+Topp 5: George Clooney!</a></REMOVE>
+<h5>Utro kone for døden</h5>
+<p>Han spiller Matt King, som er i ferd med å miste kona. Hun
+ligger hjernedød på sykehus etter en båtulykke.</p>
+Figure 3.3:
+The canonical version of the raw HTML from Figure 3.1.
+All the
+paragraphs have been explicitly marked with paragraph tags, while the link and
+accompanying text has been marked for removal.
+non-relevant content.
+The choice to not delete the content was deliberate, as we
+wanted to keep the processing pipeline non-destructive and to make it possible for
+others to use the data as they see fit.
+The canonical HTML files are made avail-
+able as a part of the dataset and provides a point of entry for people interested
+in taking a look at the data or making their own choices with respect to content
+extraction.
+In addition to providing the data in the CoNLL-U format described
+below – which has become an industry standard for natural language data sets –
+the corpus is also distributed with scripts for easy extraction of the running text.
+In Figure 3.3 we see the HTML from Figure 3.1 converted in to our canonical
+HTML format.
+3.3
+Pre-processing
+After normalizing the raw data into a uniform HTML format, we also performed
+linguistic pre-processing such as
+tokenization,
+lemmatization,
+part-of-speech
+tagging and dependency parsing.
+We use the CoNLL-U file format – which is
+described in more detail in section 3.3.4 – to encode the additional information.
+Because there are two written standards for the Norwegian language,
+we first
+identify language variety and use separate a pipeline for each of the standards.
+3.3.1
+Identifying language varieties
+Despite having only 5 million native speakers, Norwegian has two official written
+standards – Bokmål and Nynorsk.
+The two varieties are closely related and they
+3.3.
+PRE-PROCESSING
+23
+Classifier
+Accuracy
+langid.py
+100.00
+“ikkje”-classifier
+99.94
+Table 3.3:
+Evaluation of
+langid.py
+and the “ikkje”-classifier in identifying the
+written standard used on a selection of reviews.
+are mostly distinguished by minor lexical differences.
+Still,
+the differences are
+strong enough that different preprocessing pipelines must be used for the different
+standards (Velldal, Øvrelid, and Hohle, 2017), hence it is important to identify
+the standard within a particular document.
+Therefore, we have used
+langid.py
+(Lui
+and Baldwin,
+2012) – an open-source language identification system – to
+identify the standard for each review.
+6
+The language identifier is added as a
+metadata attribute which is further described in section 3.4.
+We performed an
+evaluation of
+langid.py
+on 1599 reviews.
+By looking at the titles and excerpts
+of reviews, we identified authors writing only using one standard.
+For Bokmål
+we used 1487 reviews written by Birger Vestmo, while for Nynorsk we used 112
+reviews written by Andreas Hadsel Opsvik, Maria Horvei and Anders Veberg.
+As a simple baseline we used a classifier predicts Nynorsk if the word “ikkje” (the
+Nynorsk word for “not” which is very frequent and not present in Bokmål) is
+present in the text,
+otherwise predicting Bokmål.
+Table 3.3 shows the results
+of
+this evaluation.
+We see that the
+langid.py
+achieves 100% accuracy with
+the “ikkje”-classifier just below.
+The “ikkje”-classifier misclassified one Bokmål
+review as Nynorsk, which on close inspection turned out to be due to a reference
+to a Nynorsk article in the text.
+In table 3.4 we see the number of reviews written in the two written standards.
+Bokmål dominates the distribution in the corpus with 34,656 documents, while
+there is only 533 documents in Nynorsk.
+Nynorsk is underrepresented in every
+one of the sources, ranging from 5 percent for Fædrelandsvennen, Bergens Tidende
+and P3.no, down to none for Aftenposten and DinSide.no.
+The share of Nynorsk
+in the population as a whole is a lot higher, 12 percent of all elementary school
+students used Nynorsk as their primary written form as of April 1st 2016
+7
+. There
+are no official statistics on the number of Nynorsk users in the population as
+a whole,
+but it is usually estimated to be around 10 % to 15 %.
+8
+While NRK
+is obligated by law to ensure a minimum share of 25 percent Nynorsk in their
+6
+langid.py
+can actually identify three different variants:
+no
+,
+nn
+and
+nb
+, for Norwegian (mixed),
+Nynorsk and Bokmål, respectively.
+While the precise details of how the classifier was trained are
+not clear,
+it appears to us after some experimentation that the classification of Bokmål is more
+accurate when specifying
+no
+rather than
+nb
+and hence is what we use here (together with
+nn
+).
+We
+still use the language codes nb and nn when adding information about the detected standards to the
+metadata in NoReC.
+7
+https://www.ssb.no/utdanning/statistikker/utgrs/aar/2016-12-14
+8
+Vikør, Lars S..
+(2017, 17.
+oktober).
+Språk i Norge.
+Store norske leksikon.
+Retrieved April 23
+2018 from
+https://snl.no/spr%C3%A5k_i_Norge
+24
+CHAPTER 3.
+NOREC: NORWEGIAN REVIEW CORPUS
+Source
+% Bokmål
+% Nynorsk
+VG
+99.81
+0.19
+Dagbladet
+99.98
+0.02
+Stavanger Aftenblad
+98.04
+1.96
+P3.no
+95.93
+4.07
+DinSide.no
+100.00
+0.00
+Fædrelandsvennen
+94.86
+5.14
+Bergens Tidene
+94.87
+5.13
+Aftenposten
+100.00
+0.00
+Total
+98.49
+1.51
+Table 3.4: Percentage of reviews written in Bokmål and Nynorsk across sources.
+The share of reviews written in Nynorsk varies from 0 % to 5 %, but is lower than
+would be expected based on Nynorsk use in the population for all sources.
+television and radio broadcasts, there are no such restrictions on textual content
+published online.
+3.3.2
+Linguistic enrichments and CoNLL-U
+Now with data that is normalized into a common format, we perform linguistic
+pre-processing.
+The CoNLL-U file format – originally defined for the Universal
+Dependencies (Nivre et al.,
+2016) – is used,
+following the conventions of Uni-
+versal Dependencies version 2.
+9
+Using the UDPipe toolkit (Straka,
+Haji
+ˇ
+c,
+and
+Straková, 2016) we performed sentence segmentation, tokenization, lemmatiza-
+tion, morphological analysis, part-of-speech tagging and dependency parsing.
+Given the canonical HTML format described above, it is straightforward to
+extract the relevant text.
+Figure 3.4 shows the extracted text from the canonical
+HTML from Figure 3.3.
+All markup has been stripped away and all the content
+of
+REMOVE
+tags have been removed.
+Some relevant information is also removed,
+such as the marking of headers, so in the pipeline we carry this information over
+into the CoNLL-U files.
+3.3.3
+UDpipe configuration
+Following the language identification,
+we applied UDPipe (Straka,
+Haji
+ˇ
+c,
+and
+Straková,
+2016)
+v.1.2 with its pre-trained models for Norwegian Bokmål
+and
+Nynorsk. This version of the UDPipe software and the pre-trained models were
+developed for the CoNLL 2017 shared task (Zeman et al.,
+2017),
+which was
+devoted to parsing from raw text to Universal Dependencies for more than 40
+different languages.
+We use the models trained for participation in the shared
+task (Straka and Straková, 2017), not the models provided as baseline models for
+9
+http://universaldependencies.org/format.html
+3.3.
+PRE-PROCESSING
+25
+Dette er en bittersøt skildring av en mann som må takle
+både sorg, sinne og sine to døtre på samme tid.
+Alexander Paynes film er riktignok ikke på høyde med hans
+karrierebeste, Sideways. Den bommer av og til på tone og
+stemning, men har også flere positive elementer, med George
+Clooney som det beste.
+Utro kone for døden
+Han spiller Matt King, som er i ferd med å miste kona. Hun
+ligger hjernedød på sykehus etter en båtulykke.
+Figure 3.4:
+Text extracted from canonical HTML from Figure 3.3.
+While the
+paragraphs are preserved, the heading markings are lost.
+the participants.
+The Norwegian models were trained on the UD 2.0 versions
+of the Norwegian UD treebanks (Øvrelid and Hohle,
+2016;
+Velldal,
+Øvrelid,
+and Hohle, 2017) in conjunction with the aforementioned shared task, and the
+subsequent choice of model for use (Bokmål vs Nynorsk) was determined by the
+language identified for each particular review.
+UDPipe obtained competitive results for Norwegian in the shared task, with
+rankings ranging between first place (lemmatization;
+both variants) and ninth
+place (Bokmål dependency parsing LAS) out of 33 participating teams. In terms of
+performance for the different sub-tasks, UDPipe reported F1 scores – for Bokmål
+/ Nynorsk respectively – on sentence segmentation of 96.38 / 92.08, tokenization
+of 99.79 / 99.93, lemmatization of 96.66 / 96.48, morphological analysis of 95.56
+/ 95.25, part-of-speech tagging of 96.83 / 96.54, and Labeled Accuracy Scores for
+dependency parsing of 83.89 / 82.74.
+3.3.4
+CoNLL-U files
+When extracting the text from the canonical HTML to pass it to UDPipe,
+we
+stripped away all mark-up and discard all content marked for removal as described
+in Section 3.2.2 Double newlines were inserted between paragraphs and excess
+whitespace trimmed away. Importantly, however, the text structure is retained in
+CoNLL-U by taking advantage of the support for comments to mark paragraphs
+and sentences. In addition to the global document ID number, each paragraph and
+sentence is also assigned a running ID within the document, using the following
+form:
+26
+CHAPTER 3.
+NOREC: NORWEGIAN REVIEW CORPUS
+#
+Documents
+35,189
+Sentences
+918,681
+Tokens
+14,998,667
+Types – full-form
+511,150
+Types – lemmas
+438,306
+Average document length
+426
+Table 3.5:
+Basic corpus counts.
+The average document length is relatively long
+compared to other sentiment datasets.
+Paragraphs
+<review-id>-<paragraph-id>
+, e.g.
+000001-03
+for para-
+graph 3 in document 1.
+Sentences
+<review-id>-<paragraph-id>-<sentence-id>
+,
+e.g.
+000001-03-02
+for sentence 2 in paragraph 3 in document
+1.
+In the
+CoNLL-U format, each line consists of a word with a number of tab-separated
+fields for encoding linguistic information.
+A double newline marks sentence
+boundaries.
+Comments follow the
+#
+character and are used to hold additional
+metadata such as document structure and the original string.
+In Figure 3.5 we
+see two sentences formatted in the CoNLL-U file format.
+The structure of the
+text is preserved,
+with headers and paragraphs being marked in the comments
+preceding a sentence,
+and extra spaces and newlines being marked in the last
+field of the token.
+This makes it possible to reconstruct the original
+text in
+verbatim.
+For a detailed description of the CoNLL-U format used here, please
+consult the documentation
+10
+provided by the Universal Dependencies project.
+After completing the UDPipe pre-processing,
+the corpus comprises a total
+of
+918,681 sentences and 14,998,667 tokens; see Table 3.5 for an overview of some
+core corpus counts. A script for executing the entire pipeline from text extraction
+through UDPipe parsing will be made available from the NoReC git repository.
+3.4
+Metadata and thematic categories
+For all the identified reviews, we also extract various kinds of relevant metadata,
+made available in a JSON representation with normalized attribute–value names
+across reviews.
+Metadata in NoReC include information like the URL of the
+originally published document,
+numerical
+rating,
+publishing date,
+author list,
+domain or thematic category, original ID in the source, and more. For a detailed
+description of the attributes, see table 3.6.
+Beyond this we also add information
+10
+http://universaldependencies.org/format.html
+11
+Note that some of the reviews for some sources are located behind a paywall.
+3.4.
+METADATA AND THEMATIC CATEGORIES
+27
+# text = Utro kone for døden
+# header
+# newpar id = 003906-05
+# sent_id = 003906-05-01
+1
+Utro
+utro
+ADJ
+_
+_
+2
+amod
+_
+_
+2
+kone
+kone
+NOUN
+_
+_
+0
+root
+_
+_
+3
+for
+for
+ADP
+_
+_
+4
+case
+_
+_
+4
+døden
+død
+NOUN
+_
+_
+2
+obl
+_
+SpacesAfter=\n\n
+# text = Han spiller Matt King, som er i ferd med å miste kona.
+# newpar id = 003906-06
+# sent_id = 003906-06-01
+1
+Han
+han
+PRON
+_
+_
+2
+nsubj
+_
+_
+2
+spiller spille
+VERB
+_
+_
+0
+root
+_
+_
+3
+Matt
+Matt
+PROPN
+_
+_
+2
+obj
+_
+_
+4
+King
+King
+PROPN
+_
+_
+3
+flat:name _
+SpaceAfter=No
+5
+,
+$,
+PUNCT
+_
+_
+3
+punct
+_
+_
+6
+som
+som
+PRON
+_
+_
+9
+nsubj
+_
+_
+7
+er
+være
+AUX
+_
+_
+9
+cop
+_
+_
+8
+i
+i
+ADP
+_
+_
+9
+case
+_
+_
+9
+ferd
+ferd
+NOUN
+_
+_
+3
+acl:relcl _
+_
+10 med
+med
+ADP
+_
+_
+12 mark
+_
+_
+11 å
+å
+PART
+_
+_
+12 mark
+_
+_
+12 miste
+miste
+VERB
+_
+_
+9
+acl
+_
+_
+13 kona
+kone
+NOUN
+_
+_
+12 obj
+_
+SpaceAfter=No
+14 .
+$.
+PUNCT
+_
+_
+2
+punct
+_
+_
+Figure 3.5:
+Two CoNLL-U formatted sentences.
+All original formatting – such
+as extra spaces after tokens and number of newlines – are preserved making it
+possible to reconstruct the original text in verbatim.
+28
+CHAPTER 3.
+NOREC: NORWEGIAN REVIEW CORPUS
+Attribute
+Description
+ID
+NoReC ID
+SOURCE
+-
+ID
+Source-specific ID number
+SOURCE
+Name of the source
+RATING
+Rating 1 to 6
+LANGUAGE
+Language identifier, one of
+NB
+or
+NN
+TITLE
+Title of the review
+EXCERPT
+Short description or subtitle
+URL
+URL to original review
+11
+AUTHORS
+List of authors
+CATEGORY
+Normalized category
+SOURCE
+-
+CATEGORY
+Source-specific category
+TAGS
+List of normalized tags
+SOURCE
+-
+TAGS
+List of source-specific tags
+SPLIT
+Dataset split, one of
+TRAIN
+,
+DEV
+or
+TEST
+DAY
+Day of publication
+MONTH
+Month of publication
+YEAR
+Year of publication
+Table 3.6: Description of metadata attributes.
+about the identified language variety (Bokmål/Nynorsk), the assigned data split
+(test/dev/train, as further described in Section 5.1.1), the assigned document ID,
+and finally a normalized thematic category.
+3.4.1
+Thematic categories
+The
+CATEGORY
+attribute warrants some elaboration.
+The use of
+thematic
+categories and/or tags varies a lot between the different sources,
+ranging from
+highly granular categories to umbrella categories encompassing many different
+domains. Based on the original inventory of categories, each review in NoReC is
+mapped to one out of nine normalized thematic categories with English names.
+The distribution over categories is shown in Table 3.7, sorted by frequency.
+For
+some sources,
+this
+normalization is
+a matter
+of
+simple one-to-one
+mapping,
+while for others it is more complex,
+involving heuristics based on
+the presence of certain tags and keywords in the title.
+The granularity in the
+final
+set of categories is limited by the granularity in the sources.
+However,
+the original
+(Norwegian)
+source categories are also preserved in the metadata
+(
+SOURCE
+-
+CATEGORY
+).
+Some reviews also had additional thematic metadata in
+the form of a set of tags.
+The use of tags varied a lot – from consistent use of a
+small set of predefined tags, to almost free text tags with most tags seeing very
+infrequent use.
+All of these original tags are preserved in the attribute
+SOURCE
+-
+TAGS
+. Additionally, we have added a new attribute called
+TAGS
+. For some sources
+3.4.
+METADATA AND THEMATIC CATEGORIES
+29
+Category
+#
+screen
+13,085
+music
+12,410
+literature
+3526
+products
+3120
+games
+1765
+restaurants
+534
+stage
+530
+sports
+117
+misc
+102
+total
+35,189
+Table 3.7: Number of reviews across categories.
+this is simply a translation of the tags into English, while for others it preserves
+information about the original category in the source that is more fine-grained
+than the normalized categories.
+The purpose of the
+TAGS
+attribute is to provide
+additional information to complement the
+CATEGORY
+information in the cases
+where such information is available. For instance, for some sources we know if a
+review in the category
+MUSIC
+is a concert review, while for other sources we do
+not. Therefore we can not use
+CONCERT
+as a global category, but we can convey
+this information in the tags when available.
+As seen in Table 3.7, the two categories that are by far the largest are
+SCREEN
+and
+MUSIC
+.
+While the former covers reviews about movies and TV-series,
+the
+latter covers both musical recordings and performances.
+The related category
+STAGE
+covers theater, opera, ballet, musical and other stage performances besides
+music.
+The perhaps most
+diverse category is
+PRODUCTS
+,
+which comprises
+product reviews across a number of sub-categories, ranging from cars and boats
+to mobile phones and home electronics,
+in addition to travel
+and more.
+The
+remaining categories of
+LITERATURE
+,
+GAMES
+,
+RESTAURANTS
+, and
+SPORTS
+are
+self-explanatory, while the
+MISC
+category was included to cover topics that were
+infrequent or that could not easily be mapped to any of the other categories
+by simple heuristics.
+This includes reviews of
+fine art,
+political
+debates and
+contestants in a ballroom dance competition to mention a few.
+3.4.2
+Ratings
+From the perspective of sentiment analysis, the most immediately relevant piece
+of metadata is obviously the rating.
+As discussed previously,
+all
+the reviews
+were originally published with an integer-valued rating between 1 and 6, visually
+indicated using the face of a die.
+Figure 3.6 shows the distribution of reviews
+relative to rating scores. We see that rating values of 4 and 5 are the most common,
+30
+CHAPTER 3.
+NOREC: NORWEGIAN REVIEW CORPUS
+1
+2
+3
+4
+5
+6
+0
+5,000
+10,000
+15,000
+1.2 %
+6.7 %
+18 %
+33 %
+36 %
+6.0 %
+Rating
+Reviews
+Figure 3.6: Number of reviews across ratings. The distribution is heavily skewed
+towards 4 and 5, with the lowest and highest rating seeing little use. This tendency
+is also found in other review datasets, but without the drop for the highest rating.
+while rather few reviews were given the lowest possible rating of 1. This is subject
+to a more in depth discussion in section 5.1.1.
+3.5
+Training, development and testing splits
+When comparing model performance on a given dataset it is important to have
+a standard pre-defined test set.
+We distribute NoReC with pre-defined splits for
+training, development and testing.
+A common strategy for creating these splits
+is to randomly shuffle the data and then divide the data in consecutive blocks
+or select every n’th item.
+While this is sufficient to ensure that the splits are
+representative of the distribution of the dataset as a whole,
+it is not without
+problems.
+As is the case with most review datasets,
+there are often multiple
+reviews of the same item in the NoReC dataset, especially for items such as movies
+and music that are found across all sources. A model trained on reviews will most
+likely learn that certain items receive high rating. When evaluating our models we
+want to measure how well it is able to infer the rating based on the sentiment of
+the text, and not that they have identified The Shawshank Redemption as a critically
+acclaimed movie.
+To prevent this we have to ensure that all reviews for an item
+are located in the same split. While identifying the item being reviewed is a non-
+trivial task, we can leverage the time dimension to get most of the reviews in the
+same split.
+Professional reviews are for the most part written in close proximity
+to the release date of the item being reviewed, meaning that reviews for the same
+item will be close to each other in time.
+By sorting the reviews by publication
+date and then splitting we can therefore ensure that most reviews are in the same
+split as other reviews of the same item – potentially with the exception of some
+3.5.
+TRAINING, DEVELOPMENT AND TESTING SPLITS
+31
+1998
+1999
+2000
+2001
+2002
+2003
+2004
+2005
+2006
+2007
+2008
+2009
+2010
+2011
+2012
+2013
+2014
+2015
+2016
+2017
+0
+500
+1,000
+1,500
+2,000
+2,500
+3,000
+3,500
+4,000
+Year
+Reviews
+Figure 3.7:
+Number of reviews over time.
+Prior to 2003 there are only a few
+reviews.
+The drop in 2017 can be explained by the fact that the corpus was
+assembled in mid-2017.
+items that are located around the start and end of the splits.
+As a final point it
+also makes more intuitive sense to test the model on data located ahead in time
+relative to the training data – as the model will most typically be used on new
+data. As language slowly changes over time, this will provide more representative
+test results.
+Figure 3.7 shows the number of reviews over time.
+Note that because the
+dataset was assembled in 2017,
+we only have partial data for that year.
+Figures
+3.8, 3.9 and 3.10 shows the relative distributions of ratings, categories and sources
+respectively over time. The figures are restricted to the years 2003 to 2017, despite
+the data going back to 1998, because the number of reviews prior to 2003 is very
+low as evident by Figure 3.7.
+In Figure 3.8 we can see that the distribution of
+ratings is fairly stable over time. Looking at Figure 3.9 we see that the distribution
+of categories vary a lot over time.
+This relates to the distribution of sources – as
+seen in Figure 3.10 – because some of the categories, like
+RESTAURANTS
+, mainly
+comes from one or a only a few sources.
+If we sorted the entire dataset by time,
+the distribution of categories across splits would vary a lot.
+To avoid this,
+we
+created the splits per category – sorting the reviews for each category by date and
+then performing the split.
+The split sizes are 80% train, 10% development and
+10% test.
+When doing the splitting per category we maintain an identical
+category
+distribution across splits, as evident in Figure 3.12.
+The distribution of ratings
+also remains fairly stable across splits (Figure 3.11), while the source distribution
+32
+CHAPTER 3.
+NOREC: NORWEGIAN REVIEW CORPUS
+2003
+2004
+2005
+2006
+2007
+2008
+2009
+2010
+2011
+2012
+2013
+2014
+2015
+2016
+2017
+0
+10
+20
+30
+40
+50
+60
+70
+80
+90
+100
+Year
+Reviews (%)
+1
+2
+3
+4
+5
+6
+Figure 3.8: Distribution of ratings over time.
+2003
+2004
+2005
+2006
+2007
+2008
+2009
+2010
+2011
+2012
+2013
+2014
+2015
+2016
+2017
+0
+10
+20
+30
+40
+50
+60
+70
+80
+90
+100
+Year
+Reviews (%)
+screen
+music
+literature
+products
+games
+restaurants
+stage
+sports
+misc
+Figure 3.9: Distribution of categories over time.
+3.5.
+TRAINING, DEVELOPMENT AND TESTING SPLITS
+33
+2003
+2004
+2005
+2006
+2007
+2008
+2009
+2010
+2011
+2012
+2013
+2014
+2015
+2016
+2017
+0
+10
+20
+30
+40
+50
+60
+70
+80
+90
+100
+Year
+Reviews (%)
+vg
+dagbladet
+sa
+p3
+dinside
+fvn
+bt
+ap
+Figure 3.10: Distribution of source over time.
+0
+5
+10
+15
+20
+25
+30
+35
+40
+6
+5
+4
+3
+1
+2
+Train
+Dev
+Test
+Figure 3.11: Distribution of ratings across splits.
+34
+CHAPTER 3.
+NOREC: NORWEGIAN REVIEW CORPUS
+0
+5
+10
+15
+20
+25
+30
+35
+40
+screen
+games
+music
+stage
+literature
+misc
+products
+restaurants
+sports
+Train
+Dev
+Test
+Figure 3.12: Distribution of categories across splits.
+3.5.
+TRAINING, DEVELOPMENT AND TESTING SPLITS
+35
+0
+5
+10
+15
+20
+25
+30
+35
+40
+p3
+vg
+dinside
+dagbladet
+ap
+bt
+fvn
+sa
+Train
+Dev
+Test
+Figure 3.13: Distribution of sources across splits.
+(Figure 3.13) varies a lot more across splits – with VG and Aftenposten showing the
+strongest effect.
+While it would be desirable to maintain the source distribution
+across splits,
+it is not critical
+as we are primarily interested in the ratings and
+categories.
+The categories are not so useful
+to us in themselves – we are not
+attempting to do topic classification – but they are important as the dataset is
+a cross-domain review corpus.
+37
+Chapter 4
+Computational environment
+In this chapter we will describe the computational environment and the experime-
+nal pipeline used to train the various baseline and convolutional neural network
+models. The University of Oslo provides access to high performance computing
+(HPC) resources that enables students and researchers to run a large number of
+computationally demanding jobs.
+While many machine learning models can be
+run on a laptop, more complex models require both more memory and compu-
+tational power.
+This is especially true for neural network models that are very
+computationally demanding and use a lot of matrix multiplication – an opera-
+tion that is embarrassingly parallel.
+However, using these resources comes with
+additional challenges.
+Working on a large computer cluster with thousands of
+nodes requires a different work flow compared to working interactively on a sin-
+gle server.
+The first section of this chapter deals with the challenges of using the
+high performance computing environment and our solutions to these challenges,
+while in the section following that we will look into the experimental pipeline
+used to run all the experiments in the following chapters.
+4.1
+The Abel computer cluster
+Abel is a high performance computer cluster at the University of Oslo
+1
+.
+It uses
+Slurm
+2
+to queue jobs that are run when the requested resources are available.
+Slurm is a workload manager that is used to allocate resources across a large
+number of nodes.
+A job is submitted in the form of a job script – typically a
+shell script – which sets up the job, executes the program and cleans up after the
+job is finished.
+The user can set a number of different parameters – such as the
+number of CPU-cores, amount of memory and special resources such as GPUs,
+as well as the expected maximum running time of the job (jobs exceeding the set
+time are terminated)– that are submitted with the job. The job runs whenever the
+requested resources are available, but might be put in a low priority queue if the
+user or project has too many jobs running. The output of the job script is written
+to a local file so that the user can follow the progress of the program.
+While Abel
+provides access to massive amounts of computing power,
+the
+nature of the queue system and performance limitations of the filesystem presents
+1
+http://www.uio.no/english/services/it/research/hpc/abel/
+2
+https://slurm.schedmd.com/
+38
+CHAPTER 4.
+COMPUTATIONAL ENVIRONMENT
+some additional challenges with regards to work flow.
+In this section we will
+describe these challenges and the methods use to handle them.
+We will
+start
+with the filesystem challenges and then move on to using GPUs and using the
+Singularity containerization software.
+4.1.1
+Filesystem challenges
+Each user is given 500GB of storage space in their home directory.
+However,
+this filesystem is slow and not suitable for IO intensive tasks.
+It is therefore
+recommended that all jobs should use the scratch area – a directory created for
+each job located on a faster filesystem.
+The scratch area is deleted when the job
+terminates. The typical work flow consists of the following steps
+1.
+Copy files to scratch area.
+2.
+Run program.
+3.
+Copy resulting files from scratch area back to home area.
+These steps are performed in the job script and Abel provides some pre-defined
+shell functions for performing the final step of copying files back to the home
+directory.
+In addition to the home and scratch areas, users have access to a semi-
+permanent area called user-work. This area is located on the same filesystem as the
+scratch area, but is not tied to any one specific job and is persistent between jobs.
+However, it is not meant for permanent storage and any files older than 45 days
+will be deleted.
+Copying a large number of files for every job is slow, so using
+the user-work area instead of the scratch reduces redundant copying of files.
+We
+here use rsync
+3
+so that we only copy files that have been modified.
+The need to
+copy resulting files back to the home area complicates things further.
+In simple
+cases, synchronizing from user-work or scratch back to the home area works well.
+However, if we delete a file in the home area after the job has been started, the
+deleted file still exists in user-work and will be copied back to the home area. If we
+are continuously running experiments, this means that we are not able to delete
+any files.
+One solution would be to keep track of which files were created by
+the job and only copy those.
+There are multiple ways to achieve this, either by
+doing it in the application itself or doing it in an application-agnostic way.
+We
+here prefer the latter, and will come back to that later in this section.
+When submitting a job on Abel the job is not necessarily run right away, but
+could be waiting in the queue for an arbitrary amount of time. The experimental
+work flow is often fast-paced and somewhat chaotic compared to the typical
+production work flow with well defined releases and a clear separation between
+development and production code. After submitting a job to the cluster, we often
+found ourselves eager to start implementing a new feature or do other changes to
+the code base.
+However, changing a file might lead to the introduction of a bug,
+and when the job starts it will copy the files with the newly introduced bug. The
+simple solution is to wait until the job has safely copied all the files over to the
+work area, but this is an impediment to the work flow.
+When submitting a job,
+we want the job to be run in the directory at its current state.
+In a production
+3
+https://rsync.samba.org/
+4.1.
+THE ABEL COMPUTER CLUSTER
+39
+system we would use the version control system – in our case git – to make sure
+that the correct version of the software is deployed.
+But because of the rapid
+experimental work flow, changes are not necessarily committed before running
+another experiment.
+In order to solve the two problems outlined above – the issue of copying files
+back to the home area and the need for rapid development of experimental code
+– we created a simple tool for synchronizing directory states across filesystems.
+It is based on a content-addressable filesystem inspired by git.
+A snapshot of the
+current directory state is taken, creating a tree where each file points to a hash in
+the storage system. When a new snapshot is taken, only files that differ are added
+to storage, the rest points to the same objects. Each snapshot is saved as a json file
+describing the file tree. When running a job, the whole storage directory is copied
+to the user-work area. From there the given snapshot is linked up using symbolic
+links.
+The underlying files in storage are read-only, so care have to be taken to
+ensure that the program being run does not modify any files.
+The directories,
+on the other hand, are not symbolic links, so new files can be created as normal.
+When the experiment is finished, all symbolic links are deleted, leaving only the
+newly created files that are then synchronized back to the home area.
+4.1.2
+GPU
+An important milestone in the rise of Deep Learning was the success of AlexNet
+in the ImageNet 2012 competition (Krizhevsky,
+Sutskever,
+and Hinton,
+2012).
+A large part of the success – of AlexNet and the following wave of deep neural
+networks – can be attributed to the availability of
+Graphics
+Processing Units
+(GPUs) used for parallel computation.
+Using a GPU compared to using a CPU
+dramatically cuts down training time.
+The Abel computer cluster has 16 GPU
+nodes each equipped with two NVIDIA Tesla K20 cards.
+During job scheduling,
+1 or 2 GPUs can be requested. These cards are fairly old – being released in 2012
+4
+– so performance is expected to be much better using a more recent GPU.
+We performed a simple benchmark using a convolutional neural network that
+took about 5 hours to train using a single core CPU. Training the same network
+using a single NVIDIA Tesla K20 cut down training time to about 12 minutes.
+4.1.3
+Singularity
+Abel runs CentOS 6 which was first released in 10 July 2011.
+Being almost 7
+years old at the time of writing, it can be challenging to install newer packages
+– especially if they depend on newer functionality in glibc.
+After attempting to
+install the newest version of tensorflow and finding out that it was not possible to
+run it on CentOS 6, we learned that Abel has Singularity
+5
+installed. Singularity is
+containerization software that provides a layer on top of the host system that can
+run a newer Linux distribution and have transparent access to the host filesystem.
+Singularity requires a Singularity image that contains the guest operating system
+that you want to run.
+These images can be based on Dockerfiles and then be
+4
+https://www.nvidia.com/content/PDF/kepler/Tesla-K20-Passive-BD-06455-001-v05.
+pdf
+5
+http://singularity.lbl.gov/
+40
+CHAPTER 4.
+COMPUTATIONAL ENVIRONMENT
+customized with additional software.
+With Singularity it is possible to run the
+latest Ubuntu on top of CentOS 6. We created our own Singularity image based
+on NVIDIA’s CUDA-enabled Docker image
+6
+.
+4.2
+Experimental pipeline
+Running a large number of
+experiments requires having a robust
+setup that
+saves the results of each experiment.
+While there are numerous frameworks
+for machine learning and neural networks, there are few tools for running and
+managing experiments.
+We looked at a number of tools,
+but found none that
+worked with our existing work flow in a non-intrusive way. For instance, Sacred
+requires a central database to store results and models.
+For this reason we ended
+up with writing our own experimentation pipeline.
+Inspired by the
+Pipeline
+class in scikit-learn – we have created a pipeline setup that makes it easy to plug
+together various pieces and automatically handles checkpoints along the way.
+A
+trained model can be identified by its hyperparameters and training input.
+A pipeline here refers to a sequence of operations each with their own set of
+hyper-parameters. There are two types of operations: transformers and predictors.
+Transformers
+transform the input
+in some way,
+like converting multi-point
+ratings to binary labels,
+or creating a bag-of-words representation of the input
+document.
+Predictors make predictions based on the input.
+Both types of
+operations can be trained.
+A whole pipeline can be defined in a json file as a
+dictionary of dictionaries. The outer dictionary defines the operations, while the
+inner dictionaries holds the hyper-parameters of each operation. Each experiment
+produces a file that contains all the hyper-parameters used to create the model, as
+well as the predictions produced on the training and development set.
+A simple
+command line tool can be used to evaluate and view results. In the two following
+chapters we will run a number of experiments using the experimental pipeline
+described here.
+6
+https://hub.docker.com/r/nvidia/cuda/
+41
+Chapter 5
+Data exploration and baselines
+In this chapter we will
+try to establish some baselines for NoReC that
+can
+serve as a starting point for further experimentation.
+Since the dataset is newly
+created and we can not lean on established conventions,
+we will
+spend some
+time exploring and analyzing the dataset and figure out how best to define the
+problem and evaluate performance. While sentiment analysis is a well established
+field, when it comes to evaluation – especially with regards to fine grained rating
+inference – there is no agreed upon standard.
+We will therefore explore different
+ways of evaluating rating inference tasks,
+balancing the need to use established
+methods with the need to use metrics most suited for the task.
+5.1
+Design choices and challenges
+Before setting up the experiments,
+there are a few challenges that need to be
+addressed.
+While there is a large body of research on sentiment analysis,
+most
+research has focused on binary classification on sentences and short documents
+like tweets and user review snippets.
+This dataset differs in two ways by being
+rated on a 6 point
+scale and consisting of
+longer documents
+– the average
+document length is 426 tokens.
+The main challenges are related to whether to
+pose the problem as a classification task or a regression task,
+how to represent
+documents, and how to evaluate different strategies comparatively. In this chapter
+we will attempt to establish baselines that can serve as a foundation for the next
+chapter where we will try to improve further upon the document representations.
+5.1.1
+Rating distribution
+In figure 3.6 in chapter 3 we saw the distribution of ratings,
+which is neither
+uniform nor follows the normal
+distribution,
+but highly skewed towards the
+higher ratings,
+with the exception of rating 6.
+The same tendency is seen in
+user generated ratings,
+though even stronger and with no drop for the highest
+rating (Baccianella,
+Esuli,
+and Sebastiani,
+2009).
+In figure 5.1 and 5.2 we see a
+more detailed view of the ratings distribution across categories and sources.
+The
+PRODUCTS
+and
+STAGE
+categories are the most skewed with close to half of the
+reviews having a rating of 5. We see the same distribution for DinSide – which is
+not surprising as most of the product reviews are from this source.
+42
+CHAPTER 5.
+DATA EXPLORATION AND BASELINES
+1
+2
+3
+4
+5
+6
+0
+10
+20
+30
+40
+50
+Rating
+Reviews (%)
+music
+screen
+literature
+products
+games
+restaurants
+stage
+sports
+misc
+Figure 5.1:
+Distribution of relative rating frequencies across categories.
+The
+general
+trend from figure 3.6 holds for most of the categories,
+with the most
+notable exception being the
+SPORTS
+category.
+1
+2
+3
+4
+5
+6
+0
+10
+20
+30
+40
+50
+Rating
+Reviews (%)
+vg
+dagbladet
+sa
+p3
+dinside
+fvn
+bt
+ap
+Figure 5.2:
+Distribution of relative rating frequencies across sources.
+There is
+less variance across source than categories, but Dinside stands out with half of all
+reviews receiving a rating of 5.
+5.1.
+DESIGN CHOICES AND CHALLENGES
+43
+There are many possible explanations for this phenomena with some applying
+to both user generated and professional ratings, while others apply only to one.
+While user generated ratings suffer the problem of fake reviews pushing the rating
+distribution towards the highest rating,
+professional ratings can be expected to
+be real.
+Another contributing factor could be selection bias.
+Since professional
+reviewers are limited in the number of items they can review they might choose
+items that they are already inclined to like.
+Another possible reason for the
+infrequent use of the low ratings could be of a social nature where the reviewers
+and the creators of an artistic work are acquainted and that the reviewer wants to
+avoid hurt feelings. In the case of the NoReC dataset this is especially relevant for
+book and music reviews where many of the authors and artists living in Norway,
+as opposed to movies or products that are mainly imported and – in the case of
+products – are not artistic works with a creator with feelings to hurt.
+Another peculiarity of the rating distribution is the sharp drop from 5 to 6.
+This effect seems to be unique to professional reviews.
+While everyone agrees
+that a higher rating is better than a lower rating, it is not clear how the ratings
+relate to each other. The distribution indicates that the distance between 5 and 6
+is greater than the distance between 4 and 5. Seeing that the rest of the scale leans
+so heavily towards the high ratings,
+it is not unreasonable to imagine that the
+reviewers withhold the use of the highest rating for the truly exceptional.
+What
+we see in play here are two opposing forces, one pushing towards higher ratings,
+while the other pushes away from the top rating.
+As the dataset is only sourced
+from Norwegian reviews, there is no way for us to check if these tendencies are
+culturally bound,
+being symptomatic of a combination of aversion to conflict
+and the Scandinavian negative attitude towards success – known as the “law of
+Jante” – or if it reflects a more universal human tendency.
+If it is the former, it
+might explain the findings of Baccianella, Esuli, and Sebastiani (2009) where the
+highest rating is the most frequent, as these reviews are not only user generated
+but sourced mainly from the US where attitudes towards success are very different
+than in Norway and Scandinavia.
+5.1.2
+Binary or graded classification
+Most works on sentiment analysis focuses on binary classification of positive and
+negative texts. It is not uncommon to do binary classification on rated datasets by
+splitting ratings into positive and negative. Some also use a neutral class to further
+divide the dataset.
+It should be noted that the term neutral is used to mean two
+separate things in the context of sentiment analysis, the first being neutral as in not
+sentiment bearing, and the other being neutral as in neither positive nor negative
+but somewhere in the middle. As we are working with reviews, a better term for
+the latter definition might be mediocre.
+Koppel and Schler (2006) found that the
+inclusion of a neutral class improves performance compared to binary classifiers.
+Moving on from binary and ternary classification,
+we
+also find n-ary
+classification with one class for each rating. While this enables a more fine grained
+classification,
+it also comes with additional problems.
+Classification is suitable
+for separating between independent classes.
+Ratings are not independent, with 3
+being closer to 4 than to 6.
+With only two classes, this is not really a problem,
+but as we have more ratings the independence assumption no longer holds. When
+44
+CHAPTER 5.
+DATA EXPLORATION AND BASELINES
+dealing with a rating scale, regression might be a more natural fit as it is sensitive
+to the order of the ratings.
+Pang and Lee (2005) performed rating inference on
+two datasets, with a three and four point scale. They compared regression to one-
+vs-all classification and found that regression outperformed it on the four point
+scale.
+On the three point scale,
+however,
+they performed similarly.
+They also
+experimented with using metric labeling (Kleinberg and Tardos, 2002) which is
+applied as a post-processing step taking in to account the similarity of items using a
+similarity metric. They found that when using metric labeling both classification
+and regression performance was improved most of the time.
+The choice of
+a regression model
+presents
+a challenge.
+It
+might
+seem
+reasonable that if we use logistic regression for classification we can use linear
+regression in its place as they are both linear models. However, a multi-class one-
+vs-all logistic regression classifier trains one linear classifier per class. So while each
+individual classifier is linear, the combination of these classifiers is more complex
+and has more parameters.
+In the general case, linear regression has n parameters
+where n is the number of features, while logistic regression has n × c parameters
+where c is the number of classes.
+To compensate for this discrepancy we can use
+a neural regressor with one or more hidden layers, or extend a linear model with
+polynomial features to enable modeling of non-linear functions.
+A perhaps more suitable model is ordinal regression – described in more detail
+section 2.2.3 – which is a hybrid between regression and classification, providing
+discrete predictions while at the same time being sensitive to the relationship
+between the labels. As with linear regression, ordinal regression is parameterized
+as a single vector w ∈ R
+n
+, but whereas linear regression has one bias parameter
+b ∈ R,
+ordinal regression has k − 1 bias parameters where k is the number of
+labels, each one defining where to position the hyperplane dividing the ordinal
+labels.
+In contrast with regular regression,
+ordinal
+regression outputs discrete
+values which may or may not be desirable depending on the application.
+Going forward we will
+only focus on graded classification using logistic
+regression over the full scale,
+as well as ridge regression and ordinal regression.
+While binary classification might be an easier task,
+it is hard to motivate how
+to make the division between the positive and negative classes.
+Keeping the full
+scale makes it possible to compare between logistic regression,
+ridge regression
+and ordinal regression to see if there is any benefit to modeling the relationship
+between labels.
+5.1.3
+Evaluation
+In order to compare classification and regression we need an evaluation metric
+that captures the similarity between labels.
+Common metrics for evaluating
+classification – including accuracy, precision, recall and F
+1
+score – are all variants
+on counting the number of true and false positives and negatives calculated using
+a confusion matrix, and they all give the same penalty if a 1 is misclassified as 2 or
+6, being invariant to the degree of the error.
+This is unwanted when evaluating
+rating inference systems and the effect gets larger the more fine grained the rating
+scale is.
+For regression there are several evaluation metrics.
+They all attempt to
+measure how well the regression line fit the data.
+One of the most established
+metrics for regression is Mean Absolute Error (MAE) which measures the distance
+5.1.
+DESIGN CHOICES AND CHALLENGES
+45
+between predictions and the gold standard. It is defined as
+MAE
+=
+1
+n
+n
+X
+i
+=
+1
+|
+y
+i
+−
+ˆ
+y
+i
+|
+(5.1)
+where y ∈ R
+n
+is the target values and
+ˆ
+y ∈ R
+n
+is the system predictions.
+Unlike
+the classification metrics which all report a proportion, MSE is a measure of error
+with lower being better and a score of 0 indicating a perfect fit.
+There are many
+other variations on MAE, some worth mentioning are Mean Squared Error (MSE)
+which uses squaring instead of absolute values, and Mean Zero-One Error (MZOE)
+which penalizes all errors the same, regardless of the distance to the target value.
+Even though these metrics are meant for regression we can also use them on a
+classifier, by converting the class labels to a numeric value.
+Conversely, we also
+report accuracy scores for regression models.
+This can be done by rounding
+the output value and restricting the value to be between 1 and 6.
+This is also
+sometimes called ordinal regression, but we will reserve that term to the threshold
+based models described earlier.
+The skewness
+of
+the dataset
+poses
+some challenges
+regarding evaluation.
+While accuracy can be misleading for imbalanced datasets, making the classifier
+seem better than it actually is – for a dataset where the majority class constitutes
+80% a dummy classifier only outputing this class will achieve 80% accuracy – we
+can use F
+1
+macro average to give equal weight to each class, making performance
+on less frequent
+classes as important
+as the more frequent
+ones.
+However,
+evaluation measures for regression – like MAE mentioned above – does not
+consider the distribution of
+labels.
+Baccianella,
+Esuli,
+and Sebastiani
+(2009)
+addresses this problem and proposes some modifications to regression metrics to
+account for label distribution.
+Their solution is to evaluate each class separatly
+and then average the score for each class – identical to the F
+1
+macro average –
+defining macro-versions of MSE, MAE and MZOE.
+MAE
+M
+=
+1
+|C |
+X
+c∈C
+
+1
+n
+c
+n
+X
+i
+=
+1
+y
+c
+i
+−
+ˆ
+y
+c
+i
+
+(5.2)
+MAE
+M
+was used in several SemEval shared tasks on sentiment analysis (Nakov
+et al.,
+2016;
+Rosenthal,
+Farra,
+and Nakov,
+2017).
+While Nakov et al.
+(2016)
+provides no motivation for choosing MAE over MSE,
+we can speculate that
+it might be motivated by the fact that since MSE squares the error it would
+disproportionately penalize larger errors.
+Another reason might be that while
+MSE is easier to optimize,
+MAE is more intuitive because it is linear.
+We will
+evaluate all models using accuracy, F
+1
+and MAE
+M
+.
+5.1.4
+Document representation
+Regardless of
+whether we are doing classification or regression,
+the result
+is
+limited by the document representation.
+As a baseline we will use two different
+approaches:
+bag-of-words and doc2vec.
+Both of them have some of the same
+shortcomings. They are general representations that are not trained together with
+the task.
+This means that they do not necessarily contain salient information
+with regards sentiment.
+Both models are limited in the way they can model
+46
+CHAPTER 5.
+DATA EXPLORATION AND BASELINES
+deeper linguistic structures such as negation.
+The bag-of-words representation
+completely ignores
+word order,
+while doc2vec has
+limited sensitivity to it
+especially when working with longer documents.
+To improve on this
+we need a representation that
+captures
+the relevant
+information and is tuned towards the task.
+Such a representation would not
+represent the document as a whole,
+a lot of irrelevant information would be
+ignored.
+Reviews often follow a similar format where the first and last section
+express the reviewers sentiment, while the middle section provides context and
+reflection. If this assumption holds, then a model trained on only the first and last
+section of the text would likely perform better than a model trained on the whole
+document.
+This could also be done using a soft approach,
+creating a weighted
+average of paragraph vectors.
+In the next chapter we will experiment more with
+such alternative approaches.
+5.2
+Baselines
+For the baselines we use two different document representations and three differ-
+ent rating inference methods. With the exception of some tuning of regularization
+strength to prevent overfitting – which the bag-of-words representation in partic-
+ular suffers from – none of the models have been tuned, using standard values for
+most hyperparameters.
+5.2.1
+Pre-processing
+All
+models
+were trained using the same pre-proccesing which consisted of
+lower casing and lemmatization of
+the tokens.
+The lemmas are taken from
+the CoNLL-U files described in section 3.3.2.
+The documents were flattened
+into a sequence of tokens, ignoring information on document structure such as
+sentences, paragraphs and headers.
+All tokens are kept, including punctuation.
+We experimented with using full forms and lemmas and found that lemmas all
+over resulted in a small increase in performance over full form tokens.
+5.2.2
+Document representations
+Two different document representations were used – doc2vec and bag-of-words.
+Both representations are fairly simple and since they are both well established
+methods they provide good baselines for further work. Bag-of-words have proven
+to be a solid baseline that is hard to beat for many classification tasks, including
+sentiment analysis.
+Doc2vec
+The doc2vec model
+was trained on the training set
+using gensim
+(
+ˇ
+Reh
+˚
+u
+ˇ
+rek and Sojka,
+2010),
+with vector size 100.
+Increasing the vector size to
+300 surprisingly had a negative impact on performance.
+It should be noted that
+doc2vec is primarily meant for sentences and paragraphs, and is not that suitable
+for longer documents.
+Bag-of-words
+The bag-of-words model is based on raw word frequency counts,
+using the
+CountVectorizer
+class from scikit-learn (Pedregosa et al., 2011). Using
+5.2.
+BASELINES
+47
+TF-IDF or some other transformation of the raw frequencies might improve
+results, but is not something we will pursue here.
+5.2.3
+Rating inference
+Three different methods for rating inference were used.
+They range from a
+logistic regression classifier via ordinal regression to linear regression predicting
+real values.
+Logistic regression
+A linear logistic regression classifier with L2-regularization,
+using the
+LogisticRegression
+class from scikit-learn (Pedregosa et al.,
+2011).
+There are many other classifiers that could be used – such as an SVM – but logis-
+tic regression trains relatively fast and is good enough for this purpose.
+A more
+detailed description can be found in section 2.2.2.
+Ordinal regression
+Uses the
+LogisticAT
+class from
+mord
+(Pedregosa-Izquierdo,
+2015) which implements the All-Threshold model as described in section 2.2.3.
+Tests were also done using the Immediate-Threshold model and results were simi-
+lar.
+Ridge regression
+For regression, we used linear regression with L2-regularization
+– also known as Ridge regression – implemented in the
+Ridge
+class in scikit-learn
+(Pedregosa et al., 2011). See section 2.2.1 for a more detailed description. Using a
+linear model restricts the performance of the ridge regression model somewhat,
+as it has fewer parameters than the classifier and since the relationship between
+the ratings is not necessarily linear a non-linear regressor could perhaps perform
+better.
+5.2.4
+Results
+Table
+5.1 shows
+baseline
+results
+for
+six models
+using all
+combinations
+of
+document representations and rating inference methods. All models are evaluated
+using accuracy, F
+1
+and MAE
+M
+.
+To provide some context for the results, we also
+provide dummy classifiers that ignore the input.
+The majority class classifier
+always outputs the majority class – which is a rating of 5. The random classifiers
+both draw random samples, but differ with respect to the distribution the samples
+are drawn from – one using a uniform distribution while the other uses the class
+label distribution from the training set.
+We see that all our baseline models are
+better than the dummy classifiers by a large margin.
+The logistic regression classifier performs better with regards to accuracy,
+while ordinal regression clearly shows better performance on MAE
+M
+.
+The ridge
+regression models perform worse than logistic regression with respect to accuracy
+and worse than ordinal
+regression with respect
+to MAE
+M
+.
+This is the case
+regardless of the document representation used.
+The reason for this might be
+the more limited model capacity or the non-linear relationships between ratings
+– both of which ordinal regression is less affected by having more parameters and
+more flexibility in how to separate between the labels.
+The F
+1
+scores are less
+48
+CHAPTER 5.
+DATA EXPLORATION AND BASELINES
+Model
+Accuracy
+F
+1
+MAE
+M
+BOW
++
+LOGREG
+51.59
+36.54
+0.956
+BOW
++
+ORD
+-
+AT
+49.03
+34.27
+0.926
+BOW
++
+RIDGE
+47.04
+33.34
+1.011
+DOC
+2
+VEC
++
+LOGREG
+46.45
+25.61
+1.051
+DOC
+2
+VEC
++
+ORD
+-
+AT
+44.26
+29.15
+1.017
+DOC
+2
+VEC
++
+RIDGE
+42.50
+26.37
+1.083
+M
+AJORITY
+C
+LASS
+36.84
+8.97
+1.833
+R
+ANDOM
+L
+ABEL
+D
+ISTRIBUTION
+27.49
+16.97
+1.697
+R
+ANDOM
+U
+NIFORM
+16.40
+13.80
+1.951
+Table 5.1:
+Baseline models using different document representations and rating
+inference methods.
+Weak baselines in the form of dummy classifiers are also
+shown for comparison.
+There is a clear improvement upon the weak baselines,
+and bag-of-words outperforms doc2vec in all cases.
+Model
+Accuracy
+F
+1
+MAE
+M
+B
+OW
+51.59
+36.54
+0.956
+B
+OW
+B
+ALANCED
+51.48
+39.44
+0.796
+D
+OC
+2V
+EC
+46.45
+25.61
+1.051
+D
+OC
+2V
+EC
+B
+ALANCED
+38.06
+30.76
+0.938
+Table 5.2:
+Logistic regression with and without class balancing.
+For the bag-
+of-words representation we see that class balancing can improve F
+1
+without a
+reduction in accuracy, while for doc2vec we se an increase in F
+1
+and a reduction
+in accuracy.
+clear, with ordinal regression beating the classifier when using doc2vec, while the
+opposite is true for bag-of-words.
+Based on these results it seems that the choice of document representation
+is as important – if not more – than the rating inference method used.
+Bag-
+of-words consistently outperforms doc2vec in all
+experiments.
+Since we are
+dealing with long documents – and not only sentences and short paragraphs –
+doc2vec struggles with providing a fine grained representation. The bag-of-words
+representation on the other hand explicitly retains information on specific words
+which might be very indicative with regards to sentiment.
+5.3.
+DATA EXPLORATION
+49
+0
+10
+20
+30
+40
+50
+60
+screen
+games
+music
+stage
+literature
+misc
+products
+restaurants
+sports
+Accuracy
+F
+1
+Figure 5.3: Evaluation of
+BOW
++
+LOGREG
+per category. The categories are sorted
+by size, starting with the largest category and generally speaking we see that the
+classifier performs better on larger categories.
+5.2.5
+Class balancing
+As discussed in section 5.1.1, the distribution of ratings is very imbalanced. While
+we have defined evaluation metrics that take this into account, the loss function
+we minimize weighs each class the same.
+For the logistic regression classifier
+we can easily do this by weighing each class in the loss function by the inverse
+frequency of the class.
+In table 5.2 we see the results of classifiers trained with
+and without class balancing.
+For bag-of-words we see a large improvement in
+both F
+1
+and MAE
+M
+– both of which are macro averages – with a small reduction
+in accuracy.
+Unfortunately,
+there is out-of-the-box class balancing in the ridge
+regression and ordinal regression implementations, so we have not tested to see if
+the class balancing would lead to an improvement or not. The results for doc2vec
+are less encouraging.
+While there is a clear improvement in F
+1
+score, this comes
+with a large reduction in accuracy and MAE
+M
+.
+5.3
+Data exploration
+In this section we will look closer at the results from the
+BOW
++
+LOGREG
+classifier.
+This also sheds some light on the dataset itself. By looking at performance across
+50
+CHAPTER 5.
+DATA EXPLORATION AND BASELINES
+0
+10
+20
+30
+40
+50
+60
+p3
+vg
+fvn
+ap
+bt
+sa
+dagbladet
+dinside
+Accuracy
+F
+1
+Figure 5.4:
+Evaluation of
+BOW
++
+LOGREG
+per source.
+The sources are sorted by
+size, starting with the largest source.
+Unlike for the categories, there is no clear
+pattern between size and performance.
+ratings, categories and sources, we can get valuable insight into the challenges of
+the dataset. All the evaluations in this section are done on the development set.
+Figure 5.3 shows the evaluation of the
+BOW
++
+LOGREG
+classifier per category.
+As evident, there are large differences between categories, with the performance
+on the
+SPORTS
+category being particulary poor.
+Looking back at figure 5.1
+we see that the rating distribution in the
+SPORTS
+category does not follow the
+overall trend in the dataset.
+It should also be mentioned that
+SPORTS
+is a very
+small category with a total 117 reviews in the entire corpus.
+There is a general
+tendency for the performance on the more frequent categories – such as
+SCREEN
+and
+MUSIC
+– to be higher.
+The most notable exception to this is the
+STAGE
+category, which is a relatively small category yet strong performing.
+However,
+as it is comprised mostly of theater,
+opera and musical,
+it has a lot of overlap
+with
+SCREEN
+and
+MUSIC
+.
+SPORTS
+on the other hand is both very infrequent
+and stands out with respect to the domain.
+The
+PRODUCTS
+category performs
+worse than would be expected, which could be explained by the fact that it is a
+very heterogeneous category, covering all kinds of products from cars to coffee
+makers.
+In figure 5.4 we see the evaluation per source.
+While the differences are not
+as large as between categories,
+there is still a large difference between sources,
+with performance on DinSide, Fædrelandsvennen and Bergens Tidene standing
+out as being lower than the rest.
+The lower performance of DinSide can be
+explained by looking at the performance on the
+PRODUCTS
+category – which
+comprises a large part of the reviews from DinSide.
+For Fædrelandsvennen and
+5.3.
+DATA EXPLORATION
+51
+0
+5
+10
+15
+20
+25
+30
+35
+40
+45
+50
+55
+nb
+nn
+Accuracy
+F
+1
+Figure 5.5:
+Evaluation of
+BOW
++
+LOGREG
+for
+the two written varieties
+of
+Norwegian:
+Bokmål (nb) and Nynorsk (nn).
+The performance on the Nynorsk
+reviews is – not surprisingly – much lower than on the Bokmål reviews.
+The
+difference between the two varieties is largely lexical,
+which makes it hard to
+generalize across varieties using a bag-of-words representation.
+Bergens Tidene the explanation could be related to the relatively high proportion
+of reviews written in Nynorsk – at around 5%.
+Figure 5.5 shows performance
+per language,
+and it is clear that the performance on Nynorsk reviews is a lot
+worse than the performance on Bokmål reviews – which makes sense given the
+low number of reviews written in Nynorsk.
+However,
+P3.no also has a fairly
+high Nynorsk share and is at the same time one of the best performing sources.
+We tried excluding Nynorsk and evaluating per source, and while there is a slight
+increase in performance for Fædrelandsvennen and Bergens Tidene, it is clear that
+language variety alone does not explain their relatively poor performance.
+The
+explanation may lie in the distribution of categories for each source.
+In figure 5.6 we see two normalized confusion matrices – figure 5.6a shows
+the results for B
+OW
+while figure 5.6b shows the results for the B
+OW
+B
+ALANCED
+logistic regression classifier.
+While none of them have been explicitly trained
+with regards
+to distance between labels,
+there is
+a clear
+tendency for
+the
+misclassifications to be close to the true rating.
+The confusion matrices for
+regression and ordinal regression – though not shown here – also show the same
+tendencies. While we had initially thought that ridge regression would be a better
+fit for this task, we see from the results that it is not necessary to explicitly train
+the model with regards to label distance in order to learn the relations between
+ratings.
+Looking at the two confusion matrices, we see that B
+OW
+B
+ALANED
+in
+figure 5.6b is a lot better with regards to the less frequent ratings – especially
+rating 1 and 6 – compared to B
+OW
+in figure 5.6a,
+demonstrating the benefit of
+taking class size into account during training.
+To further investigate the impact of data size on classification performance,
+we have performed an additional set of experiments in order to plot the training
+curve of the classifier as a whole and the performance of the classifier on each
+rating.
+By showing the performance of each rating separately, we highlight the
+effect of class size on performance.
+The experiments were performed by training a set of classifiers on a random
+sample without replacement of an increasing size from the training data.
+The
+sample size ranged from 10 to the full
+size of
+the training set with the size
+52
+CHAPTER 5.
+DATA EXPLORATION AND BASELINES
+Predicted
+1
+2
+3
+4
+5
+6
+True
+1
+0.07
+0.41
+0.23
+0.11
+0.16
+0.02
+2
+0
+0.27
+0.44
+0.19
+0.09
+0.01
+3
+0
+0.05
+0.45
+0.35
+0.15
+0
+4
+0
+0.01
+0.14
+0.5
+0.34
+0.01
+5
+0
+0
+0.03
+0.26
+0.67
+0.03
+6
+0
+0
+0.03
+0.12
+0.74
+0.11
+(a) B
+OW
+Predicted
+1
+2
+3
+4
+5
+6
+True
+1
+0.11
+0.57
+0.2
+0.05
+0.07
+0
+2
+0.03
+0.47
+0.38
+0.08
+0.04
+0.01
+3
+0.01
+0.13
+0.46
+0.28
+0.11
+0.01
+4
+0.01
+0.03
+0.16
+0.45
+0.32
+0.03
+5
+0
+0.02
+0.05
+0.19
+0.66
+0.09
+6
+0.01
+0.01
+0.04
+0.05
+0.63
+0.26
+(b) B
+OW
+B
+ALANCED
+Figure 5.6: Normalized confusion matrices for B
+OW
+and B
+OW
+B
+ALANCED
+from
+table 5.2, both of which are logistic regression classifiers.
+increasing by a factor n at every interval.
+We wanted to look at the effect of
+doubling the size of the sample, but found that setting n
+=
+2 resulted in too few
+data points, so we landed on n
+=
+p
+2 in order to double the number of data points.
+These classifiers were then evaluated on the full development set. When training
+on small random samples the results fluctuate a lot, so we averaged the results over
+20 runs.
+Figure 5.7 shows
+the learning curve for
+the B
+OW
+B
+ALANCED
+classifier,
+plotting the F
+1
+of each rating as well as the F
+1
+macro average.
+The results are
+presented in log-scale.
+As seen in figure 5.7, there are large differences between
+ratings. For the larger classes with more training examples – like 5 and 4 – there is a
+tendency towards diminishing returns, though a plateau has not yet been reached.
+For the smaller classes we see that the performance seems to be improving at an
+increasing rate, which is a trend also seen in the macro average.
+This is a good
+indicator that the model
+could benefit from more data,
+especially for the less
+frequent ratings. There is a direct rank correlation between the rating frequency,
+and the performance of each rating.
+We see that the performance is unstable
+when there is less available data, as seen from the fluctuating curves.
+The most
+frequent ratings – 5 and 4 – stabilize fairly quickly, while the least frequent rating
+– 1 and 6 – never appear to stabilize. It is also interesting to see that the increased
+performance for rating 2 comes after the line has stopped fluctuating.
+5.3.
+DATA EXPLORATION
+53
+10
+100
+1,000
+10,000
+0
+0.1
+0.2
+0.3
+0.4
+0.5
+0.6
+# Training examples
+F
+1
+1
+2
+3
+4
+5
+6
+Average
+Figure 5.7:
+Learning curves for B
+OW
+B
+ALANCED
+logistic regression classifier
+from table 5.2 plotting the F
+1
+of each rating.
+The dashed line shows the macro
+average. The values shown are the mean average over 20 runs.
+54
+CHAPTER 5.
+DATA EXPLORATION AND BASELINES
+5.4
+Summary
+The baselines provide us with some direction with regards to further work.
+We
+see that finding a good document representation is crucial when working with
+longer documents – bag-of-words leads to much better performance than doc2vec.
+This is supported by the findings of Le and Mikolov (2014) when testing doc2vec
+on the IMDB dataset which has an average document length of 279 tokens
+1
+–
+in which they found that doc2vec improved only very slightly upon the bag-
+of-words models.
+The NoReC has an average document length of 426 tokens,
+which might be the reason why doc2vec performs so poorly.
+We also see that
+while the choice of rating inference method is less important than document
+representation, there might be some benefits in using ordinal regression.
+Ridge
+regression – unfortunately – performs surprisingly poor even with regards to
+the regression metric.
+By looking at the confusion matrices in figure 5.6 from
+the logistic regression classifiers it is clear that even when using a model that is
+invariant to the relationship between the labels, there is a clear tendency for the
+misclassifications to be concentrated on the surrounding labels.
+This indicates
+that it might not be necessary to explicitly model the relationship between labels
+in order to create a high performing model on a rating inference task. Because of
+this we will limit ourselves to a one-vs-all classifier in the next chapter.
+Adding
+class balancing to the classifier resulted in a large increase in F
+1
+and MAE
+M
+, and
+is something that is worth taking with us to the next round of experiments.
+Going further,
+we can also leverage local interactions between words.
+The
+bag-of-words model completely ignores word-order and doc2vec is only partially
+sensitive to it. In order to capture phenomena such as negation, we need a model
+that looks at the words relative to each other.
+We could achieve this using a bag-
+of-n-grams model,
+but we would soon encounter the curse of dimensionality as
+the number of possible n-grams grows exponentially as we increase n. A popular
+and very simple way of modeling interactions between words is to use a recurrent
+neural network (RNN) that maintains an internal state, so that each word is seen
+in the context of the preceding words.
+However, convolutional neural networks
+(CNN)
+are also increasingly used for text classification.
+CNNs look at a sliding
+window of words,
+similar to n-grams,
+but more robust with regards to out-of-
+vocabulary words and much less memory intensive.
+For sentiment analysis,
+there has been a lot of working using CNNs (Kalchbrenner,
+Grefenstette,
+and
+Blunsom, 2014; Kim, 2014; Y. Zhang and Wallace, 2017).
+In the next chapter we
+will experiment with a convolutional neural network model for document level
+sentiment analysis.
+1
+The IMDB dataset was introduced by Maas et al. (2011). The original article does not provide
+corpus statistics.
+The number we report here has been calculated over all
+the 50,000 reviews
+from the dataset found at
+http://ai.stanford.edu/~amaas/data/sentiment/
+, using
+word_-
+tokenize
+from NLTK to tokenize the text.
+55
+Chapter 6
+Convolutional neural network
+models
+To improve upon the baseline established in the previous chapter, we are going to
+experiment with Convolutional Neural Networks (CNNs). CNNs were originally
+developed for image analysis,
+where the convolutions
+work over the spatial
+dimensions – which is two-dimensional
+for images.
+Adapted to text we use
+one dimensional
+convolutions
+over a sequence of
+words.
+While Recurrent
+Neural
+Networks
+(RNNs)
+(Hopfield,
+1982)
+– such as Long short-term memory
+(LSTM)
+networks (Hochreiter and Schmidhuber, 1997) – are often used for text
+classification tasks like for example Tang,
+Qin,
+and T. Liu (2015) and Lai et al.
+(2015), we will focus on CNNs as they have been found to be well suited for both
+sentence and document level sentiment analysis (Kalchbrenner, Grefenstette, and
+Blunsom,
+2014;
+Kim,
+2014).
+Convolutional
+networks,
+as opposed to RNNs,
+are invariant to the absolute position of words,
+so it does not matter where in
+a document the salient parts are located.
+As a starting point for experimenting with convolutional architectures,
+we
+will take a look at the convolutional neural network architecture described by
+Kim (2014)
+which describes a one layer convolutional
+architecture with max
+pooling. As a follow up to Kim (2014) – and also Kalchbrenner, Grefenstette, and
+Blunsom (2014) and Johnson and T. Zhang (2015) – Y. Zhang and Wallace (2017)
+looks at the effect of tuning the various hyperparameters. In this chapter we pick
+up the thread from Y. Zhang and Wallace (2017) and explore the hyperparameter
+space of
+a convolutional
+architecture on the NoReC dataset.
+First
+we will
+describe the implementation of our architecture,
+focusing on the parts of our
+architecture that differs from Y. Zhang and Wallace (2017). Then, we will look at
+how the different hyperparameters affect the performance of the models on the
+development set.
+6.1
+Implementation details
+In this section we will describe the implementation of our convolutional neural
+network architecture. While it is based on Kim (2014) and Y. Zhang and Wallace
+(2017),
+there are some differences that we will
+describe in further detail
+later
+56
+CHAPTER 6.
+CONVOLUTIONAL NEURAL NETWORK MODELS
+in this section.
+First,
+however,
+we will
+describe the technology used for the
+implementation, followed by an overview of the convolutional architecture.
+When implementing neural network models there are many available frame-
+works that provide abstractions over the underlying linear algebra operations.
+Many of the frameworks also provide seamless integration with Graphics Process-
+ing Units (GPUs) that are used to efficiently run computations in parallel. One of
+the most used frameworks is Tensorflow.
+1
+There is an implementation
+2
+of Kim
+(2014) that uses TensorFlow. While this implementation could have been adapted
+for our purposes, we instead chose to implement our own model using PyTorch
+3
+–
+for reasons that are explained in the following section – with the above mentioned
+Tensorflow-implementation as a reference.
+6.1.1
+PyTorch
+PyTorch is a dynamic computational graph library providing both low level linear
+algebra operations as well
+as high level
+neural
+network operations.
+It comes
+with out-of-the-box GPU support using CUDA.
+4
+Compared to TensorFlow it
+is easier to use and – in our experience – as fast or even faster than comparable
+models implemented in TensorFlow.
+Since it executes the graph dynamically
+from Python, we can use normal debugging tools to inspect the execution at any
+given point.
+This is in contrast to TensorFlow – where graphs are declared in
+Python and then run in a virtual machine – and facilitates quick development and
+experimentation.
+When using word embeddings the first layer in the network is
+an embedding layer. Each word is encoded as a one-hot-vector, and the embedding
+weight matrix is used to look up the corresponding embedding.
+This operation
+can be optimized by using sparse matrices for the weight updates, and while this
+is available in both Tensorflow and PyTorch, only PyTorch allows running the
+sparse embedding layer on the GPU. This translates into much shorter training
+times for the same network when using PyTorch compared to using Tensorflow.
+6.1.2
+Word embeddings
+One of the benefits of using a neural network instead of a bag-of-words model is
+that we can use pre-trained word embeddings making it possible to take advantage
+of unlabeled data.
+The introduction of pre-trained word embeddings should
+increase the model’s capacity for generalization, as words not found in the training
+set might have embeddings that will be similar to semantically similar words in
+the training set.
+We will
+use word embeddings for Norwegian created by Stadsnes (2018),
+more specifically the word2vec embeddings trained on Norsk Aviskorpus (NNC)
+lemmas using the continous bag-of-words method, as these were found to be the
+best performing on the synonymy evaluation task (Stadsnes,
+2018)
+which we
+believe is the best predictor for performance with regards to sentiment analysis
+compared to other evaluation tasks such as the word analogy task.
+While we
+1
+http://tensorflow.org
+2
+https://github.com/dennybritz/cnn-text-classification-tf
+3
+http://pytorch.org
+4
+CUDA is an API for using GPUs from Nvidia.
+6.1.
+IMPLEMENTATION DETAILS
+57
+would have liked to experiment with the many various different embeddings
+provided by Stadsnes (2018) – such as embeddings trained with fastText or on
+full-forms instead of lemmas – but that is beyond the scope of this thesis.
+Kim (2014)
+experimented with four different setups with regards to word
+embeddings:
+randomly initialized embeddings,
+static pre-trained embeddings,
+non-static pre-trained embeddings and a multichannel setup that added static and
+non-static embeddings.
+Kim (2014) reported best results for the non-static pre-
+trained embeddings which is also confirmed by Y.
+Zhang and Wallace (2017).
+Since the multichannel setup was not found to perform any better than using
+one channel,
+and because using multiple channels increases both memory use
+and running times,
+we will only use a single channel with static or non-static
+embeddings.
+6.1.3
+Classification
+In section 5.1.2 we dicsussed using ridge regression and ordinal
+regresssion in
+addition to one-vs-all logistic regression.
+In section 5.2.4 we saw that while there
+might be some benefit of using ordinal
+regression – especially with regards to
+MAE
+M
+– logistic regression in combination with class balancing outperforms all
+the other models.
+Due to the overall poor performance of the ridge regression
+model,
+we will
+not
+investigate it
+any further in this
+chapter.
+The ordinal
+regression implementation used in chapter 5 unfortunately does not work with
+neural networks, which excludes its use here.
+For these reasons we will only be
+performing one-vs-all classification in this chapter.
+6.1.4
+Neural network architecture
+This section builds on this section 2.3.3 where we described the basics of
+a
+convolutional
+neural
+network.
+Our CNN consists
+of
+an embedding layer,
+followed by a single convolution and pooling layer, finally a fully connected layer
+with softmax.
+The embedding layer consists of a matrix W
+e mb
+∈ R
+V ×d
+where
+V is the size of the vocabulary and d is the dimensionality of the embeddings.
+Since we are using pre-trained word embeddings, W
+e mb
+is loaded directly from
+the word2vec embeddings, and V is the size of the vocabulary of the pre-trained
+embeddings, not the vocabulary from the training data.
+To map between word
+form and row number in the embedding matrix, we have a separate dictionary
+structure. Each document is represented as a sparse matrix X ∈ R
+n×V
+where n is
+the length of the document. Each row represents a word and is encoded as a one-
+hot-vector indexing the corresponding word in the embedding layer. To look up
+the words in the embedding layer, we can use matrix multiplication
+X
+e mb
+=
+XW
+e mb
+(6.1)
+giving us a matrix X
+e mb
+∈ R
+n×d
+where each row is the word embedding of
+the corresponding word from X .
+Because X is sparse, this operation is usually
+optimized and not run as a regular matrix multiplication. A batch of documents
+are put into a 3 dimensional tensor X
+b a t c h
+∈ R
+m×n×V
+where m is the batch size
+and n is the size of the longest document in the batch.
+Documents shorter than
+n are padded with a special token.
+58
+CHAPTER 6.
+CONVOLUTIONAL NEURAL NETWORK MODELS
+After the embedding layer,
+we have the convolution and pooling layer –
+described in further detail
+in section 2.3.3 – which consists of a convolution
+followed by an activation function – we use ReLU – and a pooling operation –
+which is furher described in section 6.1.5. The output of this layer is a document
+vector x
+c onv
+∈ R
+d
+c onv
+where d
+c onv
+is the number of feature maps.
+Following the convolution and pooling layer,
+where a sequence of
+word
+embeddings have been reduced to a single vector that represents a document,
+we have a fully connected layer – as described in section 2.3.1 – that acts as
+the classifier.
+We first apply dropout to the document vector,
+then a linear
+transformation resulting in a vector
+ˆ
+y ∈ R
+c
+where c is the number of classes –
+in our case 6, one for each rating. We can then apply softmax to this vector to get
+a probability distribution over the classes.
+We use cross entropy loss with L2-regularization and optional class balancing,
+which is minimized using the Adam optimizer (Kingma and Ba, 2014) on mini-
+batches of size 32.
+6.1.5
+Pooling strategies
+Most other work on applying CNNs for text classification has used max pooling
+either globally over the whole sequence or on smaller regions.
+Y.
+Zhang and
+Wallace (2017)
+did some experimentation with other pooling strategies
+and
+reports that average pooling performed worse than max pooling. However, during
+preliminary experiments on the NoReC dataset we found that a convolutional
+model
+with 1-max pooling performed worse than the bag-of-words
+baseline
+model, particularly with regards to F
+1
+and MAE
+M
+. We did some experimentation
+with average pooling and found it to be better performing than 1-max pooling.
+In addition to 1-max pooling and average pooling, we introduce a new pooling
+strategy:
+Max-average pooling applies two consecutive layers of pooling.
+The
+first layer is regional
+max pooling,
+with the pool
+size added as an additional
+hyperparameter. This is followed by average pooling of the resulting vectors from
+the regional max pooling operation.
+If the pool size is set to 1, this is the same
+as average pooling, while having a pool size that is as large as the length of the
+document is the same as 1-max pooling.
+6.1.6
+Class balancing
+As we saw in section 5.2.5, adding inverse frequency weighting to the loss function
+might increase F
+1
+without decreasing accuracy scores too much.
+For this model
+we will explore two different weighting schemes.
+The first is the inverse class
+frequency like we did in section 5.2.5 for the logistic regression classifier.
+The
+weight for each class C
+i
+is given by
+weight
+(
+C
+i
+) =
+P
+|C |
+j
+counts
+(
+C
+j
+)
+counts
+(
+C
+i
+)
+(6.2)
+Because of the extremely imbalanced rating distribution in NoReC,
+using raw
+inverse frequencies could lead to an overcorrection. We will therefore also try to
+6.1.
+IMPLEMENTATION DETAILS
+59
+use the logarithm of the inverse frequency
+weight
+log
+(
+C
+i
+) =
+log
+
+
+P
+|C |
+j
+counts
+(
+C
+j
+)
+counts
+(
+C
+i
+)
+
+
+(6.3)
+6.1.7
+Using multiple filters
+Both Kim (2014) and Y.
+Zhang and Wallace (2017) uses multiple filters.
+And
+while the former only experiments with one setup, Y. Zhang and Wallace (2017)
+explores multiple filters with different filter region size.
+Their results show very
+small benefits of using multiple filters, with filter region size being much more
+important.
+Using multiple filters also significantly increases the hyperparameter
+search space.
+Y.
+Zhang and Wallace (2017)
+restricts the search to using only
+adjacent region sizes – such as
+(
+3, 4, 5
+)
+– or multiple filters of the same size.
+Due
+to the increased complexity and limited returns, we will limit our model to using
+only one filter.
+6.1.8
+Hyperparameter search
+The space of possible hyperparameter configurations becomes enormous with
+only a handfull of hyperparameters. For small models with few hyperparameters
+and short training times,
+we can perform an exhaustive grid search over the
+hyperparameter search space.
+However, for our model with 9 hyperparameters
+and training time up to 72 hours,
+this
+becomes
+infeasible.
+Y.
+Zhang and
+Wallace (2017)
+performs a systematic exploration of one hyperparameter at a
+time.
+However,
+their method fails to account
+for interactions between the
+hyperparameters – interactions that are often complex and nonintuitive.
+They
+look at the effect of changing one parameter while keeping the rest constant.
+While they mention both random hyperparameter search (Bergstra and Bengio,
+2012)
+and Bayesian hyperparameter optimization (Bergstra,
+Yamins,
+and Cox,
+2013), they conclude that
+these sophisticated search methods
+still
+require knowing which
+hyperparameters are worth exploring to begin with (and reasonable
+ranges for each). Furthermore, we believe it will be some time before
+Bayesian optimization methods are integrated into deployed,
+real-
+world systems. (Y. Zhang and Wallace, 2017, p. 2)
+The limitations of looking at one hyperparameter at a time becomes apparent
+when looking at
+the effect
+of
+using different
+pooling strategies.
+When we
+tried using average pooling with the same level
+of regularization that worked
+well with 1-max pooling,
+we found that the regularization was too strong and
+led to underfitting.
+On the other hand,
+random hyperparameter search is a
+simple and effective strategy of
+exploring the hyperparameter space (Bergstra
+and Bengio,
+2012),
+it
+does
+not
+exploit
+the knowledge we have from earlier
+experiments in order to optimize the hyperparameters.
+The hyperparameters
+of a model
+are non-differentiable,
+composed of real-valued as well
+as discrete
+variables,
+restricting the choice of
+optimization algorithms.
+One algorithm
+that does work with these constraints is Bayesian optimization which balances
+60
+CHAPTER 6.
+CONVOLUTIONAL NEURAL NETWORK MODELS
+Hyperparameter
+Range or set of values
+Embeddings type
+S
+TATIC
+, N
+ON
+S
+TATIC
+Filter region size
+1 to 50
+Feature maps
+10 to 1000
+Pooling
+1-M
+AX
+, A
+VERAGE
+, M
+AX
+A
+VERAGE
+Pool size
+1 to 200
+Dropout rate
+0 to 1.0
+L
+2
+norm
+0 to 0.1
+Class balancing
+N
+ONE
+,
+I
+NVERSE
+F
+REQUENCY
+,
+L
+OG
+I
+NVERSE
+-
+F
+REQUENCY
+Epochs
+10 to 100
+Table 6.1: The hyperparameter search space. Real and integer values are given as
+ranges, while categorical hyperparameters are given as a set of possible values.
+exploration and exploitation to optimize black-box functions.
+To perform
+Bayesian hyperparameter optimization we first
+run random hyperparameter
+search for a number of
+iterations to generate enough initial
+data.
+Then the
+Bayesian optimization algorithm uses
+this
+as
+training data to construct
+an
+acquisition function that is then optimized to find the next query point.
+This
+process is repeated and each time the estimate gets a little better.
+Bayesian
+hyperparameter optimization has been shown to find better hyperparameters
+faster than other methods – such as grid search and random search – as well
+as finding better hyperparameters than human experts (Snoek,
+Larochelle,
+and
+Adams, 2012).
+We used the package
+scikit-optimtize
+5
+– which is a Bayesian
+optimization software with an interface similar to scikit-learn – to perform
+Bayesian hyperparameter search for our convolutional neural network model.
+6.1.9
+Hyperparameter search space
+In table 6.1 we have defined the hyperparameter search space that we will explore
+using Bayesian hyperparameter optimization.
+We also chose to include the
+number of epochs here, which means there is no need to define any criteria for
+when to stop the training.
+Some of the ranges – such as for L2 rate and filter
+region size – are based on preliminary experiments,
+while others – such as the
+number for feature maps and epochs – are limited in the upper bound because of
+memory constraints on the GPUs and in order to limit the running time of the
+experiments.
+The pool size parameter only applies to max-average pooling and
+has no effect for the two other pooling strategies.
+5
+https://scikit-optimize.github.io/
+6.2.
+HYPERPARAMETER TUNING AND ANALYSIS
+61
+1
+1.5
+2
+2.5
+0
+10
+20
+30
+40
+MAE
+M
+F
+1
+Figure 6.1: Experiment results with MAE
+M
+plotted against F
+1
+.
+6.2
+Hyperparameter tuning and analysis
+In this section we will
+present
+the results of
+running over 280 experiments
+with the convolutional
+neural
+network model
+described above,
+exploring the
+hyperparameter search space defined in table 6.1.
+With so many experiments
+exploring the impact
+of
+the various
+hyperparameters,
+presenting the results
+in a table makes
+little sense,
+so we will
+instead present
+the result
+of
+each
+hyperparameter as a scatter plot with the hyperparameter on one axis and an
+evaluation metric on the other.
+Because of
+the Bayesian optimization,
+the
+distribution of experiments across hyperparameter ranges is not uniform, but is
+more clustered around high performing values.
+When interpreting these plots
+we are the most interested in looking at the best performing models,
+as worse
+performance could be caused by any of the other hyperparameters.
+Before we start looking at the results,
+however,
+we will have another look
+at the issue of evaluation.
+In section 5.1.3 we defined three different evaluation
+metrics – accuracy, F
+1
+and MAE
+M
+.
+In figures 6.1 and 6.2 we see scatter plots of
+running all the experiments plotting MAE
+M
+and accuracy against F
+1
+.
+As we can
+see from figure 6.1 there is a strong correlation between MAE
+M
+and F
+1
+– especially
+for high performing models. Looking at figure 6.2 we also see a clear correlation
+between accuracy and F
+1
+, though not as strong as in figure 6.1. While we initially
+though that there would be a larger difference between to the classification metrics
+– accuracy and F
+1
+– and the regression metric – MAE
+M
+– we see from the results
+that the divide is instead between the macro averaging metrics – F
+1
+and MAE
+M
+–
+and accuracy.
+Based on this observation we will in the rest of this chapter only
+look at the F
+1
+scores, which have the added benefit over MAE
+M
+of being bounded
+between 0 and 1.
+62
+CHAPTER 6.
+CONVOLUTIONAL NEURAL NETWORK MODELS
+10
+20
+30
+40
+50
+0
+10
+20
+30
+40
+Accuracy
+F
+1
+Figure 6.2: Experiment results with accuracy plotted against F
+1
+.
+6.2.1
+Regularization
+In figures 6.3 and 6.4 we see the values of dropout and L2 regularization plotted
+against F
+1
+.
+In tune with Y.
+Zhang and Wallace (2017)
+we see that the level
+of regularization is not that important,
+as long as the regularization is not too
+strong.
+When using two regularization methods at the same time,
+there is a
+complex interaction between the two that is difficult to visualize.
+Though not
+clearly visible in these plots, all the models benefit from at least a small level of
+regularization.
+Initially we defined the range for L2 from 0 to 0.1.
+However, the
+upper reaches of this turned out to be too strong and led to an underfitting model,
+so in this figure we only show L2 values from 0 to 0.02 for the sake of visualization.
+6.2.2
+The number of feature maps
+Figure 6.5 shows the performance of the models with regards to the number of
+feature maps used.
+As we can see, more is generally better.
+However, because of
+memory constraints we were not able to explore using more than 1000 feature
+maps.
+6.2.3
+Region size
+We initially only explored region sizes up to 20 words, but later increased this to
+50. There appears to be a peak around 15 to 20. The average sentence length of the
+corpus is around 16 tokens.
+This might be an indication that the convolutional
+model works best when looking at words in the context of the whole sentence.
+6.2.
+HYPERPARAMETER TUNING AND ANALYSIS
+63
+0
+0.2
+0.4
+0.6
+0.8
+1
+0
+10
+20
+30
+40
+Dropout level
+F
+1
+Figure 6.3: Experiment results with the dropout level plotted against F
+1
+.
+0
+0.005
+0.01
+0.015
+0.02
+0
+10
+20
+30
+40
+L2
+F
+1
+Figure 6.4: Experiment results with the L2 regularization plotted against F
+1
+. Note
+that while we explored the range 0 to 0.1, we only show the range 0 to 0.02.
+64
+CHAPTER 6.
+CONVOLUTIONAL NEURAL NETWORK MODELS
+0
+200
+400
+600
+800
+1,000
+0
+10
+20
+30
+40
+# Feature maps
+F
+1
+Figure 6.5:
+Experiment results with the number of feature maps plotted against
+F
+1
+.
+0
+10
+20
+30
+40
+50
+0
+10
+20
+30
+40
+Region size
+F
+1
+Figure 6.6: Experiment results with region size plotted against F
+1
+.
+6.2.
+HYPERPARAMETER TUNING AND ANALYSIS
+65
+1-max
+Average
+Max-average
+0
+10
+20
+30
+40
+F
+1
+Figure 6.7: Experiment results with pooling strategy plotted against F
+1
+.
+6.2.4
+Pooling strategy
+Figure 6.7 shows the performance of the models with regards to the pooling
+strategy.
+While Kim (2014) and Y. Zhang and Wallace (2017) found that 1-max
+pooling to be the best performing in their experiments,
+we find the complete
+opposite.
+Both average pooling and max-average pooling are outperforming 1-
+max pooling by a large margin on our dataset.
+There are many possible reasons
+why our results differ with respect to earlier findings.
+Besides the fact that we are working with a different dataset – one that has
+more fine-grained ratings and consists of longer documents – both Kim (2014)
+and Y.
+Zhang and Wallace (2017)
+evaluate using accuracy.
+If we look at our
+results with respect to accuracy, the difference between 1-max pooling and average
+pooling is reduced.
+This suggests that the weak performance of 1-max pooling
+with respect to F
+1
+might be related to the number of classes, or the imbalanced
+label distribution of the dataset.
+When using max-average pooling there is an additional hyperparameter for
+the size of the pooling regions. In figure 6.8 we see the performance of the models
+with respect to pooling region size.
+As the figure shows, there is a peak around
+20, with performance falling as we increase the pooling region size.
+Just as with
+the convolutional region size, we see that the optimal size for the pooling region
+is close to the average length of a sentence, which indicates that the sentiment of
+a document is located at the sentence level.
+6.2.5
+Class balancing
+Similar to what we saw in section 5.2.5 for the bag-of-words logistic regression
+classifier, class balancing also improves performance with regards F
+1
+for the CNN
+model, though the increase is more modest than what was the case for the bag-
+of-words model.
+The regular inverse-frequency weighting performs best,
+with
+66
+CHAPTER 6.
+CONVOLUTIONAL NEURAL NETWORK MODELS
+0
+50
+100
+150
+200
+0
+10
+20
+30
+40
+Pool size
+F
+1
+Figure 6.8: Experiment results with pool size plotted against F
+1
+for models using
+max-average pooling.
+None
+Balanced Log-balanced
+0
+10
+20
+30
+40
+F
+1
+Figure 6.9: Experiment results with class balancing plotted against F
+1
+.
+6.2.
+HYPERPARAMETER TUNING AND ANALYSIS
+67
+Static
+Non-static
+0
+10
+20
+30
+40
+F
+1
+Figure 6.10: Experiment results with pooling strategy plotted against F
+1
+.
+the logarithmic variant being better than no balancing.
+It is clear that weighting
+each class different can be beneficial, but using the inverse class frequency might
+not be the optimal weighting scheme. The weight for each class could instead by
+hyperparameters to the model that could be optimized to the best values.
+6.2.6
+Static vs non-static word embeddings
+Figure 6.10 shows the effect of using static and non-static word embeddings.
+As
+we can see from the figure,
+there might be a slight benefit to using static word
+embeddings in our experiments, though the difference is very small. This is again
+contrary to the findings of Kim (2014) and Y. Zhang and Wallace (2017).
+6.2.7
+Learning curve
+In section 5.3 we plotted the learning curve for the bag-of-words logistic regression
+classifier. We have repeated this for the highest performing CNN model, using the
+same method, training the classifier on random samples of increasing size from the
+training set and then evaluating on the development set. In figure 6.11 we see the
+learning curves with respect to F
+1
+comparing the best performing bag-of-words
+model with the best performing convolutional model.
+As we can see,
+the bag-
+of-words model outperforms the convolutional model when there is less training
+data,
+but the convolutional model catches up with it and eventually overtakes
+it as the size of the training set increases.
+This is in line with the conventional
+wisdom that deep learning methods require more data than traditional methods
+to outperform them.
+The increasingly steep curve for the CNN as we increase
+the number of training examples indicates that the CNN could benefit even more
+from having more data compared to the bag-of-words model.
+68
+CHAPTER 6.
+CONVOLUTIONAL NEURAL NETWORK MODELS
+10
+100
+1,000
+10,000
+0
+5 · 10
+−2
+0.1
+0.15
+0.2
+0.25
+0.3
+0.35
+0.4
+0.45
+# Training examples
+F
+1
+CNN
+B
+OW
+B
+ALANCED
+Figure 6.11:
+Comparison of
+learning curves
+for
+bag-of-words
+model
+from
+chapter 5 with the best performing convolutional model, showing the mean over
+20 runs.
+6.3.
+FINAL EVALUATION
+69
+Hyperparameter
+Model 1
+Model 2
+Pooling
+MAX
+MAX
+-
+AVERAGE
+Embeddings
+S
+TATIC
+S
+TATIC
+Balancing
+L
+OG
+I
+NVERSE
+F
+REQUENCY
+I
+NVERSE
+F
+REQUENCY
+Feature maps
+1000
+1000
+Region size
+50
+15
+Dropout
+0.480
+0.371
+L2
+0.020
+0.001
+F
+1
+37.054
+42.883
+Accuracy
+49.375
+51.706
+MAE
+M
+0.911
+0.734
+Table 6.2: Hyperparameters and evaluation scores on the development set for two
+high performing models from the CNN architecture.
+6.3
+Final evaluation
+In table 6.2 we see the hyperparameters and results for two high performing
+models,
+one using max-average pooling and the other using 1-max pooling.
+The model using max-average pooling clearly outperforms 1-max pooling with
+respect to all three metrics.
+The difference in performance between the two is
+largest with respect to F
+1
+and MAE
+M
+,
+while for accuracy the difference is less
+prominent. While some of the models using 1-max pooling had higher accuracy,
+matching that of max-average pooling, this came at the cost of reduced F
+1
+.
+The
+hyperparameters reveal that the two different pooling strategies require tuning the
+other hyperparameters for high performance, notably that 1-max pooling works
+well with stronger regularization.
+So far we have only evaluated the models on the development set. As we have
+evaluated various models and tuned the hyperparameters for the CNN models,
+we risk overfitting on the development set.
+In order to evaluate the models on
+completely unseen data,
+we have kept the test hidden away.
+Now,
+as a final
+evaluation, we include results for the test set as well.
+In figure table 6.3 we see
+the results on the development set and test set for all the models from chapter 5
+as well
+as the CNN models from table 6.2.
+Performance is on the test set is
+comparable to the performance on the development set, and there is generally a
+correlation between performance on the two sets, with accuracy generally being
+slightly better on the test set, while F
+1
+and MAE
+M
+are slightly worse on the test
+set. The results are robust, with no large discrepancies. Pre-trained convolutional
+neural network models have been made publicly available.
+6
+6
+https://github.com/ltgoslo/norec-cnn-models
+70
+CHAPTER 6.
+CONVOLUTIONAL NEURAL NETWORK MODELS
+Accuracy
+F
+1
+MAE
+M
+Model
+Dev
+Test
+Dev
+Test
+Dev
+Test
+CNNM
+AX
+49.37
+48.99
+37.05
+33.86
+0.911
+0.961
+CNNM
+AX
+A
+VERAGE
+51.71
+54.11
+42.88
+40.55
+0.734
+0.767
+BOW
++
+LOGREG
+51.59
+51.30
+36.54
+33.33
+0.956
+1.057
+BOW
++
+LOGREG
+B
+ALANCED
+51.48
+52.12
+39.44
+38.68
+0.796
+0.901
+BOW
++
+ORD
+-
+AT
+49.03
+49.42
+34.27
+35.60
+0.926
+0.983
+BOW
++
+RIDGE
+47.04
+47.77
+33.34
+34.21
+1.011
+1.029
+DOC
+2
+VEC
++
+LOGREG
+46.45
+48.70
+25.61
+27.42
+1.051
+1.073
+DOC
+2
+VEC
++
+LOGREG
+B
+ALANCED
+38.06
+40.36
+30.76
+31.88
+0.938
+0.906
+DOC
+2
+VEC
++
+ORD
+-
+AT
+44.26
+45.80
+29.15
+28.53
+1.017
+1.039
+DOC
+2
+VEC
++
+RIDGE
+42.50
+42.84
+26.37
+26.34
+1.083
+1.105
+Table 6.3:
+Evaluation of
+baseline models
+as
+seen in tables
+5.1 and 5.2 in
+section 5.2.4 and the two CNN models described in table 6.2.
+The models are
+evaluated both on the development and test set.
+6.4
+Summary and future directions
+As we can see from the results, our convolutional architecture outperforms the
+bag-of-words baseline. Tuning the hyperparameters is essential for creating a high
+performing model.
+And while hand tuning and random search can get you a
+long way,
+it takes a lot of time and effort.
+Systematic and automatic methods
+such as Bayesian hyperparameter optimization is a good tool
+for thoroughly
+exploring the hyperparameter search space.
+And while others have explored the
+hyperparameter space of convolutional neural networks for sentiment analysis,
+we have shown that it is worth doing a thorough search when applying the same
+methods to a new dataset,
+as the optimal
+hyperparameter values can often be
+task dependent. Using max-average pooling together with inverse frequency class
+balancing and static word embeddings leads to drastically higher performance on
+our dataset compared to the setup described by Kim (2014) and Y.
+Zhang and
+Wallace (2017).
+So far we have treated documents as being a sequence of words.
+However,
+documents have a structure that it might be possible to leverage in order to locate
+the more salient parts of the text.
+The documents in NoReC are comprised of
+paragraphs and sentences that are not arbitrary divisions, but represent a choice
+made by the author that might also be indicative of how humans mentally process
+language. A first step would be too look if some paragraphs are more sentiment-
+bearing than others. Reviews are often structured in a certain way, and we could
+imagine the overall sentiment to be concentrated in the last paragraph. We could
+also use machine learning to find the best paragraph.
+One way to do this could
+be to first build a classifier that tried to predict the rating of the review from each
+paragraph separately.
+Then,
+we would rank each paragraph by the probability
+6.4.
+SUMMARY AND FUTURE DIRECTIONS
+71
+assigned to it belonging to the correct class. This ranking is then used as training
+data for a ranking machine learning algorithm that might work as a proxy for
+subjectivity ranking.
+The ranking could either be used for weighing paragraphs,
+or be used as a cutoff by for instance only looking at the top 3 paragraphs in a
+document.
+In section 5.1.2 we looked at
+ordinal
+regression in order to model
+the
+relationship between ratings.
+While the results in section 5.2.4 suggests that
+we can achieve as good results using one-vs-all classification, we can not exclude
+the possibility that
+ordinal
+regression might
+be able to perform in a neural
+network.
+And while the threshold based loss function used in the
+mord
+package
+is not available out-of-the-box for neural network libraries such as PyTorch and
+Tensorflow, there are other methods that are easier to implement.
+For example
+Cheng, Z. Wang, and Pollastri (2008) defines a simple ordinal regression model
+for neural networks that works together with standard loss functions.
+While we mentioned recurrent
+neural
+networks in the beginning of
+this
+chapter,
+we have not performed any experiments using RNNs on the NoReC
+dataset.
+RNNs have been used with good results (Tang, Qin, and T. Liu, 2015;
+Lai
+et al.,
+2015) for text classification tasks,
+and might be worth looking into
+how RNNs perform on a document level
+fine-grained sentiment dataset such
+as
+NoReC.
+Using attention mechanisms
+(Bahdanau,
+Cho,
+and Bengio,
+2014)
+with RNNs has also shown promising results on document classification (Yang
+et al.,
+2016).
+While all
+the methods we have discussed are word based,
+there
+have been research on character based methods for text classification both using
+convolutional (X. Zhang, Zhao, and LeCun, 2015) and recurrent (Ramachandran,
+P. J. Liu, and Le, 2017) networks, showing promising results.
+In this chapter we have experimented with a one layer convolutional neural
+network for document
+level
+fine-grained sentiment
+analysis
+on the NoReC
+dataset.
+We have demonstrated that this architecture can outperform a bag-
+of-words logistic regression classifier – though requiring more data in order to
+achieve high performance – and that tuning the hyperparameters with regards to
+the task can be essential.
+Contrary to earlier work, we have shown that average
+pooling can outperform 1-max pooling on a rating inference task.
+73
+Chapter 7
+Conclusion and future work
+In this thesis we have developed document-level sentiment analysis for Norwe-
+gian.
+This includes the creation of the NoReC dataset – the first publicly avail-
+able sentiment dataset for Norwegian, consisting of over 35,000 reviews rated on
+a six-point scale across multiple domains including films, music, restaurants and
+products – as well as performing a quantitative data exploration.
+Furthermore
+we have established strong baselines based on a variety of traditional machine
+learning methods and shed more light on the underlying data by analyzing per-
+formance for subsets of the data such as categories and language standard. Going
+a step further, we experimented with a convolutional neural network architecture
+and performed a thorough hyperparameter search using Bayesian optimization.
+By analyzing the results, plotting each hyperparameter against performance, we
+demonstrated that there was a lot to gain from tuning the hyperparameters to
+our specific task, and we found that configurations that have performed well with
+other sentiment datasets did not perform well for our dataset,
+highlighting the
+need for task-specific tuning.
+Below we will go into a more detailed description
+of each chapter, elaborating further on the more general outline above.
+The NoReC dataset was described in chapter 3 detailing the extraction of
+text and metadata from the raw database dumps,
+and the subsequent linguistic
+pre-processing.
+NoReC is
+the first
+publicly available sentiment
+dataset
+for
+Norwegian, enabling researchers and developers – within industry and academia
+alike – to train reproducible machine learning models for rating inference,
+and
+– together with the baseline results
+– providing a well-defined standard for
+evaluating other approaches to sentiment analysis for Norwegian such as using
+sentiment lexicons.
+Chapter 3 also provided additional analysis of the dataset,
+including looking at
+how the distribution of
+ratings,
+categories and sources
+changes over time,
+and providing motivation for the method used for creating
+training, development and testing splits.
+In the preparation for the experiments in chapters 5 and 6, we described the
+computational environment and experimental pipeline in chapter 4. Working on
+a high performance computer cluster requires a different work flow compared to
+working in an interactive session. Using so-called Singularity for containerization
+and our own tool to aid in file synchronization across file systems, we established
+the foundation for
+the automated hyperparameter
+search we performed in
+chapter 6. We also discussed the benefits of using a GPU for training large neural
+74
+CHAPTER 7.
+CONCLUSION AND FUTURE WORK
+networks,
+which can cut down the training time by an order of
+magnitude.
+Being able to spawn new jobs on demand,
+utilizing the resources available at
+any given time, we were able to run a much larger number of experiments than
+would have been possible on a single computer. By defining a framework-agnostic
+experimental pipeline that powered both traditional machine learning models as
+well as convolutional neural networks, we made it easy to run new experiments
+and ensured that the result of every experiment along with the hyperparameter
+values were saved.
+In chapter 5 we continued the exploration of the dataset.
+Using traditional
+machine learning methods – bag-of-words and doc2vec for document representa-
+tion, and logistic regression, ordinal regression and linear regression for rating in-
+ference – we established strong baseline results that were shown to perform well
+above simple non-trained baselines such as a majority class and random choice
+classifiers.
+We also discussed evaluation methodology using different evaluation
+metrics – accuracy, F
+1
+and MAE
+M
+– in order to address the challenges regarding
+the relationship between ratings – which are discrete but ordered – and the imbal-
+anced rating distribution in NoReC. Continuing with the data exploration, we
+analyzed the classifier performance with respect to ratings,
+categories,
+sources,
+language standard and training set size.
+By analyzing the confusion matrices for
+the predictions of two logistic regression classifiers, we demonstrated that in spite
+of not explicit learning of the relations between ratings – such as linear regression
+and ordinal regression do – logistic regression still shows strong performance even
+when the distance between misclassifications to the ground truth is taken into
+consideration.
+Finally,
+by plotting learning curves for each rating,
+we demon-
+strated that the imbalanced rating distribution is a limiting factor with respect to
+performance, and that by increasing the amount of data the performance of the
+less frequent ratings might improve.
+In chapter 6 we moved on from traditional machine learning methods and
+experimented with a convolutional neural network architecture for document-
+level sentiment analysis. Based on previous research we defined a single layer con-
+volutional network with three different pooling strategies.
+In order to tune the
+hyperparameters of the model – considering that a full grid search is computation-
+ally expensive and that the complex interactions between hyperparameters make
+hand-tuning and univariate analysis difficult – we used Bayesian hyperparameter
+optimization to explore and exploit the hyperparameter search space.
+Through
+a number of scatter plots we analyzed the effect of each hyperparameter with re-
+spect to F
+1
+on the development set. While earlier research concluded that average
+pooling performed poorly compared to 1-max pooling, our experiments found
+the opposite, that average pooling outperformed 1-max pooling by a large margin
+on our dataset.
+However, the best performing pooling strategy was a combina-
+tion of regional max pooling followed by average pooling, a pooling strategy we
+call max-average pooling.
+We also observed that the optimal region size for con-
+volutions and the pooling region size for max-average pooling is close to the av-
+erage sentence length in the corpus, indicating that the sentiment of a document
+is located at the sentence level.
+This provides us with additional motivation to
+explore models that leverage document structure, going from words to sentences,
+sentences to paragraphs and paragraphs to documents.
+Finally, we compared the
+learning curves of the bag-of-words baseline and the convolutional architecture,
+7.1.
+FUTURE WORK
+75
+demonstrating that the neural network requires more data to perform well, but
+that it at the same time is able to surpass the bag-of-words model given enough
+data. Pre-trained convolutional neural network models have been made available
+for others to use.
+We are considering reworking chapter 6 into an article to be
+submitted to the Journal of Language Resources and Evaluation (LRE).
+7.1
+Future work
+As the SANT project and this thesis deal
+with developing both datasets and
+tools,
+future work can similarly be divided into these two parts.
+As we have
+seen throughout this thesis,
+the imbalanced rating distribution have presented
+challenges.
+As we demonstrated in chapter 5, one of the limiting factors for the
+classifier performance is the less frequent ratings at the top and bottom of the
+scale.
+This indicates that if we increase the number of reviews in the dataset,
+we can increase performance.
+As we discussed in chapter 3, there are potentially
+thousands of reviews that we were not able to extract in the first round.
+There
+are also additional sources of data from the media partners that we have not yet
+gained access to that could provide us with additional reviews.
+NoReC is a challenging dataset compared to many other sentiment datasets
+as it consists of long documents and is labeled with fine-grained ratings. This is in
+contrast to many other datasets consisting of hand picked sentences with evenly
+distributed binary labels.
+As we demonstrated in chapter 6, methods that work
+well with one dataset do not necessarily work well with another. In chapter 5 we
+saw that ordinal regression outperformed logistic regression. While we were not
+able to use the ordinal regression implementation from chapter 5 in combination
+with neural networks, it has come to our attention that there are neural ordinal
+regression models that are easy to implement and that do not require the use of
+a complex loss function, but instead works with standards loss functions that are
+already implemented in popular machine learning frameworks such as scikit-learn
+and PyTorch.
+As already discussed in section 6.4, there are many interesting neural architec-
+tures that can be used for sentiment analysis such as recurrent neural networks,
+attention models and hierarchical networks. A natural next step would be to lever-
+age document structure using an hierarchical convolutional architecture that cre-
+ates intermediary representations for sentences and paragraphs. As a comparison
+to convolutional networks, it would be interesting to see how recurrent neural
+networks perform.
+There are countless varieties of recurrent networks,
+being
+used in combination with convolutions, with character-level input, and with at-
+tention.
+Another approach to sentiment analysis – not based on machine learning –
+is to use a sentiment lexicon.
+Sentiment lexicons can be constructed by hand, or
+automatically by looking at word frequencies in positive and negative samples.
+While there have been attempts to build a sentiment lexicon for Norwegian –
+mostly by human- or machine-translations of English language resources – there
+exists no publicly available sentiment lexicon for Norwegian.
+Since NoReC
+consists of documents it is not suitable for creating a sentiment lexicon,
+there
+is however additional metadata in the raw data from DinSide containing short
+76
+CHAPTER 7.
+CONCLUSION AND FUTURE WORK
+snippets describing the pros and cons of reviewed items that could serve as a
+basis for the creation of a sentiment lexicon.
+This could then be evaluated on
+NoReC to see how it compares to the results established in this thesis. Sentiment
+analysis can also be used as a feature in downstream tasks, and the availability of
+sentiment analysis for Norwegian make it possible to get an additional perspective
+on other datasets,
+such as Talk of Norway (Lapponi
+et al.,
+2018)
+– which is
+a richly annotated corpus of the Norwegian parliament.
+When working with
+Norwegian language, the fact that there are two written varieties – Bokmål and
+Nynorsk – is an additional challenge.
+As we discussed in chapter 5, the classifier
+performance when evaluated only on the Nynorsk subset of the development set
+was much lower than on the Bokmål subset.
+Using domain-adversarial training
+(Ganin et al.,
+2016) it might be possible to create a model that is more capable
+to generalize across language varieties.
+It works by using joint-objective training
+where the second objective is to classify which language variety is being used.
+When propagating the error back, the gradient is multiplied by a negative number,
+effectively making it harder to distinguish between the language varieties used.
+In order to improve rating inference performance on NoReC, it might help to
+identify subjective sentences in the documents, and only provide these as input.
+While we could use human annotation to identify the subjective sentences,
+we
+might be able to use semi-supervised learning to – as we briefly discussed in
+section 6.4 – to automatically rank paragraphs or sentences according to how
+strongly they represent
+the sentiment
+of
+the document.
+Going deeper into
+sentiment analysis, we are not only interested in the overall sentiment of a text,
+but also identifying sentiment with respect to the different aspects of the item
+being reviewed – for a laptop this could include battery life and weight, while for
+a restaurant it might include location and speed of service.
+This, however, is not
+something that can be inferred from the data, but will require manual annotation.
+77
+Bibliography
+Baccianella,
+Stefano,
+Andrea Esuli,
+and Fabrizio Sebastiani (2009).
+“Evaluation
+measures
+for ordinal
+regression.” In:
+Proceedings
+of
+the
+9th International
+Conference on Intelligent Systems Design and Applications. Pisa, Italy, pp. 283–
+287.
+Bahdanau,
+Dzmitry,
+Kyunghyun Cho,
+and Yoshua Bengio (2014).
+“Neural
+machine translation by jointly learning to align and translate.” In:
+arXiv
+preprint arXiv:1409.0473.
+Bai, Aleksander, Hugo Hammer, Anis Yazidi, and Paal Engelstad (2014). “Con-
+structing sentiment lexicons in Norwegian from a large text corpus.” In: Pro-
+ceedings of the 17th International Conference on Computational Science and En-
+gineering. Chengdu, China, pp. 231–237.
+Bakken,
+Patrik F,
+Terje A Bratlie,
+Cristina Marco,
+and Jon Atle Gulla (2016).
+“Political
+News
+Sentiment
+Analysis
+for Under-resourced Languages.” In:
+Proceedings of the 26th International Conference on Computational Linguistics.
+Osaka, Japan, pp. 2989–2996.
+Bergstra, James and Yoshua Bengio (2012). “Random search for hyper-parameter
+optimization.” In: Journal of Machine Learning Research 13 (Feb), pp. 281–305.
+Bergstra,
+James,
+Daniel
+Yamins,
+and David Cox (2013).
+“Making a science of
+model search: Hyperparameter optimization in hundreds of dimensions for
+vision architectures.” In: Proceedings of the 30th International Conference on
+Machine Learning. Atlanta, Georgia, USA, pp. 115–123.
+Blitzer,
+John,
+Mark Dredze,
+and Fernando Pereira (2007).
+“Biographies,
+bolly-
+wood, boom-boxes and blenders: Domain adaptation for sentiment classifica-
+tion.” In: Proceedings of the 45th Annual Meeting of the Association for Compu-
+tational Linguistics. Prague, Czech Republic, pp. 440–447.
+Bojanowski, Piotr, Edouard Grave, Armand Joulin, and Tomas Mikolov (2016).
+“Enriching word vectors
+with subword information.” In:
+arXiv preprint
+arXiv:1607.04606.
+Cheng, Jianlin, Zheng Wang, and Gianluca Pollastri (2008). “A neural network
+approach to ordinal regression.” In: Proceedings of the 2007 International Joint
+Conference on Neural Networks. Hong Kong, China, pp. 1279–1284.
+Collobert, Ronan, Jason Weston, Léon Bottou, Michael Karlen, Koray Kavukcuoglu,
+and Pavel Kuksa (2011). “Natural language processing (almost) from scratch.”
+In: Journal of Machine Learning Research 12 (Aug), pp. 2493–2537.
+Ganin,
+Yaroslav,
+Evgeniya Ustinova,
+Hana Ajakan,
+Pascal
+Germain,
+Hugo
+Larochelle,
+François
+Laviolette,
+Mario Marchand,
+and Victor Lempitsky
+78
+BIBLIOGRAPHY
+(2016). “Domain-adversarial training of neural networks.” In: The Journal of
+Machine Learning Research 17 (1), pp. 2096–2030.
+Go, Alec, Richa Bhayani, and Lei Huang (2009). “Twitter sentiment classification
+using distant supervision.” In: CS224N Project Report, Stanford 1 (12).
+Goldberg, Yoav (2016). “A primer on neural network models for natural language
+processing.” In: Journal of Artificial Intelligence Research 57, pp. 345–420.
+Gulla, Jon Atle, John Arne Øye, Xiaomeng Su, and Özlem Özgöbek11 (2016).
+“Sentiment Analysis of Norwegian Twitter News Entities.” In: Proceedings of
+the 2nd Norwegian Big Data Symposium. Trondheim, Norway, pp. 40–58.
+Harris, Zellig S (1954). “Distributional structure.” In: Word 10 (2-3), pp. 146–162.
+Hochreiter, Sepp and Jürgen Schmidhuber (1997). “Long short-term memory.”
+In: Neural Computation 9 (8), pp. 1735–1780.
+Hopfield, John J (1982). “Neural networks and physical systems with emergent
+collective computational abilities.” In: Proceedings of the National Academy of
+Sciences 79 (8), pp. 2554–2558.
+Johnson, Rie and Tong Zhang (2015). “Effective use of word order for text cat-
+egorization with convolutional neural networks.” In: Proceedings of the 2015
+Conference of the North American Chapter of the Association for Computational
+Linguistics: Human Language Technologies. Denver, CO, USA, pp. 103–112.
+Joulin,
+Armand,
+Edouard Grave,
+Piotr
+Bojanowski,
+and Tomas
+Mikolov
+(2016).
+“Bag of
+tricks
+for efficient
+text
+classification.” In:
+arXiv preprint
+arXiv:1607.01759.
+Kalchbrenner, Nal, Edward Grefenstette, and Phil Blunsom (2014). “A Convolu-
+tional Neural Network for Modelling Sentences.” In: Proceedings of the 52nd
+Annual Meeting of the Association for Computational Linguistics.
+Baltimore,
+Maryland, USA, pp. 655–665.
+Kim, Yoon (2014). “Convolutional Neural Networks for Sentence Classification.”
+In:
+Proceedings
+of
+the
+2014 Conference
+on Empirical
+Methods
+in Natural
+Language Processing. Doha, Qatar, pp. 1746–1751.
+Kingma,
+Diederik P and Jimmy Ba (2014).
+“Adam:
+A method for stochastic
+optimization.” In: Proceedings of the 3rd International Conference on Learning
+Representation. San Diego, California, USA.
+Kleinberg, Jon and Eva Tardos (2002). “Approximation algorithms for classifica-
+tion problems with pairwise relationships: Metric labeling and Markov ran-
+dom fields.” In: Journal of the ACM (JACM) 49 (5), pp. 616–639.
+Koppel, Moshe and Jonathan Schler (2006). “The importance of neutral examples
+for learning sentiment.” In: Computational Intelligence 22 (2), pp. 100–109.
+Krizhevsky,
+Alex,
+Ilya Sutskever,
+and Geoffrey E Hinton (2012).
+“Imagenet
+classification with deep convolutional
+neural
+networks.” In:
+Proceedings of
+the 26th Conference on Neural
+Information Processing Systems.
+Lake Tahoe,
+Nevada, USA, pp. 1097–1105.
+Lai, Siwei, Liheng Xu, Kang Liu, and Jun Zhao (2015). “Recurrent Convolutional
+Neural Networks for Text Classification.” In: Proceedings of the 27th AAAI
+Conference on Artificial Intelligence. Bellevue, Washington, USA, pp. 2267–
+2273.
+Lapponi,
+Emanuele,
+Martin G.
+Søyland,
+Erik Velldal,
+and Stephan Oepen
+(2018). “The Talk of Norway: a richly annotated corpus of the Norwegian
+parliament, 1998–2016.” In: Language Resources and Evaluation, pp. 1–21.
+BIBLIOGRAPHY
+79
+Le,
+Quoc V and Tomas Mikolov (2014).
+“Distributed Representations of Sen-
+tences and Documents.” In: Proceedings of the 31st International Conference
+on Machine Learning. Beijing, China, pp. 1188–1196.
+LeCun,
+Yann,
+Léon Bottou,
+Yoshua
+Bengio,
+and Patrick Haffner
+(1998).
+“Gradient-based learning applied to document recognition.” In: Proceedings
+of the IEEE 86 (11), pp. 2278–2324.
+Li, Xin and Dan Roth (2002). “Learning question classifiers.” In: Proceedings of the
+19th International Conference on Computational Linguistics. Taipei, Taiwan,
+pp. 1–7.
+Lui, Marco and Timothy Baldwin (2012). “langid.py: An off-the-shelf language
+identification tool.” In: Proceedings of the 50th Meeting of the Association for
+Computational
+Linguistics System Demonstrations.
+Jeju,
+Republic of Korea,
+pp. 25–30.
+Maas,
+Andrew L.,
+Raymond E.
+Daly,
+Peter T.
+Pham,
+Dan Huang,
+Andrew Y.
+Ng,
+and Christopher Potts (2011).
+“Learning Word Vectors for Sentiment
+Analysis.” In:
+Proceedings of
+the 49th Annual
+Meeting of
+the Association for
+Computational Linguistics: Human Language Technologies. Portland, Oregon,
+USA, pp. 142–150.
+McCullagh, Peter (1980). “Regression models for ordinal data.” In: Journal of the
+royal statistical society. Series B (Methodological) 42 (2), pp. 109–142.
+McCulloch,
+Warren S and Walter Pitts (1943).
+“A logical
+calculus of the ideas
+immanent in nervous activity.” In:
+The bulletin of
+mathematical
+biophysics
+5 (4), pp. 115–133.
+Mikolov, Tomas, Kai Chen, Greg Corrado, and Jeffrey Dean (2013). “Efficient
+estimation of word representations in vector space.” In:
+Proceedings
+of
+the
+1st International Conference on Learning Representation. Scottsdale, Arizona,
+USA.
+Mohammad, Saif (2011). “From once upon a time to happily ever after: Tracking
+emotions
+in novels
+and fairy tales.” In:
+Proceedings
+of
+the 5th ACL-HLT
+Workshop on Language Technology for Cultural Heritage,
+Social Sciences,
+and
+Humanities. Portland, Oregon, USA, pp. 105–114.
+Nakov,
+Preslav,
+Alan Ritter,
+Sara Rosenthal,
+Fabrizio Sebastiani,
+and Veselin
+Stoyanov (2016). “SemEval-2016 Task 4: Sentiment Analysis in Twitter.” In:
+Proceedings of the 11th International Workshop on Semantic Evaluation. San
+Diego, California, USA, pp. 1–18.
+Nivre, Joakim et al. (2016). “Universal Dependencies v1: A Multilingual Treebank
+Collection.” In: Proceedings of the 10th International Conference on Language
+Resources and Evaluation. Portorož, Slovenia, pp. 1659–1666.
+Øvrelid,
+Lilja and Petter Hohle (2016).
+“Norwegian Universal Dependencies.”
+In: Proceedings of the 10th International Conference on Language Resources and
+Evaluation. Portorož, Slovenia, pp. 1579–1585.
+Pang, Bo and Lillian Lee (2004). “A Sentimental Education: Sentiment Analysis
+Using Subjectivity Summarization Based on Minimum Cuts.” In: Proceedings
+of
+the 42nd Annual
+Meeting on Association for Computational
+Linguistics.
+Barcelona, Spain, pp. 271–278.
+— (2005). “Seeing Stars: Exploiting Class Relationships For Sentiment Catego-
+rization With Respect To Rating Scales.” In: Proceedings of the 43rd Annual
+80
+BIBLIOGRAPHY
+Meeting on Association for Computational Linguistics. Ann Arbor, Michigan,
+USA, pp. 115–124.
+Pang, Bo and Lillian Lee (2008). “Opinion mining and sentiment analysis.” In:
+Foundations and trends in information retrieval 2 (1-2), pp. 1–135.
+Pang, Bo, Lillian Lee, and Shivakumar Vaithyanathan (2002). “Thumbs Up? Sen-
+timent Classification Using Machine Learning Techniques.” In: Proceedings of
+the ACL-02 Conference on Empirical Methods in Natural Language Processing.
+Philadelphia, Pennsylvania, USA, pp. 79–86.
+Pedregosa, F. et al. (2011). “Scikit-learn: Machine Learning in Python.” In: Journal
+of Machine Learning Research 12, pp. 2825–2830.
+Pedregosa-Izquierdo, Fabian (2015). “Feature extraction and supervised learning
+on fMRI :
+from practice to theory.” PhD thesis.
+Paris,
+France:
+Université
+Pierre et Marie Curie.
+Pennington, Jeffrey, Richard Socher, and Christopher D Manning (2014). “Glove:
+Global Vectors for Word Representation.” In:
+Proceedings of the 2014 Con-
+ference on Empirical
+Methods in Natural
+Language Processing.
+Doha,
+Qatar,
+pp. 1532–1543.
+Ramachandran,
+Prajit,
+Peter J Liu,
+and Quoc V Le (2017).
+“Unsupervised pre-
+training for sequence to sequence learning.” In: Proceedings of the 53rd Meet-
+ing of the Association for Computational Linguistics. Copenhagen, Denmark,
+pp. 383–391.
+ˇ
+Reh
+˚
+u
+ˇ
+rek,
+Radim and Petr Sojka (2010).
+“Software Framework for Topic Mod-
+elling with Large Corpora.” In: Proceedings of the LREC 2010 Workshop on
+New Challenges for NLP Frameworks. Valletta, Malta, pp. 45–50.
+Rennie,
+Jason DM and Nathan Srebro (2005).
+“Loss functions for preference
+levels:
+Regression with discrete ordered labels.” In:
+Proceedings
+the IJCAI
+Multidisciplinary Workshop on Advances in Preference Handling.
+Rosenthal,
+Sara,
+Noura Farra,
+and Preslav Nakov (2017).
+“SemEval-2017 task
+4:
+Sentiment analysis in Twitter.” In:
+Proceedings
+of
+the 12th International
+Workshop on Semantic Evaluation. Vancouver, Canada, pp. 502–518.
+Rubenstein, Herbert and John B Goodenough (1965). “Contextual correlates of
+synonymy.” In: Communications of the ACM 8 (10), pp. 627–633.
+Snoek, Jasper, Hugo Larochelle, and Ryan P Adams (2012). “Practical bayesian
+optimization of
+machine learning algorithms.” In:
+Proceedings
+of
+the 26th
+Conference on Neural
+Information Processing Systems.
+Lake Tahoe,
+Nevada,
+USA, pp. 2951–2959.
+Snyder, Benjamin and Regina Barzilay (2007). “Multiple Aspect Ranking Using
+the Good Grief Algorithm.” In: Proceedings of the 6th Annual Conference of
+the North American Chapter of the Association for Computational Linguistics:
+Human Language Technologies. Rochester, New York, USA, pp. 300–307.
+Socher, Richard, Alex Perelygin, Jean Y Wu, Jason Chuang, Christopher D Man-
+ning, Andrew Y Ng, Christopher Potts, et al. (2013). “Recursive deep models
+for semantic compositionality over a sentiment treebank.” In: Proceedings of
+the 2013 Conference on Empirical Methods in Natural Language Processing. Seat-
+tle, Washington, USA, p. 1642.
+Stadsnes,
+Cathrine (2018).
+“Evaluating Semantic Vectors for Norwegian.” MA
+thesis. Oslo, Norway: University of Oslo.
+BIBLIOGRAPHY
+81
+Straka, Milan, Jan Haji
+ˇ
+c, and Jana Straková (2016). “UDPipe: Trainable Pipeline
+for Processing CoNLL-U Files
+Performing Tokenization,
+Morphological
+Analysis,
+POS Tagging and Parsing.” In:
+Proceedings
+of
+the Tenth Interna-
+tional Conference on Language Resources and Evaluation. Portorož, Slovenia,
+pp. 4290–4297.
+Straka, Milan and Jana Straková (2017). “Tokenizing, POS Tagging, Lemmatizing
+and Parsing UD 2.0 with UDPipe.” In:
+Proceedings
+of
+the
+CoNLL 2017
+Shared Task:
+Multilingual Parsing from Raw Text to Universal Dependencies.
+Vancouver, Canada, pp. 88–99.
+Tang, Duyu, Bing Qin, and Ting Liu (2015). “Document Modeling with Gated
+Recurrent Neural Network for Sentiment Classification.” In: Proceedings of
+the 2014 Conference on Empirical
+Methods
+in Natural
+Language Processing.
+Lisbon, Portugal, pp. 1422–1432.
+Turney,
+Peter D (2002).
+“Thumbs up or thumbs down?:
+semantic orientation
+applied to unsupervised classification of reviews.” In: Proceedings of the 40th
+Annual
+Meeting on Association for Computational
+Linguistics.
+Philadelphia,
+Pennsylvania, USA, pp. 417–424.
+Velldal, Erik, Lilja Øvrelid, Eivind Alexander Bergem, Cathrine Stadsnes, Samia
+Touileb,
+and Fredrik Jørgensen (2018).
+“NoReC:
+The Norwegian Review
+Corpus.” In:
+Proceedings
+of
+the 11th International
+Conference on Language
+Resources and Evaluation. Miyazaki, Japan.
+Velldal, Erik, Lilja Øvrelid, and Petter Hohle (2017). “Joint UD Parsing of Nor-
+wegian Bokmål and Nynorsk.” In: Proceedings of the 11th Nordic Conference
+of Computational Linguistics. Gothenburg, Sweden, pp. 1–10.
+Wang,
+Hao,
+Dogan Can,
+Abe
+Kazemzadeh,
+François
+Bar,
+and Shrikanth
+Narayanan (2012). “A system for real-time twitter sentiment analysis of 2012
+us presidential election cycle.” In: Proceedings of the ACL 2012 System Demon-
+strations. Jeju, South Korea, pp. 115–120.
+Yang,
+Zichao,
+Diyi Yang,
+Chris Dyer,
+Xiaodong He,
+Alex Smola,
+and Eduard
+Hovy (2016). “Hierarchical attention networks for document classification.”
+In: Proceedings of the 15th Annual Conference of the North American Chapter of
+the Association for Computational Linguistics: Human Language Technologies.
+San Diego, California, USA, pp. 1480–1489.
+Zeman,
+Daniel
+et al.
+(2017).
+“CoNLL 2017 Shared Task:
+Multilingual
+Parsing
+from Raw Text to Universal Dependencies.” In: Proceedings of the CoNLL 2017
+Shared Task:
+Multilingual Parsing from Raw Text to Universal Dependencies.
+Vancouver, Canada, pp. 1–19.
+Zhang, Xiang, Junbo Zhao, and Yann LeCun (2015). “Character-level convolu-
+tional networks for text classification.” In: Proceedings of the 29th Conference
+on Neural Information Processing Systems. Montreal, Canada, pp. 649–657.
+Zhang, Ye and Byron Wallace (2017). “A sensitivity analysis of (and practitioners’
+guide to)
+convolutional
+neural
+networks
+for
+sentence classification.” In:
+Proceedings
+of
+the 8th International
+Joint
+Conference on Natural
+Language
+Processing. Taipei, Taiwan, pp. 253–263.

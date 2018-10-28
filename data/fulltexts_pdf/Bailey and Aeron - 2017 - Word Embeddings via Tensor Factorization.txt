@@ -1,0 +1,2019 @@
+﻿Word Embeddings via Tensor Factorization
+Eric Bailey, Charles Meyer, and Shuchin Aeron
+Tufts University, Medford, MA 02215
+Abstract
+Many state-of-the-art
+word embedding techniques involve
+factorization of a co-occurrence based matrix. We aim to ex-
+tend this approach by studying word embedding techniques
+that involve factorization of co-occurrence based tensors (
+N
+-
+way arrays). We present two new word embedding techniques
+based on tensor factorization and show that they outperform
+common methods on several semantic NLP tasks when given
+the same data.
+To train one of the embeddings,
+we present
+a new joint
+tensor
+factorization problem and an approach
+for solving it. Furthermore, we modify the performance met-
+rics for the Outlier Detection (Camacho-Collados and Nav-
+igli
+2016) task to measure the quality of higher-order rela-
+tionships that a word embedding captures. Our tensor-based
+methods significantly outperform existing methods at
+this
+task when using our new metric. Finally, we demonstrate that
+vectors in our embeddings can be composed multiplicatively
+to create different vector representations for each meaning of
+a polysemous word. We show that this property stems from
+the higher order information that the vectors contain, and thus
+is unique to our tensor based embeddings.
+Introduction
+Word embeddings have been used to improve the perfor-
+mance of many NLP tasks including language modelling
+(Bengio et al.
+2003),
+machine translation (Bahdanau,
+Cho,
+and Bengio 2014), and sentiment analysis (Kim 2014). The
+broad applicability of word embeddings to NLP implies that
+improvements to their quality will
+likely have widespread
+benefits for the field.
+The word embedding problem is to learn a mapping
+η :
+V → R
+k
+(
+k ≈
+100-300 in most applications) that encodes
+meaningful
+semantic and/or syntactic information.
+For in-
+stance, in many word embeddings,
+η(
+car
+) ≈ η(
+truck
+)
+, since
+the words are semantically similar.
+More complex relationships than similarity can also be
+encoded in word embeddings. For example, we can answer
+analogy queries of
+the form
+a :
+b
+::
+c
+:
+? using sim-
+ple arithmetic in many state-of-the-art embeddings (Mikolov
+et
+al.
+2013).
+The answer
+to bed
+:
+sleep
+::
+chair
+:
+x
+is
+given by the word whose vector representation is closest to
+η(
+sleep
+) − η(
+bed
+) + η(
+chair
+)
+(
+≈ η(
+sit
+)
+). Other embeddings
+may encode such information in a nonlinear way (Jastrzeb-
+ski, Lesniak, and Czarnecki 2017).
+(Mikolov et al. 2013) demonstrates the additive composi-
+tionality of their
+word2vec
+vectors: one can sum vectors
+produced by their embedding to compute vectors for certain
+phrases rather than just vectors for words. Later in this pa-
+per,
+we will
+show that
+our embeddings naturally give rise
+to a form of multiplicative compositionality that has not yet
+been explored in the literature.
+Almost all recent word embeddings rely on the distribu-
+tional hypothesis (Harris 1954),
+which states that a word’s
+meaning can be inferred from the words that
+tend to sur-
+round it. To utilize the distributional hypothesis, many em-
+beddings are given by a low-rank factor of a matrix derived
+from co-occurrences in a large unsupervised corpus,
+see
+(Pennington,
+Socher,
+and Manning 2014;
+Murphy,
+Taluk-
+dar, and Mitchell 2012; Levy and Goldberg 2014) and (Salle,
+Villavicencio, and Idiart 2016).
+Approaches that rely on matrix factorization only utilize
+pairwise co-occurrence information in the corpus.
+We aim
+to extend this approach by creating word embeddings given
+by factors of tensors containing higher order co-occurrence
+data.
+Related work
+Some common word embeddings related to co-occurrence
+based
+matrix
+factorization
+include
+GloVe
+(Pennington,
+Socher,
+and Manning 2014),
+word2vec
+(Levy and Gold-
+berg 2014), LexVec (Salle, Villavicencio, and Idiart 2016),
+and NNSE (Murphy, Talukdar, and Mitchell 2012). In con-
+trast, our work studies word embeddings given by factoriza-
+tion of tensors. An overview of tensor factorization methods
+is given in (Kolda and Bader 2009).
+Our
+work uses factorization of
+symmetric nonnegative
+tensors,
+which has been studied in the past (Wang and Qi
+2007; Comon et al.
+2008).
+In general,
+factorization of ten-
+sors has been applied to NLP in (Van de Cruys,
+Poibeau,
+and Korhonen 2013) and factorization of nonnegative ten-
+sors (Van de Cruys 2009).
+Recently,
+factorization of sym-
+metric tensors has been used to create a generic word embed-
+ding (Sharan and Valiant 2017) but the idea was not explored
+extensively. Our work studies this idea in much greater de-
+tail, fully demonstrating the viability of tensor factorization
+as a technique for training word embeddings.
+Composition of word vectors to create novel representa-
+tions has been studied in depth,
+including additive,
+multi-
+arXiv:1704.02686v2 [stat.ML] 15 Sep 2017
+plicative,
+and tensor-based methods (Mitchell
+and Lapata
+2010;
+Blacoe and Lapata 2012).
+Typically,
+composition is
+used to create vectors that
+represent phrases or sentences.
+Our work, instead, shows that pairs of word vectors can be
+composed multiplicatively to create different vector repre-
+sentations for the various meanings of a single polysemous
+word.
+Mathematical preliminaries
+Notation
+Throughout
+this paper we will
+write scalars in lowercase
+italics
+α
+, vectors in lowercase bold letters
+v
+, matrices with
+uppercase bold letters
+M
+, and tensors (of order
+N > 2
+) with
+Euler script notation
+X
+, as is standard in the literature.
+Pointwise Mutual Information
+Pointwise mutual information (PMI) is a useful property in
+NLP that quantifies the likelihood that two words co-occur
+(Levy and Goldberg 2014). It is defined as:
+P MI(x, y) =
+log
+p(x, y)
+p(x)p(y)
+where
+p(x, y)
+is the probability that
+x
+and
+y
+occur to-
+gether in a given fixed-length context window in the corpus,
+irrespective of order.
+It is often useful to consider the positive PMI (PPMI), de-
+fined as:
+P P M I(x, y) :=
+max
+(0, P M I(x, y))
+since negative PMI values have little grounded interpretation
+(Bullinaria and Levy 2007; Levy and Goldberg 2014; Van de
+Cruys 2009).
+Given an indexed vocabulary
+V
+= {w
+1
+, . . . , w
+|V |
+}
+,
+one can construct
+a
+|V |
+× |V |
+PPMI
+matrix
+M
+where
+m
+ij
+= P P MI(w
+i
+, w
+j
+)
+.
+Many existing word embedding
+techniques involve factorizing this PPMI matrix (Levy and
+Goldberg 2014; Murphy, Talukdar, and Mitchell 2012; Salle,
+Villavicencio, and Idiart 2016).
+PMI can be generalized to
+N
+variables.
+While there are
+many ways to do so (Van de Cruys 2011), in this paper we
+use the form defined by:
+P MI(x
+N
+1
+) =
+log
+p(x
+1
+, . . . , x
+N
+)
+p(x
+1
+) · · · p(x
+N
+)
+where
+p(x
+1
+, . . . , x
+N
+)
+is
+the
+probability
+that
+all
+of
+x
+1
+, . . . , x
+N
+occur together in a given fixed-length context
+window in the corpus, irrespective of their order.
+In this paper we study 3-way PPMI tensors
+M
+,
+where
+m
+ijk
+= P P MI(w
+i
+, w
+j
+, w
+k
+)
+,
+as this is the natural higher-
+order generalization of the PPMI matrix. We leave the study
+of
+creating word embeddings with
+N
+-dimensional
+PPMI
+tensors (
+N > 3
+) to future work.
+Tensor factorization
+Just as the rank-
+R
+matrix decomposition is defined to be the
+product of two factor matrices (
+M ≈ UV
+>
+), the canonical
+rank-
+R
+tensor decomposition for a third order tensor is de-
+fined to be the product of three factor matrices (Kolda and
+Bader 2009):
+X ≈
+R
+X
+r=1
+u
+r
+⊗ v
+r
+⊗ w
+r
+=:
+J
+U, V, W
+K
+,
+(1)
+where
+⊗
+is the outer product:
+(a⊗b⊗c)
+ijk
+= a
+i
+b
+j
+c
+k
+. This is
+also commonly referred to as the rank-R CP Decomposition.
+Elementwise, this is written as:
+x
+ijk
+≈
+R
+X
+r=1
+u
+ir
+v
+jr
+w
+kr
+= hu
+:,i
+∗ v
+:,j
+, w
+:,k
+i,
+where
+∗
+is elementwise vector multiplication and
+u
+:,i
+is the
+i
+th
+row of
+U
+.
+In our later section on multiplicative com-
+positionality,
+we will
+see this formulation gives rise to a
+meaningful
+interpretation of
+the elementwise product
+be-
+tween vectors in our word embeddings.
+Symmetric CP Decomposition.
+In this paper,
+we will
+consider symmetric CP decomposition of nonnegative ten-
+sors (Lim 2005; Kolda and Bader 2009). Since our
+N
+-way
+PPMI is nonnegative and invariant
+under permutation,
+the
+PPMI
+tensor
+M
+is nonnegative and supersymmetric,
+i.e.
+m
+ijk
+= m
+σ(i)σ(j)σ(k)
+≥ 0
+for any permutation
+σ ∈ S
+3
+.
+In the symmetric CP decomposition, instead of factoriz-
+ing
+M ≈
+J
+U, V, W
+K
+, we factorize
+M
+as the triple product
+of a single factor matrix
+U ∈ R
+|V |×R
+such that
+M ≈
+J
+U, U, U
+K
+In this formulation, we use
+U
+to be the word embedding
+so the vector for
+w
+i
+is the
+i
+th
+row of
+U
+similar to the formu-
+lations in (Levy and Goldberg 2014; Murphy, Talukdar, and
+Mitchell 2012; Pennington, Socher, and Manning 2014).
+It is known that the optimal rank-
+k
+CP decomposition ex-
+ists for symmetric nonnegative tensors such as the PPMI ten-
+sor (Lim 2005).
+However,
+finding such a decomposition is
+NP hard in general (Hstad 1990) so we must consider ap-
+proximate methods.
+In this work,
+we only consider
+the symmetric CP de-
+composition,
+leaving the study of other tensor decomposi-
+tions (such as the Tensor Train or HOSVD (Oseledets 2011;
+Kolda and Bader 2009)) to future work.
+Methodologies
+Computing the Symmetric CP Decomposition
+The
+Θ(|V |
+3
+)
+size of the third order PPMI tensor presents
+a number of computational challenges. In practice,
+|V |
+can
+vary from
+10
+4
+to
+10
+6
+, resulting in a tensor whose naive rep-
+resentation requires at
+least
+4 ∗ 10, 000
+3
+bytes =
+4
+TB of
+floats.
+Even the sparse representation of
+the tensor
+takes
+up such a large fraction of
+memory that
+standard algo-
+rithms such as successive rank-1 approximation (Wang and
+Qi
+2007;
+Mu,
+Hsu,
+and Goldfarb 2015)
+and alternating
+least-squares (Kolda and Bader 2009) are infeasible for our
+uses.
+Thus,
+in this paper we will consider a stochastic on-
+line formulation similar to that of (Maehara,
+Hayashi,
+and
+Kawarabayashi 2016).
+We optimize the CP decomposition in an online fashion,
+using small random subsets
+M
+t
+of the nonzero tensor en-
+tries to update the decomposition at time
+t
+. In this minibatch
+setting, we optimize the decomposition based on the current
+minibatch and the previous decomposition at time
+t − 1
+. To
+update
+U
+(and thus the symmetric decomposition), we first
+define a decomposition loss
+L(M
+t
+, U)
+and minimize this
+loss with respect to
+U
+using Adam (Kingma and Ba 2014).
+At each time
+t
+, we take
+M
+t
+to be all co-occurrence triples
+(weighted by PPMI) in a fixed number of sentences (around
+1,000) from the corpus. We continue training until we have
+depleted the entire corpus.
+For
+M
+t
+to accurately model
+M
+,
+we also include a cer-
+tain proportion of elements with zero PPMI (or “negative
+samples”) in
+M
+t
+, similar to that of (Salle, Villavicencio, and
+Idiart 2016). We use an empirically found proportion of neg-
+ative samples for training, and leave discovery of the optimal
+negative sample proportion to future work.
+Word Embedding Proposals
+CP-S. The first embedding we propose is based on symmetic
+CP decomposition of the PPMI tensor
+M
+as discussed in the
+mathematical preliminaries section. The optimal setting for
+the word embedding
+W
+is:
+W := argmin
+U
+||M −
+J
+U, U, U
+K
+||
+F
+Since we cannot feasibly compute this exactly, we minimize
+the loss function defined as the squared error between the
+values in
+M
+t
+and their predicted values:
+L(M
+t
+, U) =
+X
+m
+t
+ijk
+∈M
+t
+(m
+t
+ijk
+−
+R
+X
+r=1
+u
+ir
+u
+jr
+u
+kr
+)
+2
+using the techniques discussed in the previous section.
+JCP-S.
+A potential problem with CP-S is that it is only
+trained on third order information. To rectify this issue, we
+propose a novel joint tensor factorization problem we call
+Joint
+Symmetric Rank-
+R
+CP Decomposition.
+In this prob-
+lem, the input is the fixed rank
+R
+and a list of supersymmet-
+ric tensors
+M
+n
+of different orders but whose axis lengths all
+equal
+|V |
+.
+Each tensor
+M
+n
+is to be factorized via rank-
+R
+symmetric CP decomposition using a single
+|V | × R
+factor
+matrix
+U
+.
+To produce a solution,
+we first define the loss at time
+t
+to be the sum of the reconstruction losses of each different
+tensor:
+L
+joint
+((M
+t
+)
+N
+n=2
+, U) =
+N
+X
+n=2
+L(M
+t
+n
+, U),
+where
+M
+n
+is an
+n
+-dimensional supersymmetric PPMI ten-
+sor. We then minimize the loss with respect to
+U
+. Since we
+are using at most third order tensors in this work, we assign
+our word embedding
+W
+to be:
+W := argmin
+U
+L
+joint
+(M
+2
+, M
+3
+, U)
+= argmin
+U
+
+L(M
+2
+, U) + L(M
+3
+, U)
+
+This problem is a specific instance of Coupled Tensor
+Decomposition,
+which has been studied in the past
+(Acar,
+Kolda, and Dunlavy 2011; Naskovska and Haardt 2016). In
+this problem, the goal is to factorize multiple tensors using
+at
+least
+one factor matrix in common.
+A similar formula-
+tion to our problem can be found in (Comon, Qi, and Use-
+vich 2015), which studies blind source separation using the
+algebraic geometric aspects of jointly factorizing numerous
+supersymmetric tensors (to unknown rank).
+In contrast
+to
+our work, they outline some generic rank properties of such
+a decomposition rather than attacking the problem numeri-
+cally. Also, in our formulation the rank is fixed and an ap-
+proximate solution must be found. Exploring the connection
+between the theoretical aspects of joint decomposition and
+quality of word embeddings would be an interesting avenue
+for future work.
+To the best of our knowledge this is the first study of Joint
+Symmetric Rank-
+R
+CP Decomposition.
+Shifted PMI
+In the same way (Levy and Goldberg 2014) considers fac-
+torization of positive shifted PMI matrices, we consider fac-
+torization of positive shifted PMI tensors
+M
+, where
+m
+ijk
+=
+max(P MI(w
+i
+, w
+j
+, w
+k
+) − α, 0)
+for some constant shift
+α
+.
+We empirically found that
+different
+levels of
+shifting re-
+sulted in different qualities of word embeddings – the best
+shift
+we found for CP-S was a shift
+of
+α ≈ 3
+,
+whereas
+any nonzero shift for JCP-S resulted in a worse embedding
+across the board. When we discuss evaluation we report the
+results given by factorization of the PPMI tensors shifted by
+the best value we found for each specific embedding.
+Computational notes
+When considering going from two dimensions to three,
+it
+is perhaps necessary to discuss the computational issues in
+such a problem size increase.
+However,
+it should be noted
+that the creation of pre-trained embeddings can be seen as
+a pre-processing step for many future NLP tasks,
+so if the
+training can be completed once, it can be used forever there-
+after without having to take training time into account. De-
+spite this, we found that the training of our embeddings was
+not considerably slower than the training of order-2 equiv-
+alents such as SGNS.
+Explicitly,
+our GPU trained CBOW
+vectors (using the experimental
+settings found below)
+in
+3568 seconds, whereas training CP-S and JCP-S took 6786
+and 8686 seconds respectively.
+Evaluation
+In this section we present a quantitative evaluation compar-
+ing our embeddings to an informationless embedding and
+two strong baselines. Our baselines are:
+1.
+Random (random vectors with I.I.D.
+entries normally
+distributed with mean 0 and variance
+1
+2
+), for comparing
+against a model with no meaningful information encoded
+2.
+word2vec (CBOW) (Mikolov et al. 2013), for compari-
+son against the most commonly used embedding method,
+as well as for comparison against a technique related to
+PPMI matrix factorization (Levy and Goldberg 2014)
+3.
+NNSE
+1
+(Murphy, Talukdar, and Mitchell 2012), for com-
+parison against
+a technique that
+relies on an explicit
+PPMI matrix factorization
+For a fair comparison, we trained each model on the same
+corpus of 10 million sentences gathered from Wikipedia. We
+removed stopwords and words appearing fewer than 2,000
+times (130 million tokens total) to reduce noise and unin-
+formative words.
+Our word2vec and NNSE baselines were
+trained using the recommended hyperparameters from their
+original
+publications,
+and all
+optimizers were using using
+the default settings. Hyperparameters are always consistent
+across evaluations.
+Because of the dataset size,
+the results shown should be
+considered a proof of concept rather than an objective com-
+parison to state-of-the-art
+pre-trained embeddings.
+Due to
+the natural computational challenges arising from working
+with tensors,
+we leave creation of a full-scale production
+ready embedding based on tensor
+factorization to future
+work.
+As is common in the literature (Mikolov et al. 2013; Mur-
+phy, Talukdar, and Mitchell 2012), we use 300-dimensional
+vectors for our embeddings and all word vectors are normal-
+ized to unit length prior to evaluation.
+Quantitative tasks
+Outlier Detection.
+The Outlier Detection task (Camacho-
+Collados and Navigli 2016) is to determine which word in
+a list
+L
+of
+n + 1
+words is unrelated to the other
+n
+which
+were chosen to be related.
+For each
+w ∈ L
+,
+one can com-
+pute its compactness score
+c(w)
+, which is the compactness
+of
+L \ {w}
+.
+c(w)
+is explicitly computed as the mean simi-
+larity of all word pairs
+(w
+i
+, w
+j
+) :
+w
+i
+, w
+j
+∈ L \ {w}
+.
+The
+predicted outlier is argmax
+w∈L
+c(w)
+, as the
+n
+related words
+should form a compact cluster with high mean similarity.
+We use the WikiSem500 dataset (Blair, Merhav, and Barry
+2016) which includes sets of
+n = 8
+words per group gath-
+ered based on semantic similarity. Thus, performance on this
+task is correlated with the amount of semantic information
+encoded in a word embedding. Performance on this dataset
+was shown to be well-correlated with performance at
+the
+common NLP task of sentiment analysis (Blair, Merhav, and
+Barry 2016).
+The two metrics associated with this task are accuracy and
+Outlier Position Percentage (OPP). Accuracy is the fraction
+of cases in which the true outlier correctly had the highest
+compactness score. OPP measures how close the true outlier
+was to having the highest compactness score, rewarding em-
+beddings more for predicting the outlier to be in
+2
+nd
+place
+rather than
+n
+th
+when sorting the words by their compactness
+score
+c(w)
+.
+3-way Outlier Detection.
+As our tensor-based embed-
+dings encode higher order relationships between words, we
+introduce a new way to compute
+c(w)
+based on groups of 3
+1
+The input to NNSE is an
+m × n
+matrix,
+where there are
+m
+words and
+n
+co-occurrence patterns.
+In our experiments,
+we set
+m = n = |V |
+and set
+the co-occurrence information to be the
+number of times
+w
+i
+appears within a window of 5 words of
+w
+j
+. As
+stated in the paper, the matrix entries are weighted by PPMI.
+words rather than pairs of words. We define the compactness
+score for a word
+w
+to be:
+c(w) =
+X
+v
+i
+1
+6=v
+w
+X
+v
+i
+2
+6=v
+w
+,v
+i
+1
+X
+v
+i
+3
+6=v
+w
+,v
+i
+1
+,v
+i
+2
+sim(v
+i
+1
+, v
+i
+2
+, v
+i
+3
+),
+where
+sim(·)
+denotes similarity between a group of 3 vec-
+tors.
+sim(·)
+is defined as:
+sim(v
+1
+, v
+2
+, v
+3
+) =
+
+1
+3
+3
+X
+i=1
+||v
+i
+−
+1
+3
+3
+X
+j=1
+v
+j
+||
+2
+
+−1
+We call this evaluation method OD
+3
+.
+The purpose of OD
+3
+is to evaluate the extent to which an
+embedding captures
+3
+rd
+order relationships between words.
+As we will see in the results of our quantitative experiments,
+our tensor methods outperform the baselines on OD3, which
+validates our approach.
+This approach can easily be generalized to OD
+N (N >
+3)
+, but again we leave the study of higher order relationships
+to future work.
+Simple
+supervised tasks.
+(Jastrzebski,
+Lesniak,
+and
+Czarnecki 2017) points out that the primary application of
+word embeddings is transfer learning to NLP tasks.
+They
+argue that to evaluate an embedding’s ability to transfer in-
+formation to a relevant task, one must measure the embed-
+ding’s accessibility of
+information for
+actual
+downstream
+tasks.
+To do so,
+one must
+cite the performance of simple
+supervised tasks as training set size increases, which is com-
+monly done in transfer learning evaluation (Jastrzebski, Les-
+niak, and Czarnecki 2017). If an algorithm using a word em-
+bedding performs well with just a small amount of training
+data, then the information encoded in the embedding is eas-
+ily accessible.
+The simple supervised downstream tasks we use to evalu-
+ate the embeddings are as follows:
+1.
+Supervised Analogy Recovery. We consider the task of
+solving queries of the form a : b :: c : ? using a simple
+neural network as suggested in (Jastrzebski, Lesniak, and
+Czarnecki 2017). The analogy dataset we use is from the
+Google analogy testbed (Mikolov et al. 2013).
+2.
+Sentiment analysis. We also consider sentiment analysis
+as described by (Schnabel et al. 2015). We use the sug-
+gested Large Movie Review dataset (Maas et al.
+2011),
+containing 50,000 movie reviews.
+All
+code is implemented using scikit-learn or TensorFlow
+and uses the suggested train/test split.
+Word similarity. To standardize our evaluation method-
+ology, we evaluate the embeddings using word similarity on
+the common MEN and MTurk datasets (Bruni, Tran, and Ba-
+roni 2014; Radinsky et al. 2011). For an overview of word
+similarity evaluation, see (Schnabel et al. 2015).
+Quantitative results
+Outlier Detection results.
+The results are shown in Table
+1. The first thing to note is that CP-S outperforms the other
+methods across each Outlier
+Detection metric.
+Since the
+WikiSem500 dataset is semantically focused,
+performance
+Figure 1: Analogy task performance vs. % training data
+Table 1: Outlier Detection scores across all embeddings
+(Method)
+OD2 OPP
+OD2 acc
+OD3 OPP
+OD3 acc
+Random
+0.6123
+0.2765
+0.5345
+0.1950
+CBOW
+0.6542
+0.3731
+0.6162
+0.3034
+NNSE
+0.6998
+0.4288
+0.6292
+0.3190
+CP-S
+0.7078
+0.4370
+0.6741
+0.3597
+JCP-S
+0.7017
+0.4242
+0.6666
+0.3201
+at this task demonstrates the quality of semantic information
+encoded in our embeddings.
+On OD2, the baselines perform more competitively with
+our CP Decomposition based models, but when OD3 is con-
+sidered our methods clearly excel.
+Since the tensor-based
+methods are trained directly on third order information and
+perform much better at OD3, we see that OD3 scores reflect
+the amount of third order information in a word embedding.
+This is a validation of OD3,
+as our
+3
+rd
+order embeddings
+would naturally out perform
+2
+nd
+order embeddings at a task
+that requires third order information. Still, the superiority of
+our tensor-based embeddings at OD
+2
+demonstrates the qual-
+ity of the semantic information they encode.
+Supervised analogy results.
+The results are shown in
+Figure 1.
+At
+the supervised semantic analogy task,
+CP-S
+vastly outperforms the baselines at all levels of training data,
+further signifying the amount
+of semantic information en-
+coded by this embedding technique.
+Also, when only 10% of the training data is presented, our
+tensor methods are the only ones that attain nonzero perfor-
+mance – even in such a limited data setting, use of CP-S’s
+vectors results in nearly 40% accuracy. This phenomenon is
+also observed in the syntactic analogy tasks: our embeddings
+consistently outperform the others until 100% of the training
+data is presented.
+These two observations demonstrate the
+accessibility of the information encoded in our word embed-
+dings. We can thus conclude that this relational information
+encoded in the tensor-based embeddings is more easily ac-
+cessible than that of CBOW and NNSE. Thus, our methods
+would likely be better suited for transfer learning to actual
+NLP tasks, particularly those in data-sparse settings.
+Sentiment
+analysis results.
+The results are shown in
+Figure 2. In this task, JCP-S is the dominant method across
+all levels of training data,
+but the difference is more obvi-
+ous when training data is limited. This again indicates that
+for this specific task the information encoded by our tensor-
+based methods is more readily available as that of the base-
+lines. It is thus evident that exploiting both second and third
+order co-occurrence data leads to higher quality semantic in-
+formation being encoded in the embedding. At this point it
+is not clear why JCP-S so vastly outperforms CP-S at this
+task, but its superiority to the other strong baselines demon-
+strates the quality of information encoded by JCP-S.
+This
+discrepancy is also illustrative of the fact that there is no sin-
+gle “best word embedding” (Jastrzebski, Lesniak, and Czar-
+necki 2017) – different embeddings encode different types
+of information,
+and thus should be used where they shine
+rather than for every NLP task.
+Word Similarity results.
+Table 2: Word Similarity Scores (Spearman’s
+ρ
+)
+(Method)
+MEN
+MTurk
+Random
+-0.028
+-0.150
+CBOW
+0.601
+0.498
+NNSE
+0.717
+0.686
+CP-S
+0.630
+0.631
+JCP-S
+0.621
+0.669
+We show the results in Table 2. As we can see, our em-
+Figure 2: Sentiment analysis task performance vs. % training data
+beddings very clearly outperform the random embedding at
+this task.
+They even outperform CBOW on both of these
+datasets. It is worth including these results as the word sim-
+ilarity task is a very common way of evaluating embedding
+quality in the literature. However, due to the many intrinsic
+problems with evaluating word embeddings using word sim-
+ilarity (Faruqui et al. 2016), we do not discuss this further.
+Multiplicative Compositionality
+We find that even though they are not explicitly trained to
+do so,
+our tensor-based embeddings capture polysemy in-
+formation naturally through multiplicative compositional-
+ity. We demonstrate this property qualitatively and provide
+proper motivation for it, leaving automated utilization to fu-
+ture work.
+In our tensor-based embeddings,
+we found that one can
+create a vector that
+represents a word
+w
+in the context
+of
+another word
+w
+0
+by taking the elementwise product
+v
+w
+∗v
+w
+0
+.
+We call
+v
+w
+∗ v
+w
+0
+a “meaning vector” for the polysemous
+word
+w
+.
+For example, consider the word star, which can denote a
+lead performer or a celestial body. We can create a vector for
+star in the “lead performer” sense by taking the elementwise
+product
+v
+star
+∗ v
+actor
+. This produces a vector that lies near
+vectors for words related to lead performers and far from
+those related to star’s other senses.
+To motivate why this works,
+recall
+that
+the values in a
+third order PPMI tensor
+M
+are given by:
+m
+ijk
+= P P MI(w
+i
+, w
+j
+, w
+k
+) ≈
+R
+X
+r=1
+v
+ir
+v
+jr
+v
+kr
+= hv
+i
+∗v
+j
+, v
+k
+i,
+where
+v
+i
+is the word vector for
+w
+i
+. If words
+w
+i
+, w
+j
+, w
+k
+have
+a high PPMI, then
+hv
+i
+∗ v
+j
+, v
+k
+i
+will also be high, meaning
+v
+i
+∗ v
+j
+will
+be close to
+v
+k
+in the vector space by cosine
+similarity.
+For example, even though galaxy is likely to appear in the
+context
+of the word star in in the “celestial
+body” sense,
+hv
+star
+∗ v
+actor
+, v
+galaxy
+i
+≈
+PPMI(star,
+actor,
+galaxy)
+is
+low whereas
+hv
+star
+∗ v
+actor
+, v
+drama
+i ≈
+PPMI(star,
+actor,
+drama) is high. Thus ,
+v
+star
+∗ v
+actor
+represents the meaning
+of star in the “lead performer” sense.
+In Table 3 we present the nearest neighbors of multiplica-
+tive and additive composed vectors for a variety of poly-
+semous words. As we can see, the words corresponding to
+the nearest neighbors of the composed vectors for our ten-
+sor methods are semantically related to the intended sense
+both for
+multiplicative and additive composition.
+In con-
+trast,
+for CBOW,
+only additive composition yields vectors
+whose nearest neighbors are semantically related to the in-
+tended sense.
+Thus,
+our embeddings can produce comple-
+mentary sets of polysemous word representations that
+are
+qualitatively valid whereas CBOW (seemingly) only guar-
+antees meaningful additive compositionality. We leave auto-
+mated usage of this property to future work.
+Conclusion
+Our key contributions are as follows:
+1.
+Two novel
+tensor factorization based word embed-
+dings.
+We presented CP-S and JCP-S,
+which are word
+embedding techniques based on symmetric CP decom-
+position. We experimentally demonstrated that these em-
+beddings outperform existing matrix-based techniques
+on a number of downstream semantic tasks when trained
+on the same data.
+2.
+A novel joint symmetric tensor factorization problem.
+Table 3: Nearest neighbors (in cosine similarity) to elementwise products of word vectors
+Composition
+Nearest neighbors (CP-S)
+Nearest neighbors (JCP-S)
+Nearest neighbors (CBOW)
+star
+∗
+actor
+oscar
+,
+award-winning
+,
+supporting
+roles
+,
+drama
+,
+musical
+DNA
+,
+younger
+,
+tip
+star
++
+actor
+stars
+,
+movie
+,
+actress
+actress
+,
+trek
+,
+picture
+actress
+,
+comedian
+,
+starred
+star
+∗
+planet
+planets
+,
+constellation
+,
+trek
+galaxy
+,
+earth
+,
+minor
+fingers
+,
+layer
+,
+arm
+star
++
+planet
+sun
+,
+earth
+,
+galaxy
+galaxy
+,
+dwarf
+,
+constellation
+galaxy
+,
+planets
+,
+earth
+tank
+∗
+fuel
+liquid
+,
+injection
+,
+tanks
+vehicles
+,
+motors
+,
+vehicle
+armored
+,
+tanks
+,
+armoured
+tank
++
+fuel
+tanks
+,
+engines
+,
+injection
+vehicles
+,
+tanks
+,
+powered
+tanks
+,
+engine
+,
+diesel
+tank
+∗
+weapon
+gun
+,
+ammunition
+,
+tanks
+brigade
+,
+cavalry
+,
+battalion
+persian
+,
+age
+,
+rapid
+tank
++
+weapon
+tanks
+,
+armor
+,
+rifle
+tanks
+,
+battery
+,
+batteries
+tanks
+,
+cannon
+,
+armored
+We introduced and utilized Joint Symmetric Rank-
+R
+CP
+Decomposition to train JCP-S. In this problem, multiple
+supersymmetric tensors must be decomposed using a sin-
+gle rank-
+R
+factor matrix. This technique allows for uti-
+lization of both second and third order co-occurrence in-
+formation in word embedding training.
+3.
+A new embedding
+evaluation metric
+to
+measure
+amount of third order information.
+We produce a
+3
+-
+way analogue of Outlier Detection (Camacho-Collados
+and Navigli 2016) that we call OD
+3
+. This metric evalu-
+ates the degree to which third order information is cap-
+tured by a given word embedding. We demonstrated this
+by showing our tensor based techniques, which naturally
+encode third information,
+perform better at
+OD3 com-
+pared to existing second order models.
+4.
+Word vector multiplicative compositionality for poly-
+semous word representation. We showed that our word
+vectors can be meaningfully composed multiplicatively
+to create a “meaning vector” for each different sense of a
+polysemous word. This property is a consequence of the
+higher order information used to train our embeddings,
+and was empirically shown to be unique to our tensor-
+based embeddings.
+Tensor factorization appears to be a highly applicable and
+effective tool for learning word embeddings, with many ar-
+eas of potential future work. Leveraging higher order data in
+training word embeddings is useful for encoding new types
+of information and semantic relationships compared to mod-
+els that are trained using only pairwise data. This indicates
+that such techniques will prove useful for training word em-
+beddings to be used in downstream NLP tasks.
+References
+[Acar, Kolda, and Dunlavy 2011]
+Acar, E.; Kolda, T. G.; and
+Dunlavy, D. M.
+2011.
+All-at-once optimization for coupled
+matrix and tensor factorizations.
+CoRR abs/1105.3422.
+[Bahdanau, Cho, and Bengio 2014]
+Bahdanau,
+D.;
+Cho,
+K.;
+and Bengio, Y.
+2014.
+Neural machine translation by jointly
+learning to align and translate.
+CoRR abs/1409.0473.
+[Bengio et al. 2003]
+Bengio,
+Y.; Ducharme,
+R.; Vincent,
+P.;
+and Janvin, C. 2003. A neural probabilistic language model.
+J. Mach. Learn. Res. 3:1137–1155.
+[Blacoe and Lapata 2012]
+Blacoe, W., and Lapata, M.
+2012.
+A comparison of vector-based representations for seman-
+tic composition.
+In Proceedings of the 2012 Joint Confer-
+ence on Empirical Methods in Natural Language Processing
+and Computational Natural Language Learning,
+EMNLP-
+CoNLL ’12, 546–556.
+Stroudsburg, PA, USA: Association
+for Computational Linguistics.
+[Blair, Merhav, and Barry 2016]
+Blair,
+P.;
+Merhav,
+Y.;
+and
+Barry, J.
+2016.
+Automated generation of multilingual clus-
+ters for the evaluation of distributed representations.
+CoRR
+abs/1611.01547.
+[Bruni, Tran, and Baroni 2014]
+Bruni,
+E.;
+Tran,
+N.
+K.;
+and
+Baroni, M.
+2014.
+Multimodal distributional semantics.
+J.
+Artif. Int. Res. 49(1):1–47.
+[Bullinaria and Levy 2007]
+Bullinaria, J. A., and Levy, J.
+P.
+2007.
+Extracting semantic representations from word co-
+occurrence statistics: A computational study.
+Behavior Re-
+search Methods 39(3):510–526.
+[Camacho-Collados and Navigli 2016]
+Camacho-Collados,
+J.,
+and Navigli,
+R.
+2016.
+Find the word that
+does not
+belong:
+A framework for
+an intrinsic evaluation of
+word
+vector
+representations.
+In ACL Workshop on Evaluating
+Vector Space Representations for NLP, 43–50.
+Association
+for Computational Linguistics.
+[Comon et al. 2008]
+Comon, P.; Golub, G.; Lim, L.-H.; and
+Mourrain, B. 2008. Symmetric tensors and symmetric tensor
+rank.
+SIAM Journal on Matrix Analysis and Applications
+30(3):1254–1279.
+[Comon, Qi, and Usevich 2015]
+Comon, P.; Qi, Y.; and Use-
+vich, K.
+2015.
+A polynomial formulation for joint decom-
+position of symmetric tensors of different orders.
+In LVA-
+ICA’2015, volume 9237 of Lecture Notes in Computer Sci-
+ence. Liberec, Czech Republic: Springer. Special session on
+tensors. hal-01168992.
+[Faruqui et al. 2016]
+Faruqui,
+M.; Tsvetkov,
+Y.; Rastogi,
+P.;
+and
+Dyer,
+C.
+2016.
+Problems
+with
+evaluation
+of
+word embeddings
+using word similarity tasks.
+CoRR
+abs/1605.02276.
+[Harris 1954]
+Harris, Z. 1954. Distributional structure. Word
+10(23):146–162.
+[Hstad 1990]
+Hstad,
+J.
+1990.
+Tensor rank is np-complete.
+Journal of Algorithms 11(4):644 – 654.
+[Jastrzebski, Lesniak, and Czarnecki 2017]
+Jastrzebski,
+S.;
+Lesniak, D.; and Czarnecki, W. M.
+2017.
+How to evaluate
+word embeddings? on importance of
+data efficiency and
+simple supervised tasks.
+[Kim 2014]
+Kim,
+Y.
+2014.
+Convolutional neural networks
+for sentence classification.
+CoRR abs/1408.5882.
+[Kingma and Ba 2014]
+Kingma,
+D.
+P.,
+and Ba,
+J.
+2014.
+Adam:
+A method for
+stochastic
+optimization.
+CoRR
+abs/1412.6980.
+[Kolda and Bader 2009]
+Kolda,
+T.
+G.,
+and Bader,
+B.
+W.
+2009.
+Tensor decompositions and applications.
+SIAM RE-
+VIEW 51(3):455–500.
+[Levy and Goldberg 2014]
+Levy, O., and Goldberg, Y.
+2014.
+Neural word embedding as implicit matrix factorization.
+In
+Proceedings of the 27th International Conference on Neu-
+ral Information Processing Systems,
+NIPS’14,
+2177–2185.
+Cambridge, MA, USA: MIT Press.
+[Lim 2005]
+Lim,
+L.-H.
+2005.
+Optimal
+solutions to non-
+negative parafac/multilinear nmf always exist.
+[Maas et al. 2011]
+Maas,
+A.
+L.;
+Daly,
+R.
+E.;
+Pham,
+P.
+T.;
+Huang, D.; Ng, A. Y.; and Potts, C.
+2011.
+Learning word
+vectors for sentiment analysis.
+In Proceedings of the 49th
+Annual Meeting of the Association for Computational Lin-
+guistics: Human Language Technologies - Volume 1,
+HLT
+’11, 142–150. Stroudsburg, PA, USA: Association for Com-
+putational Linguistics.
+[Maehara, Hayashi, and Kawarabayashi 2016]
+Maehara,
+T.;
+Hayashi,
+K.;
+and Kawarabayashi,
+K.-i.
+2016.
+Expected
+tensor decomposition with stochastic gradient descent.
+In
+Proceedings of the Thirtieth AAAI Conference on Artificial
+Intelligence, AAAI’16, 1919–1925.
+AAAI Press.
+[Mikolov et al. 2013]
+Mikolov,
+T.;
+Sutskever,
+I.;
+Chen,
+K.;
+Corrado,
+G.;
+and Dean,
+J.
+2013.
+Distributed representa-
+tions of words and phrases and their compositionality. CoRR
+abs/1310.4546.
+[Mitchell and Lapata 2010]
+Mitchell,
+J.,
+and
+Lapata,
+M.
+2010.
+Composition in Distributional Models of Semantics.
+Cognitive Science 34(8):1388–1429.
+[Mu, Hsu, and Goldfarb 2015]
+Mu,
+C.;
+Hsu,
+D.;
+and Gold-
+farb,
+D.
+2015.
+Successive rank-one approximations for
+nearly orthogonally decomposable symmetric tensors. SIAM
+Journal
+on Matrix Analysis and Applications 36(4):1638–
+1659.
+[Murphy, Talukdar, and Mitchell 2012]
+Murphy,
+B.;
+Taluk-
+dar,
+P.
+P.;
+and Mitchell,
+T.
+M.
+2012.
+Learning effective
+and interpretable semantic models using non-negative sparse
+embedding.
+In Kay,
+M.,
+and Boitet,
+C.,
+eds.,
+COLING,
+1933–1950.
+Indian Institute of Technology Bombay.
+[Naskovska and Haardt 2016]
+Naskovska,
+K.,
+and Haardt,
+M.
+2016.
+Extension of the semi-algebraic framework for
+approximate CP decompositions via simultaneous matrix di-
+agonalization to the efficient calculation of coupled CP de-
+compositions. In 50th Asilomar Conference on Signals, Sys-
+tems and Computers, ACSSC 2016, Pacific Grove, CA, USA,
+November 6-9, 2016, 1728–1732.
+[Oseledets 2011]
+Oseledets, I. V.
+2011.
+Tensor-train decom-
+position.
+SIAM J. Sci. Comput. 33(5):2295–2317.
+[Pennington, Socher, and Manning 2014]
+Pennington,
+J.;
+Socher,
+R.;
+and Manning,
+C.
+D.
+2014.
+Glove:
+Global
+vectors for word representation.
+In Empirical Methods in
+Natural Language Processing (EMNLP), 1532–1543.
+[Radinsky et al. 2011]
+Radinsky,
+K.;
+Agichtein,
+E.;
+Gabrilovich,
+E.;
+and Markovitch,
+S.
+2011.
+A word at
+a time:
+Computing word relatedness
+using temporal
+se-
+mantic analysis.
+In Proceedings of
+the 20th International
+Conference on World Wide Web, WWW ’11, 337–346.
+New
+York, NY, USA: ACM.
+[Salle, Villavicencio, and Idiart 2016]
+Salle,
+A.;
+Villavicen-
+cio,
+A.;
+and Idiart,
+M.
+2016.
+Matrix factorization using
+window sampling and negative sampling for improved word
+representations.
+In Proceedings of the 54th Annual Meet-
+ing of the Association for Computational Linguistics,
+ACL
+2016, August 7-12, 2016, Berlin, Germany, Volume 2: Short
+Papers.
+[Schnabel et al. 2015]
+Schnabel,
+T.;
+Labutov,
+I.;
+Mimno,
+D. M.; and Joachims, T. 2015. Evaluation methods for unsu-
+pervised word embeddings.
+In Mrquez, L.; Callison-Burch,
+C.; Su,
+J.; Pighin,
+D.; and Marton,
+Y.,
+eds.,
+EMNLP,
+298–
+307.
+The Association for Computational Linguistics.
+[Sharan and Valiant 2017]
+Sharan, V., and Valiant, G.
+2017.
+Orthogonalized als:
+A theoretically principled tensor
+de-
+composition algorithm for
+practical
+use.
+arXiv preprint
+arXiv:1703.01804.
+[Van de Cruys, Poibeau, and Korhonen 2013]
+Van de Cruys,
+T.;
+Poibeau,
+T.;
+and Korhonen,
+A.
+2013.
+A tensor-based
+factorization model of semantic compositionality.
+In Proc.
+of NAACL-HLT, 1142–1151.
+[Van de Cruys 2009]
+Van de Cruys, T. 2009. A non-negative
+tensor factorization model for selectional preference induc-
+tion.
+In Proceedings of the Workshop on Geometrical Mod-
+els
+of
+Natural
+Language Semantics,
+GEMS ’09,
+83–90.
+Stroudsburg, PA, USA: Association for Computational Lin-
+guistics.
+[Van de Cruys 2011]
+Van de Cruys,
+T.
+2011.
+Two multi-
+variate generalizations of pointwise mutual information.
+In
+Proceedings of
+the Workshop on Distributional
+Semantics
+and Compositionality, DiSCo ’11, 16–20.
+Stroudsburg, PA,
+USA: Association for Computational Linguistics.
+[Wang and Qi 2007]
+Wang,
+Y.,
+and Qi,
+L.
+2007.
+On the
+successive supersymmetric rank-1 decomposition of higher-
+order supersymmetric tensors.
+Numerical Lin. Alg. with Ap-
+plic. 14(6):503–519.

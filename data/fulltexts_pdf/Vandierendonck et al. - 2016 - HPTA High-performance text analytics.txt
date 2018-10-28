@@ -1,0 +1,2915 @@
+﻿2016 IEEE International Conference on Big Data (Big Data)
+978-1-4673-9005-7/16/$31.00 ©2016 IEEE
+416
+HPTA: High-Performance Text Analytics
+Hans Vandierendonck,
+Karen Murphy,
+Mahwish Arif,
+Dimitrios S.
+Nikolopoulos
+Queen’s University Belfast
+Email:
+{
+h.vandierendonck,k.l.murphy,m.arif,d.nikolopoulos
+}
+@qub.ac.uk
+Abstract—One of
+the main targets
+of
+data analytics
+is
+un-
+structured data,
+which primarily involves
+textual
+data.
+High-
+performance processing of textual data is non-trivial. We present
+the
+HPTA library
+for
+high-performance
+text
+analytics.
+The
+library helps
+programmers
+to map textual
+data to a dense
+numeric representation,
+which can be handled more efﬁciently.
+HPTA encapsulates three performance optimizations: (i) efﬁcient
+memory management for textual
+data,
+(ii) parallel
+computation
+on associative data structures that map text to values and (iii) op-
+timization of the type of associative data structure depending on
+the program context.
+We demonstrate that
+HPTA outperforms
+popular frameworks for text analytics such as scikit-learn.
+Index Terms—data analytics;
+performance optimization;
+text
+analytics;
+I.
+I
+NTRODUCTION
+Text analytics are an important class of data analytics,
+dif-
+ferentiated from analytics in general by extracting information
+from textual
+data.
+While exact
+data is hard to obtain,
+it
+is
+claimed that 80% of all big data is unstructured, hence textual
+in nature [1].
+Analyzing data at high speed is immensely important given
+that
+data volumes
+are consistently growing.
+The dominant
+approach to scaling up analytics capabilities consists of using
+increasing numbers of servers. Single-thread performance, i.e.,
+the time it
+takes an individual
+server
+to process its part
+of
+the work,
+is
+generally neglected [2].
+This
+approach is
+not
+scalable in the long term due to operational costs of the high
+number of components involved and the diminishing returns
+that result from scaling out. In contrast, improving the single-
+thread performance of analytics can reduce operational
+costs
+even in the face of growing data volumes.
+The data analytics literature generally pays little attention
+to single-thread performance.
+There is a good motivation for
+this:
+single-thread code is typically written by data analysts
+and it is not desirable to require high-performance computing
+expertise from data analysts.
+In contrast,
+performance-critical
+code is encapsulated in libraries and frameworks,
+although
+the performance of these is under scrutiny [2]–[6].
+However,
+to the best of our knowledge,
+there exist no frameworks,
+nor
+good practice,
+for manipulating textual data at high speed for
+general
+algorithms.
+The goal
+of this work is to ﬁll
+this gap
+in the literature and provide guidelines for
+achieving high-
+performance text
+analytics.
+Moreover,
+we present
+HPTA,
+a
+library that implements these guidelines in a reusable way.
+This
+paper
+presents
+three
+guidelines
+towards
+high-
+performance text analytics:
+Memory management: text
+analytics will
+deal
+with a large
+number
+of
+text
+fragments.
+These fragments are often short,
+e.g.,
+words in a natural
+language.
+Traditional
+memory man-
+agement,
+involving independent
+allocation of each fragment,
+is not scalable due to the performance overhead of ﬁne-grain
+dynamic memory management
+and the resulting fragmenta-
+tion.
+Nonetheless,
+popular
+systems such as Hadoop [7]
+and
+Spark [8] follow this approach.
+We investigate techniques to
+circumvent this problem and experimentally characterize their
+effectiveness.
+Parallelism and associative data structures: associative data
+structures track the computed values for each text fragment. It
+is well known that the choice of associative data structure, e.g.,
+hash table versus map,
+affects performance.
+Data analytics
+frameworks have settled on lists of key-value pairs as the main
+associative data structure [7], [9]. Few would argue that this is
+optimal
+in single-threaded applications,
+yet
+it
+seems to work
+well
+for parallel
+execution,
+in particular for data partitioning
+and reduction. In contrast, frameworks that use more complex
+data structures are restricted to single-threaded execution [10],
+[11].
+We argue that
+parallel
+execution is possible using any
+associative container and we present methods for partitioning
+and reduction.
+Experimental
+validation shows that
+the use of
+appropriate data structures outperforms the list-based repre-
+sentation.
+Moving data is faster: We demonstrate that different phases
+in text analytics applications utilize the data structures in dif-
+ferent ways.
+As such,
+phases require different data structures,
+which leads to the counter-intuitive result that moving the data
+to different
+data structures
+during the computation reduces
+execution time,
+even though data volumes
+are large.
+Note
+however that we re-organize data within a node.
+The remainder of this paper is organized as follows.
+Sec-
+tion II discusses related work on text
+analytics and relevant
+high-performance computing techniques. Section III describes
+the computation of term frequency-inverse document frequency
+(TF-IDF)
+as
+a
+guiding example.
+Section IV presents
+our
+performance optimization guidelines and their implementation
+in the HPTA library.
+Section IV-C shows the experimental
+evaluation of the guidelines.
+Section VII concludes the paper.
+II.
+R
+ELATED
+W
+ORK
+Research into high-performance text analytics often involves
+approximate algorithms and acceleration using Graphics Pro-
+cessing Units (GPUs).
+The Term Frequency-Inverse Corpus Frequency (TF-ICF)
+algorithm [14] approximates the IDF scores using document
+relevance
+metrics
+that
+are
+pre-calculated over
+a
+reference
+corpus.
+The assumption is that
+the document
+frequencies are
+417
+constant
+for
+a large enough corpus.
+TF-ICF scores can be
+calculated in a single pass,
+as opposed for
+two passes for
+TF-IDF.
+While this paper demonstrates our techniques on the
+TF-IDF algorithm,
+they are equally applicable to TF-ICF.
+Erra et
+al
+[15]
+present
+a GPU implementation of
+an ap-
+proximate streaming version of TF-IDF. The TF-IDF metric is
+approximated by counting occurrences of a pre-set number of
+terms only in order to meet the memory limitations of GPUs.
+Our approach in contrast produces exact counts.
+Zhang et al [16], [17] study document clustering on clusters
+of
+computers equipped with GPUs.
+They pre-compute TF-
+ICF scores [14].
+on the CPU and accelerate a ﬂock clustering
+algorithm on the GPU. They demonstrate a 10x speedup when
+using 16 high-end NVIDIA GPUs compared to executing on
+a single desktop.
+Szaszy et
+al
+accelerate document
+stream clustering where
+they assume that
+a stream of documents needs to be contin-
+uously clustered [18].
+They use sparse matrix-vector multiply
+(SpMV) techniques to compute the similarity between the TF-
+IDF of
+a document
+and the reference clusters.
+The SpMV
+calculation is performed on the GPU.
+They do not
+study the
+issue of text parsing and assume that a document is converted
+to TF-IDF form prior to entering their system.
+Each of the above works investigate acceleration of the nu-
+merical
+aspect
+of document
+clustering algorithms.
+Numerical
+computations are however
+well
+understood.
+In contrast,
+this
+work focuses on the text processing aspect of text analytics.
+An important
+component
+of
+this work is concerned with
+parallel operation on associative data structures. Several works
+have investigated scalable parallel
+data structures.
+The Stan-
+dard Template Adaptive Parallel
+Library (STAPL) [19],
+[20]
+distributes
+data
+structures
+across
+a
+cluster
+by partitioning
+the key space.
+Accesses to data structures are transparently
+forwarded to the appropriate machine.
+The Parallel
+Standard
+Template Library (PSTL) [21] is a similar,
+older project.
+The
+parallel-STL approach has limited scalability in comparison
+to this work as it aims to parallelize individual operations on
+associative data structures. This work, in contrast, is concerned
+only with parallel iteration.
+PDQCollections [22] processes associative data structures in
+a map-reduce-like model.
+The authors consider functions on
+the data such that
+the data may be split
+(e.g.,
+by key range),
+operated on independently and then merged as in a reduction
+operation. PDQCollections is more akin to the approach taken
+in this work due to the reduction of associative data sets.
+An
+important
+distinction is that
+our approach is not
+speciﬁc nor
+limited to map-reduce programs.
+III.
+T
+EXT
+A
+NALYTICS
+: TF-IDF C
+ASE
+S
+TUDY
+To simplify the exposition,
+we will
+study term frequency-
+inverse
+document
+frequency
+(TF-IDF)
+[23]
+as
+a
+guiding
+example of
+text
+analytics.
+While the TF-IDF operation is
+simple enough to understand in detail,
+it
+exposes important
+reoccurring properties of text analytics operations.
+TF-IDF assigns a weight
+to each term-document
+combina-
+tion.
+The weights reﬂect
+the importance of
+the term within
+1 procedure TFIDF(documents[0..n−1]) {
+2
+//
+term frequency per document
+3
+associative container( string −> int) term freq[n];
+4
+//
+document freq. and ID
+5
+associative container( string −> (int,int ))
+doc freq;
+6
+parallel
+for( i
+:
+0.. n−1) {
+7
+//
+Calculate term frequency in i −th document
+8
+parallel
+for(term :
+documents[i])
+9
+modify(term freq[i ], term,+,1)
+10
+//
+Update document frequencies for term in i−th document
+11
+//
+Increment counter for each term ignoring term frequency
+12
+//
+Value of
+ID is
+irrelevant
+at
+this time
+13
+merge(doc freq,term freq[i],
+14
+f =(k ,( dﬂ , idl
+),
+tfr )−>(k,(dﬂ+1, idl
+)),
+15
+g=(k, tfr )−>(k,(1,0)))
+16
+}
+17
+//
+Assign unique IDs to each term. The terms can be optionally
+18
+//
+sorted alphabetically .
+Sorting here affects the order of
+19
+//
+terms in the TF−IDF matrix and output.
+20
+//
+Store IDs in second element of value pair in doc freq.
+21
+sort−by−key(doc freq)
+22
+ID = 0;
+23
+parallel
+for(term :
+doc freq) {
+24
+modify(doc freq,term,f=(( tf ,old ID),ID)−>(tf,ID))
+25
+ID += 1
+26
+}
+27
+//
+Construct TF−IDF (sparse) matrix
+28
+parallel
+for( i
+:
+0.. n−1) {
+29
+for (( term, tf )
+:
+term freq[i ])
+{
+30
+//
+Calculate TF−IDF score for term in i−th document
+31
+( df , id )
+:= lookup(doc freq,term)
+32
+tﬁdf
+[ i , id ]
+:= tf
+∗ log (( df +1)/(n+1))
+33
+}
+34
+}
+35
+return tﬁdf
+36 }
+Fig.
+1.
+Code
+structure
+for
+term frequency–inverse
+document
+frequency
+calculation for
+a collection of
+documents.
+The operations
+on associative
+containers are deﬁned in Table I.
+the document
+and across the set
+of documents.
+Fig.
+1 shows
+a pseudo-code for TF-IDF.
+This code uses a number of asso-
+ciative containers that
+store information on each encountered
+term.
+These operations are described in Table I.
+Firstly,
+the
+code
+uses
+an associative
+container
+per
+input
+ﬁle
+to store
+the term frequency within that
+document.
+I.e.,
+the container
+associates
+every term (key)
+to its
+frequency of
+occurrence
+(value).
+Secondly,
+a single associative container
+is
+used to
+calculate the document
+frequency across the collection.
+This
+container stores two integer values for each term encountered
+in each of
+the documents:
+the number
+of
+documents where
+the term occurs (document frequency) and a unique sequence
+number that is determined only when all ﬁles have been read.
+The latter
+number
+is
+important
+for
+sorting the output
+data
+alphabetically.
+The algorithm has three distinct
+phases.
+In the ﬁrst
+phase
+(term count
+phase),
+all
+documents
+are
+read and the
+per-
+document
+term frequency is determined.
+Moreover,
+all
+terms
+from all documents are added to the document frequency con-
+tainer and the document frequency is updated. The containers
+are mostly updated during the term count
+phase.
+The access
+pattern consists thus of random accesses.
+The second phase of the algorithm assigns a unique ID to
+418
+TABLE I
+C
+OMMON OPERATIONS ON ASSOCIATIVE CONTAINERS
+.
+Operation
+Description
+insert(c, k, v)
+insert value v for key k in collection c
+modify(c, k, f, v)
+modify collection c to store value v
+0
+for key k as
+v
+0
+= f(v
+0
+, v) or insert v if key k absent
+lookup(c, k)
+lookup what value is stored for key k in collection
+c
+iterate-seq(c, k, v)
+retrieve the next stored key-value pair
+iterate-par(c, k, v)
+as iterate-seq(k, v) but
+can be used as iterator in
+a parallel for-loop
+merge(c
+l
+, c
+r
+, f, g)
+merge collection c
+r
+into c
+l
+by storing the value
+f (v
+l
+, v
+r
+) if (k, v
+l
+) ∈ c
+l
+and (k, v
+r
+) ∈ c
+r
+for a
+key k, or by inserting (k, g(v
+r
+)) for (k, v
+r
+) ∈ c
+r
+.
+sort-by-key(c)
+sort all entries of collection c by key
+sort-by-value(c)
+sort all entries of collection c by value
+each term.
+This is helpful to build the TF-IDF matrix,
+i.e.,
+to
+index it
+by numeric ID rather than by string.
+Assigning IDs
+is however also critical
+in order to produce an alphabetically
+sorted output.
+The third phase computes the TF-IDF scores and stores
+them in a matrix.
+Although the pseudo-code depicts a dense
+matrix,
+a sparse matrix is used as non-stop-words typically
+occur in only a fraction of the documents.
+The matrix is built
+up by rows,
+where rows can be easily constructed in parallel.
+Each row corresponds to a document
+and is constructed by
+iterating over all elements of the corresponding per-document
+term frequency container. Each term in this container is looked
+up in the term frequency container to obtain the corresponding
+document frequency.
+IV.
+O
+PTIMIZATION OF
+T
+EXT
+A
+NALYTICS
+We have identiﬁed optimization opportunities that
+are ap-
+plicable to text analytics operations in general, and to TF/IDF
+speciﬁcally.
+We will experimentally demonstrate their impact
+in Section IV-C.
+A.
+Memory Management
+Text
+analytics operate on a large collection of
+text
+frag-
+ments.
+A common goal is to map these text fragments into a
+numeric multi-dimensional space [23],
+but until that mapping
+is achieved,
+text
+analytics operations process individual
+text
+fragments.
+The text fragments can be created and represented
+in multiple ways:
+Text fragments are individually allocated as they are read
+in or discovered. Memory allocators typically round allocated
+memory sizes
+up to frequently occurring sizes.
+This
+will
+incur signiﬁcant internal fragmentation as text fragments have
+highly varying lengths.
+Alternatively,
+systems using garbage
+collection will
+incur signiﬁcant
+garbage collection overheads
+when all text fragments are separately allocated.
+The garbage
+collector must analyze these objects upon each collection pass,
+adding to the overhead of garbage collection [28].
+However,
+it
+can be expected that
+large groups of
+text
+fragments have
+equal life-times in text analytics applications.
+The input
+ﬁles
+are retained integrally.
+A fast
+solution
+results
+when reading in input
+ﬁles
+integrally into working
+TABLE II
+T
+IME COMPLEXITY OF OPERATIONS ON ASSOCIATIVE CONTAINERS
+ASSUMING THE CONTAINER HOLDS
+n
+ELEMENTS
+.
+Operation
+Time Complexity
+List
+Sorted List
+Hash Table
+Map
+insert(k, v)
+O(n)
+O(n)
+O(1)
+O(log n)
+modify(k, f, v)
+O(n)
+O(log n)
+1
+O(1)
+O(log n)
+lookup(k)
+O(n)
+O(log n)
+O(1)
+O(log n)
+iterate-seq(k, v)
+O(1)
+O(1)
+O(1)
+O(1)
+iterate-par(k, v)
+O(1)
+O(1)
+n/a
+n/a
+merge(c
+l
+, c
+r
+, f, g)
+O(n
+l
+n
+r
+)
+O(n
+l
++ n
+r
+)
+O(n
+r
+)
+O(n
+l
++ n
+r
+)
+2
+sort-by-key(c)
+O(n log n)
+O(1)
+n/a
+O(1)
+sort-by-value(c)
+O(n log n)
+O(n log n)
+n/a
+n/a
+memory [26], e.g., using mmap on UNIX-based systems. This
+avoids separate memory allocations for each fragment
+in the
+input.
+However,
+it
+will
+result
+in large memory overhead and
+bad memory locality.
+In particular,
+when terms repeat
+many
+times in the same document,
+each repetition of the word will
+be held in memory while a bag-of-words model requires that
+only one copy of each word is stored.
+This is the case,
+e.g.,
+in the TF-IDF example. More importantly, retaining full input
+ﬁles requires that sufﬁcient main memory is available.
+Region-based memory allocators aim to maximize perfor-
+mance by eradicating internal fragmentation and by efﬁciently
+de-allocating a
+large
+number
+of
+items
+in bulk [28]–[30].
+Region-based memory allocation is effective when individ-
+ually allocated items
+go out
+of
+scope
+at
+the
+same
+time,
+implying that their memory can be reclaimed at the same time.
+Region-based memory management is more sophisticated than
+retaining all
+input
+ﬁles
+in memory,
+but
+results
+in similar
+performance beneﬁts.
+Region-based memory management
+is generally provided
+using application-speciﬁc code [29],
+[30].
+Language support
+has been proposed [31],
+[32] but
+is not
+widely available.
+As
+such,
+we have selected a library implementation.
+B.
+Reference Associative Containers
+A myriad associative containers have been proposed in the
+literature,
+each making distinct
+trade-offs in the time com-
+plexity of various operations,
+in average-case vs.
+worst-case
+time complexity,
+in memory efﬁciency,
+in raw performance,
+etc.
+The goal of this work is not to identify the best possible
+container for text analytics or for TF-IDF. Rather, we aim (i) to
+demonstrate that
+text
+analytics are sensitive to the properties
+of the containers, (ii) identify the opportunity for moving data
+from one container type to another during an algorithm and
+(iii) to set out guidelines how to select container types.
+We consider four different classes of associative containers:
+lists of key-value pairs,
+lists of key-value pairs sorted by key,
+hash tables
+and hash maps.
+These are different
+enough to
+warrant their study. Table II shows the average-case time com-
+plexity of the common operations for these 4 data structures.
+1
+O(n) for new keys due to moving elements in the array.
+2
+Assumes usage of the C++’11 insertion hint indicating that the element is
+inserted in the immediate neighborhood of an iterator. The iterator is assumed
+to be the position where the previous element was inserted.
+419
+TABLE III
+C
+ONVERSION COST OF ASSOCIATIVE CONTAINERS HOLDING
+n
+ELEMENTS
+.
+Source
+Target Container
+List
+Sorted List
+Hash Table
+Map
+List
+–
+O(n log n)
+O(n)
+O(n log n)
+Sorted List
+O(1)
+–
+O(n)
+O(n)
+3
+Hash Table
+O(n)
+O(n log n)
+–
+O(n log n)
+Map
+O(n)
+O(n)
+O(n)
+–
+TABLE IV
+C
+OST OF MERGING ASSOCIATIVE CONTAINERS OF DIFFERENT TYPES
+.
+Right (m)
+Left Argument (n)
+List
+Sorted List
+Hash Table
+Map
+List
+O(mn)
+O(mn)
+O(m)
+O(m log n)
+Sorted List
+O(mn)
+O(m + n)
+O(m)
+O(m)
+Hash Table
+O(mn)
+O(mn)
+O(m)
+O(m log n)
+Map
+O(mn)
+O(m + n)
+O(m)
+O(m)
+Time complexity is a good predictor of execution time given
+that
+analytics typically concerns large data sets.
+For
+sorted
+lists of key-value pairs we assume that
+value lookup uses a
+binary search algorithm [33]. The time complexity of the hash
+table is based on the unordered map described in the C++
+standard [24], while the map is based on the C++ map, which
+always stores its elements in sorted order.
+Table II shows that
+a hash table provides best
+time com-
+plexity on a range of operations.
+However,
+it
+is not
+possible
+to sort
+the contents of a hash table.
+In order to do that,
+it
+is
+necessary to move the data to a different
+container,
+either a
+list
+of key-value pairs or a map.
+However,
+once the data has
+been moved over,
+all operations have higher time complexity.
+It is now more expensive to access the data.
+Hence,
+a careful
+trade-off is necessary to decide on conversions.
+For completeness,
+we show the time complexity of conver-
+sion in Table III,
+and of merge operations in Table IV.
+C.
+Container Selection
+As indicated above,
+containers must
+be selected with care,
+but
+when done right,
+there is opportunity for switching con-
+tainers.
+In this Section we outline our methodology to select
+containers. Referring back to the TF-IDF algorithm (Figure 1),
+we observe that
+each container
+is
+used in different
+ways
+throughout the algorithm. The per-document term catalogs are
+used in line 15 only with the modify operation.
+At
+lines 9
+and 29,
+the catalogs
+are traversed sequentially,
+either
+in a
+merge operation or using iterate-seq during the construction
+of the TF-IDF matrix.
+The modify operation is clearly most
+efﬁcient on a hash table (Table II).
+Iteration over all elements
+has
+O
+(1)
+time complexity for lists and the hash table. Detailed
+measurement
+has
+shown however
+that
+iteration through an
+array-based list
+is more efﬁcient
+than through a hash table.
+As such,
+we consider that
+there is opportunity to change the
+container type for the term catalogs prior to line 15.
+Similarly, we analyze the usage of the document frequency
+container.
+This container is updated using merge at
+line 15.
+3
+Assumes
+usage
+again of
+the
+C++’11 insertion hint.
+If
+absent,
+time
+complexity is O(n log n).
+The merge operation is most efﬁcient when the left-hand-side
+argument (doc_freq) is a hash table (Table IV). In fact, the
+hash table is the only data structure where the time complexity
+of merge is independent of the size of doc_freq. At line 21,
+however,
+the document
+frequency container
+must
+be sorted
+by key,
+which is impossible with a hash table.
+A change in
+container is thus necessary due to the functionality. At line 23,
+the document
+frequency container is traversed,
+preferably in
+parallel. This is most efﬁcient with a list-based data structure.
+The subsequent modiﬁcation is, however,
+O
+(1)
+in all cases as
+modify can be performed through a pointer into the container.
+Finally,
+at
+line 31,
+a lookup of
+the document
+frequency is
+performed, which is again more efﬁcient with a hash table. We
+have thus identiﬁed four code regions accessing the document
+frequency container. Each code region has a distinct preference
+for the container type,
+which can be distinct from that of the
+preceding code region.
+Note
+that
+data
+structure
+conversions
+are
+a
+non-obvious
+choice when working with potentially large data sets.
+In fact,
+the leading data analytics platforms have designed their par-
+allel
+execution exclusively around lists:
+Hadoop [7] operates
+exclusively on key-value lists while Spark [8]
+is organized
+around resilient distributed data sets (RDDs),
+which,
+like our
+key-value lists,
+are essentially arrays.
+D.
+Parallelization
+Parallelism occurs
+naturally in data analytics
+due to the
+possibility to traverse data sets in parallel. While it is clear that
+an array-based list can be traversed in parallel, so too can any
+iterable collection.
+In the worst
+case,
+parallel
+traversal
+may
+require additional
+computation in order
+to get
+each parallel
+thread started. Concretely, for data structures providing a C++
+random access iterator, such as arrays, we divide the iteration
+range among the threads.
+Each thread can jump directly to
+the appropriate position due to the random access nature of
+the iterator.
+For
+data structures
+that
+provide a C++ input
+iterator,
+we can divide the iteration range similarly on the
+basis
+of
+the number
+of
+elements
+to iterate over.
+However,
+ﬁnding the appropriate starting point
+requires repeated incre-
+ments of
+the iterator
+to traverse from the beginning of
+the
+collection to the desired point.
+This can be done,
+e.g.,
+using
+std::advance() in C++, which is a linear-time operation
+for input iterators.
+Apart
+from traversing data sets in parallel,
+we also need
+to construct
+associative data structures in parallel.
+One ap-
+proach is to use concurrent
+or parallel
+data structures where
+multiple threads
+can insert
+or
+modify elements
+[20],
+[21].
+This approach potentially has limited scalability due to the
+need to synchronize threads when accessing the shared data
+structure.
+The approach chosen in this work is to construct
+private data structures within each thread and to merge these
+data structures in pairs as threads complete.
+We demonstrate
+that this approach results in a high degree of scalability.
+If we apply the above obersvations to TF-IDF,
+we observe
+that all of the loops in Fig. 1 can be executed in parallel. Some
+loops are trivial to parallelize, while others require more work.
+420
+TABLE V
+C
+HARACTERIZATION OF INPUT DATA SETS
+.
+Data set
+Description
+Size
+Files
+Unique
+words
+Various
+“Classic3” and “Classic4” data sets (CISI,
+CRAN,
+MED and ACM) and Reuters press
+releases (Reuters-21578)
+62.8 MB
+23 K
+192 K
+NSF Abstracts
+NSF research award abstracts 1990–2003 [34]
+311 MB
+101 K
+268 K
+Gutenberg
+A selection of e-books from Project Gutenberg,
+covering multiple languages
+20.00 GB
+52,361
+259 M
+Artiﬁcial
+Phoenix++ [35] word count data set. 4th and 5th ﬁle repeat 3rd ﬁle 4 times, respectively
+8 times
+1.33 GB
+5
+144 K
+For instance, the loop at Line 8 can be parallelized by dividing
+the document in large chunks,
+split at a word boundary [26].
+Distinct
+associative containers are computed for each chunk.
+These are reduced in pairs using a tree reduction at
+the end
+of the loop. Moreover, the loop at Line 23 can be parallelized
+using a preﬁx sum [27].
+V.
+HPTA L
+IBRARY
+The
+key component
+of
+HPTA is
+a
+word bank,
+a
+data
+structure that
+implements region-based memory allocation of
+strings.
+The word bank consists of a list
+of large chunks of
+memory that are allocated using the system-supplied memory
+allocator. Words that are added to the word bank are allocated
+at the end of the last chunk using bump-pointer allocation [25].
+When all
+memory in the last
+chunk has been used,
+or
+the
+next
+string is too long to ﬁt
+in the chunk,
+a new chunk is
+appended to the list.
+The chunk size can be tuned by the
+programmer.
+In general,
+using larger
+chunk sizes results in
+less system overhead.
+HPTA furthermore couples each associative data structure
+with a word bank.
+As such,
+the associative data structure and
+its word bank are created and destroyed together.
+The main
+advantage of this approach is that
+it
+is safe to store pointers
+to strings in the associative data structure where the pointers
+point into the word bank.
+HPTA furthermore
+implements
+auxiliary data
+structures
+such as sparse and dense vectors and matrices and methods
+for reading and writing the WEKA ﬁle format [11].
+VI.
+E
+XPERIMENTAL
+E
+VALUATION
+We analyze the proposed optimizations for
+text
+analytics
+experimentally on a quad-socket 2.6GHz Intel Xeon E7-4860
+v2,
+totaling 48 threads.
+The operating system is CentOS 6.5
+with the Intel C compiler version 14.0.1. We have implemented
+HPTA in C++ and parallelized key operations with Cilk [36],
+using Intel
+Cilkplus.
+Reported results are averaged over
+10
+executions.
+We use 4 public data sets with varying sizes in
+the evaluation (Table V).
+The “artiﬁcial” data set
+has
+few
+documents. As such, its execution time is dominated by word
+frequency computation.
+We
+assume
+that
+documents
+are
+encoded in the
+UTF-8
+format
+[37] with unique representations for all
+strings.
+I.e.,
+a
+choice is made between “
+´
+a” and the diacritic “a’ ” to represent
+the accented character a. Under this assumption lexicographic
+ordering of
+UTF-8 strings can be determined by comparing
+character by character without decoding the content.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+ 
+
+
+   
+
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+   
+  
+
+
+
+   
+
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+
+
+   
+
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+  
+ 
+  
+
+
+   
+
+ 
+
+Fig.
+2.
+Parallel
+speedup dependent
+on the memory management
+policy.
+Speedups are normalized against region-based memory management.
+The evaluation below focuses on the TF-IDF algorithm for
+words.
+We have also evaluated the effectiveness of the opti-
+mizations when calculating TF-IDF for 3-grams.
+The results
+are qualitatively the same. As such we present results only for
+single-word terms (1-grams).
+A.
+Memory Management
+The memory management
+policy has an important
+impact
+on the performance of
+text
+analytics.
+Fig.
+2 shows parallel
+speedup using the
+system memory allocator,
+region-based
+memory management and retaining all input ﬁles in-memory.
+All
+associative data structures are hash tables in this experi-
+ment.
+Note that parallel speedups range from 4
+×
+to 24
+×
+and
+correlate strongly to the data set size.
+The system allocator
+has
+the lowest
+performance across
+the board.
+The performance of
+per-word memory allocation
+could be improved on by using NUMA-aware memory allo-
+cators [38], However, NUMA-awareness is not the only issue.
+Analyzing the single-thread execution time demonstrates that
+per-word memory allocation also incurs overhead due to extra
+work performed.
+Phoenix [26],
+[35]
+retains all
+input
+ﬁles in-memory.
+This
+avoids memory allocation as each word can point
+directly to
+the input
+ﬁle buffer.
+This technique is fastest
+for the smaller
+input
+sets.
+However,
+it
+has poor
+parallel
+scalability due to
+421
+%
+&
+'
+(
+)
+*
++
+,
+-
+  
+  
+ 
+  
+  
+ 
+  
+  
+ 
+  
+  
+ 
+
+
+ 
+
+
+  
+   
+ 
+"
+
+Fig. 3.
+Execution time when storing the term frequency data in a hash table,
+a key-value list or a map,
+normalized to the hash table case.
+%!%
+%!'
+%!(
+%!)
+%!*
+&!%
+&!'
+&!(
+&!)
+ 
+
+   
+
+   
+
+   
+
+ 
+
+
+ 
+
+
+  
+   
+ 
+"
+
+Fig.
+4.
+Execution time when retaining the term frequency data in a hash
+table,
+or when converting it
+to a key-value list
+or a map,
+normalized to the
+hash table case.
+Document frequencies are stored in a hash table.
+increased working set
+size (Fig.
+2).
+We consider
+only the
+region-based allocator in the remainder of this paper.
+B.
+Exploration of Container Types
+We ﬁrst analyze performance assuming only one data struc-
+ture is used throughout
+the computation.
+Fig.
+3 shows the
+single-threaded execution time normalized to using a hash
+table.
+We omit
+the execution times for
+the sorting stage as
+this is marginal or not applicable in the case of the hash table.
+Using key-value lists throughout the computation performs
+up to 20x slower than hash tables for the NSF Abstracts data
+set. This is interesting to note as the key-value list abstraction
+is fundamental to the operation of Hadoop [7] and lies at the
+heart of Spark’s RDDs [8].
+The main performance bottleneck in our list-based imple-
+mentation is the merge operation,
+which has time complexity
+O
+(
+m
++
+n
+)
+to merge collections of
+n
+and
+m
+elements.
+Note
+that merge is called once per document and that the size of the
+target container is continuously growing throughout execution.
+Assume for
+the sake of
+argument
+that
+d
+documents contain
+m
+unique words
+each,
+then the time complexity of
+merge
+is
+O
+(
+d
+2
+m
+)
+.
+A Hadoop-like sorting solution could perform
+better with a time complexity of
+O
+(
+dm
+log
+dm
+)
+,
+assuming a
+list
+of
+dm
+words is ﬁrst
+constructed by concatenation and
+subsequently sorted.
+C.
+Unsorted Output
+We
+will
+ﬁrst
+consider
+the
+case
+where
+the
+corpus
+need
+not
+be sorted alphabetically.
+In this
+case,
+the sorting step
+can be omitted and document
+frequencies can be stored in
+# #
+# &
+$ #
+$ &
+% #
+% &
+! ' ' 
+! '' 
+''
+'' 
+! ' ' 
+! '' 
+''
+'' 
+! ' ' 
+! '' 
+''
+'' 
+! ' ' 
+! '' 
+''
+'' 
+
+
+ 
+
+
+  
+   
+ 
+"
+
+
+Fig.
+5.
+Execution times.
+Format:
+sort+iterate+lookup,
+where sort
+is
+the
+container used to sort words, iterate is the container type iterated during term
+catalog and lookup is the container type used for document frequency lookup.
+The remaining operations are performed on hash tables.
+a
+hash table
+throughout
+the
+algorithm.
+We
+have
+however
+observed that
+execution time can be reduced by converting
+the term frequency container to a sorted list. Term frequencies
+are stored in a hash table during construction (Lines 8– 9,
+Fig.
+1) and converted to a list prior to Line 13.
+Fig.
+4 shows
+performance when using a hash table,
+a key-value list
+or
+a
+map for the merge and iterate-seq operations.
+Converting the
+data to key-value list
+is worthwhile as it
+is much faster
+to
+iterate through a list
+vs.
+a hash table.
+Overall
+execution time
+is
+reduced by up to 19% for
+the “Various” data set.
+The
+“Artiﬁcial” data set is slowed down marginally (
+<
+1%
+) as the
+conversion takes time and does not
+lead to signiﬁcant
+gains
+due to the low number of documents.
+D.
+Sorted Output
+Sorting the output
+alphabetically is best
+achieved by con-
+verting of document
+frequencies to a sorted container which,
+in practical terms, implies a sorted key-value list (results with
+a map are invariably worse).
+The TF-IDF phase performs
+lookups on the document frequencies. These can be performed
+either
+using binary search on the list,
+or
+on a hash table
+provided the data is converted back to a hash table.
+Fig.
+5
+shows these options.
+The ﬁrst
+bar corresponds to using only
+hash tables.
+The second bar
+corresponds to converting term
+frequencies to a list,
+the best
+case for
+unsorted output.
+The
+third bar
+shows
+execution time
+performing lookups
+using
+binary search on a sorted key-value list.
+This is unacceptably
+slow.
+The fourth bar
+shows
+that
+converting the document
+frequencies back to a hash table for
+fast
+lookup results in
+performance competitive with that
+of the unsorted case,
+and
+often out-performs the solution with only hash tables. Yet, the
+output is alphabetically sorted.
+E.
+Parallel Scalability
+Using lists rather than hash tables has additional advantages
+for
+parallel
+execution as
+it
+is
+easier
+and more efﬁcient
+to
+parallelize accesses
+to (array-based)
+lists.
+The best
+version
+with unsorted output
+achieves higher speedup than the hash
+table-only version (Fig.
+6).
+This furthermore depends on the
+422
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+ 
+  
+ 
+  
+ 
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+   
+  
+
+  
+ 
+  
+ 
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+  
+ 
+  
+ 
+  
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+  
+ 
+  
+  
+ 
+  
+ 
+  
+Fig. 6.
+Parallel speedup of TF-IDF normalized against using a hash table for
+lookup-intensive code regions and a list for iteration-intensive code regions.
+TABLE VI
+TF/IDF
+EXECUTION TIME
+(
+SECONDS
+)
+WITH
+HPTA, P
+HOENIX
+++
+AND
+S
+CI
+K
+IT
+-L
+EARN
+. T
+1
+SHOWS SINGLE
+-
+THREAD EXECUTION TIME
+; T
+48
+IS
+EXECUTION TIME FOR
+48
+THREADS
+; S
+48
+= T
+1
+/T
+48
+.
+HPTA
+Phoenix++
+SKLearn
+Data set
+T
+1
+T
+48
+S
+48
+T
+1
+T
+48
+S
+48
+T
+1
+Various
+1.8
+0.5
+3.7
+1.9
+1.2
+1.7
+13.4
+NSF
+7.5
+1.7
+4.4
+7.7
+2.7
+2.9
+44.5
+Gutenberg
+385.7
+15.4
+25.1
+398.6
+53.5
+7.5
+4448.0
+Artiﬁcial
+16.2
+0.9
+17.4
+11.0
+6.9
+1.6
+267.6
+data set:
+data sets with few ﬁles observe less beneﬁt
+from
+converting the term frequencies to lists.
+The best
+algorithm for
+sorted output
+can achieve better
+speedup than the hash table-only version when the number
+of ﬁles is large.
+It performs poorly on the Gutenberg data set
+as the number of unique words is very large,
+which implies
+more time is spent sorting the corpus.
+F.
+Comparison Against Single-Node Systems
+We compare HPTA against
+Phoenix++ [35]
+and SciKit-
+Learn [10],
+two state-of-the-art single-node systems.
+Phoenix++ [35]
+is a shared memory runtime system for
+map-reduce
+workloads.
+We
+have
+implemented TF-IDF in
+Phoenix++ with one map/reduce round.
+Each map task pro-
+cesses one document and produces a list of (term,
+frequency,
+document-id) tripples.
+The reduce tasks merge tripples into a
+list
+of (document-id,
+TF-IDF) pairs per term.
+The map task
+uses a hash table internally as a performance optimization.
+Note that
+there is no parallel
+processing of large ﬁles.
+This
+could be addressed by splitting the work over multiple map/re-
+duce pipelines,
+which precludes usage of hash table within a
+map task and does not bring substantial added parallelism for
+the data sets with a large number of ﬁles.
+Phoenix++ achieves
+limited scalability in comparison to
+HPTA (Fig.
+7,
+Table
+VI).
+The
+“Artiﬁcial”
+workload is
+a
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+ 
+
+   
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+   
+  
+
+
+   
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+
+   
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ 
+  
+ 
+  
+
+   
+Fig. 7.
+Parallel speedup of TF-IDF comparing the optimized solution against a
+map/reduce solution using Phoenix++. Speedup is normalized against HPTA.
+special
+case as the map phase handles each document
+in a
+sequential
+manner.
+As
+such,
+speedup is
+limited to 5.
+The
+performance
+of
+Phoenix++ is
+limited due
+to sub-optimal
+handling of the three optimization opportunities identiﬁed in
+this paper: (i) Phoenix++ uses memory mapping of input ﬁles
+and keeps the full
+ﬁles in memory throughout
+the execution.
+We have shown this is sub-optimal
+to region-based memory
+allocation. (ii) Phoenix++ limits the choices of data structures.
+While we have made the optimal
+choice for
+a hash table
+within the map task,
+the code is otherwise restricted to use
+speciﬁc intermediate containers and speciﬁc access patterns. In
+contrast,
+HPTA supports freely structured programs whereby
+the programmer can manipulate the resulting word–frequency
+map without
+restrictions.
+(iii)
+In order
+to associate word–
+frequency pairs with their document,
+Phoenix++ requires that
+each pair is annotated individually.
+In contrast,
+HPTA allows
+to associate an entire hash table to its document,
+which is
+signiﬁcantly more space-efﬁcient.
+The ﬁnal
+comparison is
+against
+SciKit-Learn,
+a popular
+single-threaded machine learning library [12].
+We compare
+against
+SciKit-Learn rather than Gensim [13] because of its
+use of the fast
+NumPy library.
+Our setup uses Python 2.7.5,
+SciKit-Learn 0.17.1 and NumPy 1.7.1.
+HPTA is one order
+of
+magnitude faster
+than SciKit-Learn (Table VI).
+Analysis
+of
+the
+source
+code
+shows
+that
+SciKit-Learn is
+prone
+to
+the limitations addressed by HPTA.
+It
+does not
+switch data
+structures throughout
+the computation.
+Moreover,
+as Python
+is
+a managed language using garbage collection,
+memory
+management is hard to control.
+VII.
+C
+ONCLUSION
+Text
+analytics are an important
+type of data analytics.
+We
+address the unexplored issue of manipulating text
+fragments
+at
+high speed,
+which is
+orthogonal
+to achieving speed-up
+by scaling-out
+analytics
+processing.
+The goal
+of
+this
+work
+423
+is to formulate guidelines for
+optimizing text
+analytics and
+to demonstrate that
+they can be implemented in a reusable
+library.
+We have identiﬁed three performance optimizations:
+(i) region-based memory management,
+(ii) selection of asso-
+ciative data structures and (iii) transferring between associative
+data structures throughout the computation. We note that these
+optimizations are not
+implemented in leading data analytics
+platforms such as Hadoop and Spark.
+Our experimental eval-
+uation however shows signiﬁcant performance improvements,
+up to 5
+×
+for region-based memory management,
+up to 20
+×
+for
+data structure optimization and up to 19% for
+changing
+data structures during the computation.
+The techniques presented in this paper signiﬁcantly boost
+the performance of leading data analytics frameworks,
+which
+will
+reduce
+hardware
+requirements
+and
+improve
+time-to-
+solution and energy-efﬁciency.
+A
+CKNOWLEDGEMENT
+This
+work
+is
+supported
+by
+the
+European
+Commu-
+nity’s Seventh Framework Programme (FP7/2007-2013)
+un-
+der
+the
+ASAP project,
+grant
+agreement
+no.
+619706,
+and
+by
+the
+United
+Kingdom EPSRC under
+grant
+agreement
+EP/L027402/1. The source code used in this study is available
+at http://www.github.com/hvdieren/asap operators.
+R
+EFERENCES
+[1]
+S.
+Grimes,
+“Unstructured
+data
+and
+the
+80
+per-
+cent
+rule,”
+http://breakthroughanalysis.com/2008/08/01/
+unstructured-data-and-the-80-percent-rule/,
+Aug.
+2008.
+[2]
+F.
+McSherry,
+M.
+Isard,
+and D.
+G.
+Murray,
+“Scalability!
+but
+at
+what
+COST?” in 15th Workshop on Hot Topics in Operating Systems (HotOS
+XV).
+USENIX Association,
+May 2015.
+[3]
+K.
+Ousterhout,
+R.
+Rasti,
+S.
+Ratnasamy,
+S.
+Shenker,
+and B.-G.
+Chun,
+“Making sense of performance in data analytics frameworks,” in Proc.
+of
+the 12th USENIX Conf.
+on Networked Systems Design and Imple-
+mentation,
+2015,
+pp.
+293–307.
+[4]
+A. Pavlo et al, “A comparison of approaches to large-scale data analysis,”
+in Proc. of the 2009 ACM SIGMOD Intl. Conf. on Management of Data,
+2009,
+pp.
+165–178.
+[5]
+M.
+Han,
+K.
+Daudjee,
+K.
+Ammar,
+M.
+T.
+¨
+Ozsu,
+X.
+Wang,
+and T.
+Jin,
+“An experimental comparison of Pregel-like graph processing systems,”
+Proc.
+VLDB Endow.,
+vol.
+7,
+no.
+12,
+pp.
+1047–1058,
+Aug.
+2014.
+[6]
+N.
+Satish et
+al,
+“Navigating the maze of
+graph analytics frameworks
+using massive graph datasets,” in Proc. of the 2014 ACM SIGMOD Intl.
+Conf.
+on Management of Data,
+2014,
+pp.
+979–990.
+[7]
+“Apache hadoop,” http://hadoop.apache.org,
+2016.
+[8]
+“Apache spark,” http://spark.apache.org,
+2016.
+[9]
+M.
+Zaharia et
+al,
+“Resilient
+distributed datasets:
+A fault-tolerant
+ab-
+straction for in-memory cluster computing,” in Proc. of the 9th USENIX
+Conf. on Networked Systems Design and Implementation, 2012, pp. 2–2.
+[10]
+F. Pedregosa et al, “Scikit-learn: Machine learning in python,” J. Mach.
+Learn.
+Res.,
+vol.
+12,
+pp.
+2825–2830,
+Nov.
+2011.
+[11]
+M. Hall et al, “The WEKA data mining software: An update,” SIGKDD
+Explor.
+Newsl.,
+vol.
+11,
+no.
+1,
+pp.
+10–18,
+Nov.
+2009.
+[12]
+L.
+Buitinck et
+al,
+“API
+design for
+machine learning software:
+expe-
+riences
+from the scikit-learn project,” in Proc.
+of
+the ECML/PKDD
+Workshop:
+Languages for Data Mining and Machine Learning,
+Sep.
+2013,
+p.
+15.
+[13]
+R. Rehurek and P. Sojka, “Software framework for topic modelling with
+large corpora,” in The LREC 2010 Workshop on new challenges for NLP
+frameworks.
+University of Malta,
+2010,
+pp.
+45–50.
+[14]
+J. W. Reed et al, “TF-ICF: A new term weighting scheme for clustering
+dynamic data streams,” in 5th Intl.
+Conf.
+on Machine Learning and
+Applications (ICMLA’06),
+Dec 2006,
+pp.
+258–263.
+[15]
+U.
+Erra,
+S.
+Senatore,
+F.
+Minnella,
+and G.
+Caggianese,
+“Approximate
+TFIDF based on topic extraction from massive message stream using
+the GPU,” Information Sciences,
+vol.
+292,
+pp.
+143 – 161,
+2015.
+[16]
+Y.
+Zhang,
+F.
+Mueller,
+X.
+Cui,
+and T.
+Potok,
+“Large-scale
+multi-
+dimensional
+document
+clustering on GPU clusters,” in Parallel
+Dis-
+tributed Processing (IPDPS),
+2010 IEEE Intl.
+Symp.
+on,
+April
+2010,
+pp.
+1–10.
+[17]
+Y.
+Zhang,
+F.
+Mueller,
+X.
+Cui,
+and T.
+Potok,
+“Data-intensive document
+clustering on graphics
+processing unit
+(GPU)
+clusters,”
+J.
+Parallel
+Distrib.
+Comput.,
+vol.
+71,
+no.
+2,
+pp.
+211–224,
+Feb.
+2011.
+[18]
+M. J. Szaszy and H. Samet, “Document stream clustering using GPUs,”
+2013,
+available
+at
+http://wwwold.cs.umd.edu/Grad/scholarlypapers/
+papers/Szaszy.pdf.
+[19]
+L.
+Rauchwerger,
+F.
+Arzu,
+and K.
+Ouchi,
+“Standard templates adaptive
+parallel library (STAPL),” in LCR ’98: Selected Papers from the 4th Intl.
+Workshop on Languages, Compilers, and Run-Time Systems for Scalable
+Computers,
+1998,
+pp.
+402–409.
+[20]
+G.
+Tanase,
+C.
+Raman,
+M.
+Bianco,
+N.
+M.
+Amato,
+and L.
+Rauchwerger,
+“Associative Parallel
+Containers in STAPL,” Proc.
+of
+the Workshop on
+Languages and compilers for parallel computing,
+2008,
+pp.
+156–171.
+[21]
+E.
+Johnson and D.
+Gannon,
+“HPC++:
+Experiments with the parallel
+standard
+template
+library,”
+in
+Proc.
+of
+the
+11th
+Intl.
+Conf.
+on
+Supercomputing,
+1997,
+pp.
+124–131.
+[22]
+M.
+Varshney
+and
+V.
+Goudar,
+“PDQCollections:
+A data-parallel
+programming model
+and library for associative containers,” Computer
+Science Department,
+Universtiy of California,
+Los Angeles,
+Tech.
+Rep.
+130004,
+Apr.
+2013.
+[23]
+G.
+Salton and M.
+J.
+McGill,
+Eds.,
+Introduction to Modern Information
+Retrieval.
+Mcgraw-Hill,
+1983.
+[24]
+“International standard ISO/IEC 14882:2014(E)
+programming language
+C++,” 2014.
+[25]
+D.
+E.
+Knuth,
+The
+Art
+of
+Computer
+Programming
+Volume
+1:
+Fundamental Algorithms.
+Addison Wesley,
+1997.
+[26]
+C. Ranger, R. Raghuraman, A. Penmetsa, G. Bradski, and C. Kozyrakis,
+“Evaluating mapreduce
+for
+multi-core
+and multiprocessor
+systems,”
+in Proc.
+of
+the 2007 IEEE 13th Intl.
+Symp.
+on High Performance
+Computer Architecture,
+2007,
+pp.
+13–24.
+[27]
+G. E. Blelloch, “Preﬁx sums and their applications,” School of Computer
+Science,
+Carnegie
+Mellon University,
+Tech.
+Rep.
+CMU-CS-90-190,
+Nov.
+1990.
+[28]
+C.
+Stancu,
+C.
+Wimmer,
+S.
+Brunthaler,
+P.
+Larsen,
+and M.
+Franz,
+“Safe
+and efﬁcient
+hybrid memory management
+for
+Java,” in Proc.
+of
+the
+2015 Intl.
+Symp.
+on Memory Management,
+2015,
+pp.
+81–92.
+[29]
+D.
+Gay and A.
+Aiken,
+“Language support
+for regions,” in Proc.
+of
+the
+ACM SIGPLAN 2001 Conf.
+on Programming Language Design and
+Implementation,
+2001,
+pp.
+70–80.
+[30]
+H.
+Inoue,
+H.
+Komatsu,
+and
+T.
+Nakatani,
+“A study
+of
+memory
+management
+for
+web-based applications on multicore processors,” in
+Proc.
+of
+the 30th ACM SIGPLAN Conf.
+on Programming Language
+Design and Implementation,
+2009,
+pp.
+386–396.
+[31]
+D.
+Grossman et
+al,
+“Region-based memory management
+in Cyclone,”
+in Proc.
+of the ACM SIGPLAN 2002 Conf.
+on Programming Language
+Design and Implementation,
+2002,
+pp.
+282–293.
+[32]
+D.
+Shabalin
+and
+M.
+Odersky,
+“Region-based
+off-heap
+memory
+for
+Scala,”
+EPFL,
+Tech.
+Rep.,
+Feb.
+2015,
+available
+as
+https:
+//infoscience.epﬂ.ch/record/213469/ﬁles/Regions\%20report.pdf.
+[33]
+D.
+E.
+Knuth,
+The Art
+of
+Computer Programming Volume 3:
+Sorting
+and Searching.
+Addison Wesley,
+1998.
+[34]
+“NSF
+research
+awards
+abstracts
+1990–2003,”
+archive.ics.uci.edu/
+ml/machine-learning-databases/nsfabs-mld/nsfawards.html,
+Nov.
+2003,
+consulted: February 2016.
+[35]
+J.
+Talbot,
+R.
+M.
+Yoo,
+and
+C.
+Kozyrakis,
+“Phoenix++:
+Modular
+mapreduce for
+shared-memory systems,” in Proc.
+of
+the Second Intl.
+Workshop on MapReduce and Its Applications,
+2011,
+pp.
+9–16.
+[36]
+M.
+Frigo,
+C.
+E.
+Leiserson,
+and K.
+H.
+Randall,
+“The implementation
+of
+the Cilk-5 multi-threaded language,” in PLDI
+’98:
+Proc.
+of
+the
+1998 ACM SIGPLAN conference on Programming language design
+and implementation,
+1998,
+pp.
+212–223.
+[37]
+F. Yergeau, UTF-8, a transformation format of ISO 10646, The Internet
+Society,
+Nov.
+2003,
+RFC-3629.
+[38]
+Y.
+Mao,
+R.
+Morris,
+and
+F.
+Kaashoek,
+“Optimizing
+MapReduce
+for
+multicore
+architectures,”
+MIT Computer
+Science
+and Artiﬁcial
+Intelligence Laboratory,
+Tech.
+Rep.
+MIT-CSAIL-TR-2010-020,
+2010.

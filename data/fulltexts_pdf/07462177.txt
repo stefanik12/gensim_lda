@@ -1,0 +1,3493 @@
+﻿Kvasir: Scalable Provision of Semantically
+Relevant Web Content on Big Data Framework
+Liang Wang, Sotiris Tasoulis, Teemu Roos, and Jussi Kangasharju, Member, IEEE
+Abstract—The Internet is overloading its users with excessive information flows, so that effective content-based filtering becomes
+crucial in improving user experience and work efficiency. Latent semantic analysis has long been demonstrated as a promising
+information retrieval technique to search for relevant articles from large text corpora. We build Kvasir, a semantic recommendation
+system, on top of latent semantic analysis and other state-of-the-art technologies to seamlessly integrate an automated and proactive
+content provision service into web browsing. We utilize the processing power of Apache Spark to scale up Kvasir into a practical
+Internet service. In addition, we improve the classic randomized partition tree to support efficient indexing and searching of millions of
+documents. Herein we present the architectural design of Kvasir, the core algorithms, along with our solutions to the technical
+challenges in the actual system implementation.
+Index Terms—Web application, information retrieval, semantic search, random projection, machine learning, Apache Spark
+Ç
+1
+I
+NTRODUCTION
+C
+URRENTLY
+,
+the Internet
+is overloading its users with
+excessive information flows.
+Therefore, smart content
+provision and recommendation become more and more
+crucial
+in improving user
+experience and efficiency in
+using Internet
+applications.
+For a typical
+example,
+many
+users are most likely to read several
+articles on the same
+topic while surfing on the Web.
+Hence many news web-
+sites (e.g.,
+The New York Times,
+BBC News and Yahoo
+News) usually group similar articles together and provide
+them on the same page so that the users can avoid launch-
+ing another search for the topic.
+However,
+most
+of
+such
+services
+are
+constrained within a
+single
+domain,
+and
+cross-domain content
+provision is
+usually achieved by
+manually linking to the relevant articles on different sites.
+Meanwhile,
+companies
+like Google and Microsoft
+take
+advantage of their search engines and provide customiz-
+able keyword filters to aggregate related articles across
+various domains for users to subscribe.
+However,
+to sub-
+scribe a topic,
+a user needs to manually extract keywords
+from an article,
+then to switch between different
+search
+services while browsing the web pages.
+In general,
+seamless
+integration of
+intelligent
+content
+provision into web browsing at user interface level remains
+an open research question. No universally accepted optimal
+design exists. Herein we propose Kvasir,
+1
+a system built on
+top of latent semantic analysis (LSA).
+2
+We show how Kvasir
+can be integrated with the state-of-art
+technologies (e.g.,
+Apache Spark, machine learning, etc.). Kvasir automatically
+looks for the similar articles when a user is browsing a web
+page and injects the search results in an easily accessible
+panel within the browser view for seamless integration.
+The ranking of results is based on the cosine similarity in
+LSA space, which was proposed as an effective information
+retrieval
+technique almost
+two decades ago [5].
+Despite
+some successful applications in early information systems,
+two technical
+challenges
+practically prevent
+LSA from
+becoming a scalable Internet
+service.
+First,
+LSA relies on
+large matrix multiplications and singular value decomposi-
+tion (SVD),
+which become notoriously time and memory
+consuming when the document
+corpus is huge.
+Second,
+LSA is a vector space model, and fast search in high dimen-
+sional spaces tends to become a bottle-neck in practice.
+We must emphasize that Kvasir is not meant to replace
+the conventional
+web search engines,
+recommender
+sys-
+tems,
+or other existing technologies discussed in Section 2.
+Instead,
+Kvasir
+represents
+another
+potential
+solution to
+enhance user experience in future Internet applications.
+In
+this paper,
+by presenting the architectural components,
+we
+show how we tackle the scalability challenges confronting
+Kvasir in building and indexing high dimensional language
+database. To address the challenge in constructing the data-
+base,
+we adopt
+a rank-revealing algorithm for dimension
+reduction before the actual SVD.
+To address the challenge
+
+L.
+Wang is
+with the
+University of
+Cambridge,
+Cambridge,
+United
+Kingdom.
+E-mail:
+liang.wang@cl.cam.ac.uk.
+
+S.
+Tasoulis
+is
+with the
+Liverpool
+John Moores
+University,
+Liverpool,
+United Kingdom. E-mail: Sotiris.Tasoulis@cs.helsinki.fi.
+
+T.
+Roos and J. Kangasharaju are with the University of Helsinki,
+Helsinki
+FIN-00014, Finland. E-mail: {teemu.roos, Jussi.Kangasharju}@cs.helsinki.fi.
+Manuscript received 30 June 2015;
+revised 7 Mar.
+2016;
+accepted 12 Apr.
+2016. Date of publication 27 Apr. 2016; date of current version 28 Oct. 2016.
+Recommended for acceptance by M. Sheng, A.V. Vasilakos, Q. Yu, and L. Yao.
+For information on obtaining reprints of
+this article,
+please send e-mail
+to:
+reprints@ieee.org, and reference the Digital Object Identifier below.
+Digital Object Identifier no. 10.1109/TBDATA.2016.2557348
+1.
+Kvasir
+is the acronym for
+Knowledge
+ViA Semantic Information
+Retrieval, it is also the name of a Scandinavian god in Norse mythology
+who travels around the world to teach and spread knowledge and is
+considered extremely wise.
+2.
+We have introduced the basic Kvasir system framework in [51]
+and demonstrated its seamless integration into web browsing in World
+Wide Web Conference (WWW’15) in May, 2015.
+IEEE TRANSACTIONS ON BIG DATA,
+VOL. 2,
+NO. 3,
+JULY-SEPTEMBER 2016
+219
+2332-7790 ß 2016 IEEE. Personal use is permitted, but republication/redistribution requires IEEE permission.
+See http://www.ieee.org/publications_standards/publications/rights/index.html for more information.
+in high dimensional search, we utilize approximate nearest
+neighbour search to trade off accuracy for efficiency.
+The
+corresponding indexing algorithm is optimized for parallel
+implementation.
+In general,
+this paper focuses on the system scalability
+perspective when utilizing big data frameworks to scale up
+Internet services, and we present our solutions to the techni-
+cal challenges in building up Kvasir. Specifically, our contri-
+butions are:
+1)
+We present the architecture of Kvasir,
+which is able
+to seamlessly integrate LSA-based content provision
+in web browsing by using state-of-art technologies.
+2)
+We implement
+the first
+stochastic SVD on Apache
+Spark,
+which can efficiently build LSA-based lan-
+guage models on large text corpora.
+3)
+We propose a parallel
+version of
+the randomized
+partition tree algorithm which provides fast index-
+ing in high dimensional vector spaces using Apache
+Spark.
+3
+4)
+We present
+various technical
+solutions in order to
+address the scalability challenges in building Kvasir
+into a practical Internet service, such as caching, par-
+allel indexing and reducing index size.
+The paper is structured as follows: Section 2 gives a brief
+overview over the various topics covered in this paper. Sec-
+tion 3 presents the architecture of Kvasir.
+In Section 4,
+we
+illustrate the algorithms of the core components in details.
+Section 5 presents our evaluation results. Finally, Sections 6
+and 7 extend the discussion then conclude the paper.
+2
+B
+ACKGROUND AND
+R
+ELATED
+W
+ORK
+Inside Kvasir,
+the design covers a wide range of different
+topics, each topic has numerous related work. In the follow-
+ing, we constrain the discussion only on the core techniques
+used in the system design and implementation.
+Due to the
+space limit, we cannot list all related work, we recommend
+using the references mentioned in this section as a starting
+point for further reading.
+2.1
+Intelligent Content Provision
+Our daily life heavily relies on recommendations, intelligent
+content provision aims to match a user’s profile of interests
+to the best candidates in a large repository of options [43].
+There are several
+parallel
+efforts in integrating intelligent
+content
+provision and recommendation in web browsing.
+They differentiate between each other by the main tech-
+nique used to achieve the goal.
+The initial
+effort
+relies on the semantic web stack pro-
+posed in [4], which requires adding explicit ontology infor-
+mation to all web pages so that ontology-based applications
+(e.g.,
+Piggy bank [28])
+can utilize ontology reasoning to
+interconnect
+content
+semantically.
+Though semantic web
+has a well-defined architecture,
+it suffers from the fact that
+most web pages are unstructured or semi-structured HTML
+files, and content providers lack of motivation to adopt this
+technology to their websites.
+Therefore,
+even though the
+relevant research still remains active in academia, the actual
+progress of
+adopting ontology-based methods in real-life
+applications has stalled in these years.
+Collaborative Filtering (CF)
+[9],
+[33],
+which was
+first
+coined in Tapestry [22], is a thriving research area and also
+the second alternative solution. Recommenders built on top
+of CF exploit the similarities in users’
+rankings to predict
+one user’s preference on a specific content. CF attracts more
+research interest these years due to the popularity of online
+shopping (e.g., Amazon, eBay, Taobao, etc.) and video serv-
+ices (e.g.,
+YouTube,
+Vimeo,
+Dailymotion,
+etc.).
+However,
+recommender systems need user behavior rather than con-
+tent itself as explicit input to bootstrap the service,
+and is
+usually constrained within a single domain.
+Cross-domain
+recommenders [15], [34] have made progress lately, but the
+complexity and scalability need further investigation.
+Search engines can be considered as the third alternative
+though a user needs explicitly extract the keywords from
+the page then launch another search.
+The ranking of
+the
+search results is based on multiple ranking signals such as
+link analysis on the underlying graph structure of intercon-
+nected pages (e.g.,
+PageRank [41]
+and HITS [32]).
+Such
+graph-based link analysis is based on the assumption that
+those web pages of related topics tend to link to each other,
+and the importance of a page often positively correlates to
+its degree.
+The indexing process is modelled as a random
+walk atop of the graph derived from the linked pages and
+needs to be pre-compiled offline.
+As the fourth alternative,
+Kvasir takes another route by
+utilizing information retrieval (IR) technique [20], [36]. Kva-
+sir belongs to the content-based filtering and emphasizes
+the semantics contained in the unstructured web text.
+In
+general,
+a text corpus is transformed to the suitable repre-
+sentation depending on the specific mathematical
+models
+(e.g., set-theoretic, algebraic, or probabilistic models), based
+on which a numeric score is calculated for ranking.
+Differ-
+ent from the previous CF and link analysis, the underlying
+assumption of IR is that the text (or information in a broader
+sense) contained in a document can very well
+indicate its
+(latent) topics. The relatedness of any two given documents
+can be calculated with a well-defined metric function atop
+of these topics. Since topics can have a direct connection to
+context, context awareness therefore becomes the most sig-
+nificant
+advantage in IR,
+which has been integrated into
+Hummingbird – Google’s new search algorithm.
+Despite of
+the different
+assumptions and mechanisms,
+aforementioned techniques are not mutually exclusive, and
+there is no dominant technique regarding intelligent content
+provision in general [7], [11]. Intelligence depends on a spe-
+cific context
+and can be achieved by combining multiple
+other techniques such as behavioural analysis.
+[1],
+[7] pro-
+vide a broad survey and thorough comparisons of different
+technologies adopted in various recommender systems.
+2.2
+Topic Models and Nearest Neighbour Search
+Topic modelling [2], [5], [6], [19], [27] is a popular machine
+learning technology that
+utilizes statistical
+models to dis-
+cover the abstract topics in a collection of documents. Topic
+models are widely used in many domains such as text min-
+ing,
+network analysis,
+genetics and etc.
+In this paper,
+we
+constrain our discussion in Vector Space Model (VSM) due
+3.
+The source code of
+the key components in Kvasir are publicly
+accessible and hosted on Github.
+We will
+release all
+the Kvasir code
+after the paper is accepted.
+220
+IEEE TRANSACTIONS ON BIG DATA,
+VOL. 2,
+NO. 3,
+JULY-SEPTEMBER 2016
+to both space limit and the fact that Kvasir is built atop of
+VSM. The initial idea of using linear algebraic technique to
+derive latent topic model was proposed in Latent Semantic
+Analysis,
+i.e.,
+LSA [5],
+[19].
+As the core operation of LSA,
+SVD is a well-established subject and has been intensively
+studied over three decades. Recent efforts have been focus-
+ing
+on
+efficient
+incremental
+updates
+to
+accommodate
+dynamic data streams [8] and scalable algorithms to process
+huge matrices.
+Probabilistic
+LSA (pLSA)
+[27]
+relates
+to non-negative
+matrix factorization (NMF),
+it
+explicitly models topics as
+latent variables based on the co-occurrences of terms and
+documents in a text corpus.
+Comparing to LSA that mini-
+mises the L2 norm (a.k.a Frobenius norm) of an objective
+function, pLSA relies on its likelihood function to learn the
+model
+parameters by minimizing of the cross entropy (or
+Kullback-Leibler divergence) between the empirical
+distri-
+bution and the
+model
+using Expectation Maximization
+(EM)
+algorithm.
+Projecting a query to a low dimensional
+space often requires several
+iterations of EM algorithm in
+pLSA, which in general is much slower than a simple matrix
+and vector multiplication in LSA.
+Latent Dirichlet Allocation
+(LDA) [6] is a generative model for topic modelling. LDA is
+similar to pLSA but replaces maximum likelihood estimator
+with Bayesian estimator,
+hence it is sometimes referred to
+as the Bayesian version of
+pLSA.
+Namely,
+LDA assumes
+that
+the topic distribution has a Dirichlet
+prior.
+All
+three
+aforementioned VSM are related to some extent but are dif-
+ferent
+in actual
+implementations,
+which one can generate
+the best topic model still remains as an open question in aca-
+demia.
+In Kvasir,
+we
+choose
+to extend the
+basic
+LSA
+because of
+its simplicity,
+good performance,
+and ease to
+parallelize.
+Efficient nearest neighbour search in high dimensional
+spaces has attracted a lot
+of
+attention in machine learn-
+ing community.
+There is
+a huge body of
+literature on
+this
+subject
+which can be
+categorized as
+graph-based
+[23],
+[49],
+hashing-based [26],
+[48],
+[52],
+and partition
+tree-based solutions [16],
+[31],
+[38],
+[46].
+The graph-based
+algorithms construct
+a graph structure by connecting a
+point to its nearest neighbours in a data set.
+These algo-
+rithms
+suffer
+from the
+time-consuming
+construction
+phase.
+As the best
+known hashing-based solution,
+local-
+ity-sensitive hashing (LSH) [3],
+[35] uses a large number
+of
+hash functions with the property that
+the hashes of
+nearby points
+are
+also close
+to each other
+with high
+probability.
+The performance of
+a hashing-based algo-
+rithm highly depends on the quality of the hashing func-
+tions,
+and it
+is usually outperformed by partition tree-
+based methods
+in practice [38].
+In particular
+the Ran-
+domized Partition tree (RP-tree)
+[16]
+method have been
+shown to be
+very successful
+in practice
+regarding its
+good scalability [18],
+while it
+was also recently shown
+[17] that its probability to fail
+is bounded when the data
+are documents from a topic model.
+RP-tree was initially
+introduced as an improvement
+over the k-d tree method
+that
+is
+more
+appropriate
+for
+use
+in high dimensional
+spaces,
+drawing inspiration from LSH [35].
+In this work,
+inspired by a recent application of the random projection
+method [47],
+we take advantage of
+the simplicity of
+the
+RP-tree method to further develop its parallel version.
+2.3
+Popular Software Toolkits
+There are abundant software toolkits with different empha-
+sises on machine learning and natural language processing.
+We only list the most relevant ones like WEKA [25], scikit-
+learn [45], FLANN [39], Gensim [42], and ScalaNLP [44].
+Both WEKA and scikit-learn include many general-pur-
+pose algorithms for data mining and analysis, but the toolkits
+are only suitable for small and medium problems.
+Gensim
+and ScalaNLP have a clear
+focus
+on language models.
+ScalaNLP’s linear algebra library (Breeze) is not yet mature
+enough, which limits its scalability. On the other hand, Gen-
+sim scales well on large corpora using a single machine, but
+fails to provide efficient
+indexing and searching.
+Though
+FLANN provides fast nearest neighbour search,
+it requires
+loading the full data set in to memory therefore severely lim-
+its the problem size [30]. None of the aforementioned toolkits
+provides a horizontally scalable solution on big data frame-
+works.
+However,
+horizontal
+scalability promised by major
+frameworks plays a key role in achieving Internet-scale serv-
+ices. The default machine learning library MLlib in Apache
+Spark misses the stochastic SVD and effective indexing algo-
+rithms [54].
+Generally speaking,
+an effective and efficient
+content-based recommender system needs to be explicitly
+designed,
+tailored,
+and optimized according to the specific
+application scenario. Despite of many off-the-shelf software
+toolkits, very few (if not none) practical systems were built
+directly atop of a general purpose machine learning package,
+because most toolkits are plagued with severe performance
+and scalability issues when they are used in a web service.
+Especially for large-scale LSA applications,
+based on our
+knowledge, Kvasir made the very first attempt and contribu-
+tion in demonstrating the feasibility of scaling up a complex
+IR technique to Internet scale by exploiting the power of big
+data frameworks [51].
+Comparing to Kvasir,
+other similar
+services we can find on the Internet such as www.similarsites.
+com and Google Similar Pages work only at
+domain level
+instead of page level
+to avoid scalability issues from high
+computation complexity.
+3
+K
+VASIR
+A
+RCHITECTURE
+At
+the core,
+Kvasir implements an LSA-based index and
+search service, and its architecture can be divided into two
+subsystems as frontend and backend. Fig. 1 illustrates the gen-
+eral workflow and internal design of the system. The front-
+end is currently implemented as a lightweight extension in
+Chrome browser.
+The browser
+extension only sends the
+page URL back to the KServer whenever a new tab/win-
+dow is
+created.
+The
+KServer
+running at
+the
+backend
+retrieves the content of the given URL then responds with
+the most relevant documents in a database. The results are
+formatted into JSON strings.
+The extension presents the
+results in a friendly way on the page being browsed. From
+user perspective, a user only interacts with the frontend by
+checking the list of recommendations that may interest him.
+To connect
+to the frontend,
+the backend exposes one
+simple RESTful
+API as below,
+which gives great flexibility
+to all
+possible frontend implementations.
+By loosely cou-
+pling with the backend,
+it becomes easy to mash-up new
+services on top of
+Kvasir.
+Line 1 and 2 give an example
+request to Kvasir service. type=0 indicates that info con-
+tains a URL,
+otherwise info contains a piece of
+text
+if
+WANG ET AL.: KVASIR: SCALABLE PROVISION OF SEMANTICALLY RELEVANT WEB CONTENT ON BIG DATA FRAMEWORK
+221
+type=1.
+Line 4-9 present
+an example response from the
+server,
+which contains
+the metainfo of
+a list
+of
+similar
+articles.
+Note that the frontend can refine or rearrange the
+results based on the metainfo (e.g., similarity or timestamp).
+1 POST
+2 https://api.kvasir/query?type=0&info=url
+3
+4 {’’results’’: [
+5
+{’’title’’: document title,
+6
+’’similarity’’: similarity metric,
+7
+’’page_url’’: link to the document,
+8
+’’timestamp’’: document create date}
+9 ]}
+The backend system implements indexing and searching
+functionality which consist
+of
+five components:
+Crawler,
+Cleaner,
+DLSA,
+PANNS and KServer.
+Three components
+(i.e.,
+Cleaner,
+DLSA and PANNS)
+are wrapped into one
+library since all are implemented on top of Apache Spark.
+The library covers three phases as text cleaning,
+database
+building, and indexing. We briefly present the main tasks in
+each component as below.
+Crawler collects raw documents from the Web then com-
+piles them into two data sets.
+One is the English Wikipedia
+dump, and another is compiled from over 300 news feeds of
+the high-quality content providers such as BBC,
+Guardian,
+Times,
+Yahoo News,
+MSNBC,
+and etc.
+Table 1 summarizes
+the basic statistics of the data sets.
+Multiple instances of the
+Crawler run in parallel on different machines.
+Simple fault-
+tolerant mechanisms like periodical backup have been imple-
+mented to improve the robustness of crawling process.
+In
+addition to the text body, the Crawler also records the time-
+stamp, URL and title of the retrieved news as metainfo, which
+can be further utilized to refine the search results.
+Cleaner cleans the unstructured text corpus and converts
+the corpus into term frequency-inverse document frequency
+(TF-IDF) model.
+In the preprocessing phase,
+we clean the
+text by removing HTML tags and stopwords,
+deaccenting,
+tokenization, etc. The dictionary refers to the vocabulary of
+a language model,
+its quality directly impacts the model
+performance.
+To build the dictionary,
+we exclude both
+extremely rare and extremely common terms, and keep 10
+5
+most popular ones as features. More precisely, a term is con-
+sidered as rare if it appears in less than 20 documents, while
+a term is considered as common if it appears in more than
+40 percent of documents.
+DLSA builds up an LSA-based model
+from the previ-
+ously constructed TF-IDF model.
+Technically,
+the TF-IDF
+itself is already a vector space language model. The reason
+we seldom use TF-IDF directly is because the model
+con-
+tains too much noise and the dimensionality is too high to
+process efficiently even on a modern computer. To convert
+a TF-IDF to an LSA model,
+DLSA’s algebraic operations
+involve large matrix multiplications and time-consuming
+SVD.
+We initially tried to use MLib to implement
+DLSA.
+However, MLlib is unable to perform SVD on a data set of
+10
+5
+features with limited RAM,
+we have to implement our
+own stochastic SVD on Apache Spark using rank-revealing
+technique. Section 4.1 discusses DLSA in details.
+PANNS
+4
+builds the search index to enable fast
+k-NN
+search in high dimensional
+LSA vector
+spaces.
+Though
+Fig. 1. Kvasir architecture – there are five major components in the backend system, and they are numbered based on their order in the workflow.
+Frontend is implemented in a Chrome browser, and connects the backend with a simple RESTful API. A screen shot of the user interface of the front-
+end is also presented at the bottom right of the figure.
+TABLE 1
+Two Data Sets Are Used in the Evaluation
+Data set
+# of entries
+Raw text size
+Article length
+Wikipedia
+3:9  10
+6
+47.0 GB
+Avg. 782 words
+News
+4:6  10
+5
+1.62 GB
+Avg. 648 words
+Wikipedia represents relatively static knowledge,
+while News represents con-
+stantly changing dynamic knowledge.
+4.
+PANNS is becoming a popular choice of Python-based approxi-
+mate k-NN library for application developers. According to the PyPI’s
+statistics, PANNS has achieved over 27,000 downloads since it was first
+published in October 2014. The source code is hosted on the Github at
+https://github.com/ryanrhymes/panns.
+222
+IEEE TRANSACTIONS ON BIG DATA,
+VOL. 2,
+NO. 3,
+JULY-SEPTEMBER 2016
+dimensionality has been significantly reduced from TF-IDF
+(10
+5
+features)
+to LSA (10
+3
+features),
+k-NN search in a
+10
+3
+-dimension space is still a great challenge especially when
+we try to provide responsive services.
+Naive linear search
+using one CPU takes over 6 seconds to finish in a database of
+4 million entries, which is unacceptably long for any realistic
+services.
+PANNS implements a parallel
+RP-tree algorithm
+which makes a reasonable tradeoff between accuracy and effi-
+ciency. PANNS is the core component in the backend system
+and Section 4.2 presents its algorithm in details.
+KServer runs within a web server,
+processes the users
+requests and replies with a list of similar documents. KSer-
+ver uses the index built by PANNS to perform fast search
+in the database. The ranking of the search results is based
+on the cosine similarity metric.
+A key performance metric
+for KServer is the service time.
+We wrapped KServer into
+a Docker
+5
+image and deployed multiple KServer instances
+on different machines to achieve better performance.
+We
+also implemented a simple round-robin mechanism to bal-
+ance the request loads among the multiple KServers.
+Kvasir architecture provides a great potential and flexi-
+bility for developers to build various interesting applica-
+tions
+on different
+devices,
+e.g.,
+semantic
+search engine,
+intelligent
+Twitter
+bots,
+context-aware content
+provision,
+and etc.
+6
+4
+C
+ORE
+A
+LGORITHMS
+DLSA and PANNS are the two core components respon-
+sible
+for
+building language
+models
+and indexing the
+high dimensional
+data sets in Kvasir.
+In the following,
+we first sketch out the key ideas in DLSA.
+Then we focus
+on the mechanisms
+of
+PANNS and present
+in details
+how we extend the classic RP-tree algorithm to improve
+the indexing and querying efficiency.
+The code of
+the
+key components
+in Kvasir
+are
+publicly accessible
+on
+Github,
+those who have interest can either read the code
+to further
+study the algorithmic details [50]
+or
+refer
+to
+our technical report [29].
+4.1
+Distributed Stochastic SVD
+The vector space model belongs to algebraic language mod-
+els, where each document is represented with a row vector.
+Each element in the vector represents the weight of a term in
+the dictionary calculated in a specific way.
+For example,
+it
+can be simply calculated as the frequency of a term in a docu-
+ment, or slightly more complicated TF-IDF. The length of the
+vector is determined by the size of the dictionary (i.e., num-
+ber of features). A text corpus containing m documents and a
+dictionary of n terms will be converted to an A ¼ m  n row-
+based matrix.
+Informally,
+we say that A grows taller if the
+number of documents (i.e., m) increases, and grows fatter if
+we add more terms (i.e.,
+n) in the dictionary.
+LSA utilizes
+SVD to reduce n by only keeping a small number of linear
+combinations of the original features.
+To perform SVD,
+we
+need to calculate the covariance matrix C ¼ A
+T
+ A, which
+is a n  n matrix and is usually much smaller than A.
+We can easily parallelize the calculation of C by dividing
+A into k smaller chunks of
+size ½
+m
+k
+  n,
+so that
+the final
+result can be obtained by aggregating the partial results as
+C ¼ A
+T
+ A ¼
+P
+k
+i¼1
+A
+T
+i
+ A
+i
+.
+However,
+a
+more
+serious
+problem is posed by the large number of columns,
+i.e.,
+n.
+The SVD function in MLlib is only able to handle tall and
+thin matrices up to some hundreds of features. For most of
+the language models, there are often hundreds of thousands
+features (e.g.,
+10
+5
+in our case).
+The covariance matrix C
+becomes too big to fit into the physical memory,
+hence the
+native SVD operation in MLlib of Spark fails as the first sub-
+figure of Fig. 2 shows.
+In linear
+algebra,
+a matrix can be approximated by
+another matrix of lower rank while still retaining approxi-
+mately properties of the matrix that are important for the
+problem at hand.
+In other words,
+we can use another thin-
+ner matrix B to approximate the original fat A.
+The corre-
+sponding technique is
+referred to as
+rank-revealing QR
+estimation [24].
+A TF-IDF model having 10
+5
+features often
+contains a lot of redundant information.
+Therefore,
+we can
+effectively thin the matrix A then fit
+C into the memory.
+Fig.
+2 illustrates the algorithmic logic in DLSA,
+which is
+essentially a distributed stochastic SVD implementation.
+4.2
+Parallel Randomized Partition Tree
+With an LSA model at hand, finding the most relevant doc-
+ument is equivalent to finding the nearest neighbours for a
+Fig. 2. DLSA uses rank-revealing to effectively reduce dimensionality to perform in-memory SVD. By converting the fat matrix A to the thinner matrix
+B, we can effectively reduce the size of the covariance matrix C. At the same time, the smaller matrix B remains as a good estimate of A.
+5.
+Docker is a virtualization technology which utilizes Linux con-
+tainer to provide system-level isolation. Docker is an open source proj-
+ect and its webiste is https://www.docker.com/
+6.
+We provide the live demo videos of the seamless integration of
+Kvasir into web browsing at
+the official
+website.
+The link is http://
+www.cs.helsinki.fi/u/lxwang/kvasir/#demo
+WANG ET AL.: KVASIR: SCALABLE PROVISION OF SEMANTICALLY RELEVANT WEB CONTENT ON BIG DATA FRAMEWORK
+223
+given point
+in the derived vector
+space,
+which is often
+referred to as k-NN problem.
+The distance is usually mea-
+sured with the cosine similarity of two vectors.
+However,
+neither naive linear search nor conventional k-d tree is capa-
+ble of performing efficient search in such high dimensional
+space even though the dimensionality has been significantly
+reduced from 10
+5
+to 10
+3
+by LSA.
+Nonetheless,
+we need not locate the exact nearest neigh-
+bours
+in practice.
+In most
+cases,
+slight
+numerical
+error
+(reflected in the language context) is not noticeable at all, i.e.,
+the returned documents still look relevant from the user’s per-
+spective. By sacrificing some accuracy, we can obtain a signifi-
+cant gain in searching speed.
+The general idea of RP-tree algorithm used here is clus-
+tering the points by partitioning the space into smaller sub-
+spaces recursively. Technically, this can be achieved by any
+tree-based algorithms.
+Given a tree built from a database,
+we answer a nearest neighbour query q in an efficient way,
+by moving q down the tree to its appropriate leaf cell,
+and
+then return the nearest neighbour in that cell.
+However in
+several
+cases q’s nearest
+neighbour may well
+lie within a
+different cell.
+Fig.
+3 gives a naive example on a 2-dimension vector
+space.
+First,
+a random vector x is drawn and all the points
+are projected onto x.
+Then we divide the whole space into
+half at the mean value of all projections (i.e., the blue circle
+on x) to reduce the problem size.
+For each new subspace,
+we draw another random vector for projection, and this pro-
+cess continues recursively until the number of points in the
+space reaches the predefined threshold on cluster size.
+We
+can construct a binary tree to facilitate the search. As we can
+see in the first subfigure of Fig. 3, though the projections of
+A, B, and C seem close to each other on x, C is actually quite
+distant from A and B. However, it has been shown that such
+misclassifications become arbitrarily rare as the iterative
+procedure continues by drawing more random vectors and
+performing corresponding splits. More precisely, in [16] the
+authors show that under the assumption of some intrinsic
+dimensionality of a subcluster (i.e.,
+nodes of a tree struc-
+ture),
+its
+descendant
+clusters
+will
+have a much smaller
+diameter, hence can include the points that are expected to
+be more similar
+to each other.
+Herein the diameter
+is
+defined as the distance between the furthest
+pair of
+data
+points in a cell. Such an example is given in Fig. 3, where y
+successfully separates C from A and B.
+Another
+kind of
+misclassification is
+that
+two nearby
+points are unluckily divided into different subspaces,
+e.g.,
+points B and D in the left panel of Fig. 3. To get around this
+issue, the authors in [35] proposed a tree structure (i.e., spill
+tree) where each data point is stored in multiple leaves, by
+following overlapping splits.
+Although the
+query time
+remains essentially the same,
+the required space is signifi-
+cantly increased.
+In this work we choose to improve the
+accuracy by building multiple RP-trees.
+We expect that the
+randomness in tree construction will
+introduce extra vari-
+ability in the neighbours that are returned by several
+RP-
+trees for a given query point. This can be taken as an advan-
+tage in order to mitigate the second kind of misclassification
+while searching for the nearest neighbours of a query point
+in the combined search set. However, in this case one would
+need to store a large number of random vectors at
+every
+node of the tree, introducing significant storage overhead as
+well. For a corpus of 4 million documents, if we use 10
+5
+ran-
+dom vectors (i.e.,
+a cluster size of 20),
+and each vector is a
+10
+3
+-dimension real vector (32-bit float number), the induced
+storage overhead is about 381.5 MB for each RP-tree. There-
+fore, such a solution leads to a huge index of 47:7 GB given
+128 RP-trees are included, or 95:4 GB given 256 RP-trees.
+The huge index size not
+only consumes a significant
+amount of storage resources,
+but also prevents the system
+from scaling up after more and more documents are col-
+lected.
+One possible solution to reduce the index size is
+reusing the random vectors.
+Namely,
+we can generate a
+pool
+of
+random vectors once,
+then randomly choose one
+from the pool each time when one is needed. However, the
+immediate challenge emerges when we try to parallelize the
+tree building on multiple nodes, because we need to broad-
+cast the pool of vectors onto every node,
+which causes sig-
+nificant network traffic.
+To address this challenge,
+we propose to use a pseudo
+random seed in building and storing search index.
+Instead
+of maintaining a pool of random vectors, we just need a ran-
+dom seed for each RP-tree. The computation node can build
+all the random vectors on the fly from the given seed. From
+the model
+building perspective,
+we can easily broadcast
+several
+random seeds
+with negligible
+traffic
+overhead
+instead of
+a large matrix in the network,
+therefore we
+improve the computation efficiency.
+From the storage per-
+spective, we only need to store one 4-byte random seed for
+each RP-tree.
+In such a way,
+we are able to successfully
+Fig. 3. We can continuously project the points on random vectors and use mean value to divide the space for clustering.
+224
+IEEE TRANSACTIONS ON BIG DATA,
+VOL. 2,
+NO. 3,
+JULY-SEPTEMBER 2016
+reduce the storage overhead from 47:7 GB to 512 B for a
+search index consisting of
+128 RP-trees (with cluster size
+20), or from 95:4 GB to only 1 KB if 256 RP-trees are used.
+4.3
+Using More Trees with Small Clusters
+A RP-tree helps us to locate a cluster which is likely to con-
+tain some of
+the k nearest
+neighbours for a given query
+point.
+Within the cluster,
+a linear search is performed to
+identify
+the
+best
+candidates.
+Regarding the
+design of
+PANNS,
+we have two design options in order to improve
+the searching accuracy. Namely, given the size of the aggre-
+gated cluster which is taken as the union of all
+the target
+clusters from every tree, we can
+1)
+either use less trees with larger leaf clusters,
+2)
+or use more trees with smaller leaf clusters.
+We expect that when using more trees the probability of a
+query point to fall very close to a splitting hyperplane should
+be reduced, thus it should be less likely for its nearest neigh-
+bours to lie in a different cluster. By reducing such misclassifi-
+cations, the searching accuracy is supposed to be improved.
+Based on our knowledge,
+although there are no previous
+theoretical results that may justify such a hypothesis in the
+field of
+nearest
+neighbour search algorithms,
+this concept
+could be considered as a combination strategy similar to those
+appeared in ensemble clustering, a very well established field
+of research [40]. Similar to our case, ensemble clustering algo-
+rithms improve clustering solutions by fusing information
+from several data partitions. In our further study on this par-
+ticular part of the proposed system we intend to extend the
+probabilistic schemes developed in [17] in an attempt to dis-
+cover the underlying theoretical properties suggested by our
+empirical findings. In particular, we intend to similarly pro-
+vide theoretical bounds for failure probability and show that
+such failures can be reduced by using more RP-trees.
+To experimentally investigate this hypothesis we employ
+a subset of the Wikipedia database for further analysis.
+In
+what follows,
+the data set contains 500;000 points and we
+always search for
+the 50 nearest
+neighbours of
+a query
+point. Then we measure the searching accuracy by calculat-
+ing the amount of actual nearest neighbours found.
+We query 1;000 points in each experiment.
+The results
+presented in Fig.
+4 correspond to the mean values of the
+aggregated nearest neighbours of the 1;000 query points dis-
+covered by PANNS out of 100 experiment runs.
+Note that
+x-axis represents the “size of search space” which is defined
+by the number of unique points within the union of all the
+leaf
+clusters that
+the query point
+fall
+in.
+Therefore,
+given
+the same search space size,
+using more tress indicates that
+the leaf clusters become smaller.
+As we can see in Fig.
+4,
+for a given x value,
+the curves
+move upwards as we use more and more trees,
+indicating
+that the accuracy improves. As shown in the case of 50 trees,
+almost 80 percent of the actual nearest neighbours are found
+by performing a search over the 10 percent of the data set.
+To further illustrate the benefits of using as many RP-
+trees as possible,
+we present in Fig. 5 the results where the
+size of search space remains approximately constant while
+the number of trees grows and subsequently the cluster size
+shrinks accordingly.
+As shown,
+a larger number of
+trees
+leads to the better accuracy.
+For example,
+the accuracy is
+improved about 62:5 percent by increasing the number of
+trees from 2 to 18.
+Finally in Fig.
+6 similar outcome is observed when the
+average size of the leaf clusters remains approximately con-
+stant
+and the number of
+trees increases.
+In these experi-
+ments, we choose two specific cluster sizes for comparisons,
+i.e., cluster size 77 and 787. Both are just average leaf cluster
+sizes resulted from the termination criterion in the tree con-
+struction procedure which pre-sets a maximum allowed
+size of
+a leaf
+cluster
+(here 100 and 1;000 respectively,
+selected for illustration purposes as any other relative set
+up gives similar results).
+In addition,
+we also draw a ran-
+dom subset for any given size from the whole data set to
+serve as a baseline.
+As we see,
+the accuracy of the random
+subset
+has
+a linear
+improvement
+rate which is
+simply
+due to the linear growth of its search space.
+As expected,
+the
+RP-tree
+solutions
+are
+significantly
+better
+than the
+Fig. 4. The number of true nearest neighbours found for different number
+of
+trees.
+For a given search space size,
+more trees lead to the better
+accuracy.
+Fig. 5. The number of true nearest neighbours found as a function of the
+number of RP-trees used, while the search space size remains approxi-
+mately constant.
+WANG ET AL.: KVASIR: SCALABLE PROVISION OF SEMANTICALLY RELEVANT WEB CONTENT ON BIG DATA FRAMEWORK
+225
+random subset, and cluster size 77 consistently outperforms
+cluster size 787 especially when the search space is small.
+Our empirical results clearly show the benefits of using
+more trees instead of
+using larger clusters for improving
+search accuracy. Moreover, regarding the searching perfor-
+mance,
+since searching can be easily parallelized,
+using
+more trees will not impact the searching time.
+4.4
+Getting Rid of Original Space
+To select the best candidates from a cluster of points,
+we
+need to use the coordinates in the original space to calculate
+their relative distance to the query point. This however, first
+increases
+the
+storage
+overhead since
+we
+need to keep
+the original
+high dimensional
+data set
+which is usually
+huge; second increases the query overhead since we need to
+access
+such data
+set.
+The
+performance
+becomes
+more
+severely degraded if the original data set is too big to load
+into the physical
+memory.
+Moreover,
+computing the dis-
+tance between two points in the high dimensional space per
+se is very time-consuming.
+Nonetheless,
+our
+results
+show that
+it
+is
+possible
+to
+completely get rid of the original data set while keeping the
+accuracy at a satisfying level. The underlying core idea is to
+replace the original
+space with the projected one.
+By so
+doing, we are able to achieve a significant reduction in stor-
+age and non-trivial gains in searching performance.
+PANNS supports both “searching with original space” and
+“searching without original
+space” modes.
+To illustrate how
+PANNS searches for k-NN of a given query point x 2 R
+n
+without
+visiting the original
+space,
+we first
+introduce the
+following notations. We let T
+i
+denote the ith RP-tree in the
+search index file. Recall that a search index file is a collection
+of RP-trees. We then let C
+i
+denote the target cluster at a leaf
+node of T
+i
+which might contain the k-NN of x (or just part
+of them).
+Instead of storing the actual vector values of the
+original data points, each cluster C
+i
+stores only the tuples of
+indices and projected values of
+the data points.
+That
+is,
+C
+i
+¼ fðj; y
+i;j
+Þji; j 2 N; y
+i;j
+2 Rg wherein j is the index of
+a
+data point in the data set and y
+i;j
+is its projected value in C
+i
+.
+PANNS performs the following steps in order to find the
+approximate k-NN of x.
+Step 1 For each RP-tree T
+i
+in the index file, locate the target
+cluster C
+i
+using the standard RP-tree algorithm.
+We
+then project the query point x 2 R
+n
+into the same space
+as those points in C
+i
+, i.e. x
+0
+i
+2 R.
+Step 2 For each C
+i
+, make another set D
+i
+which contains the
+relative projected distances.
+Namely,
+the relative dis-
+tance between x
+0
+i
+and each point y
+i;j
+in C
+i
+in the pro-
+jected space. More precisely,
+D
+i
+¼ fðj; d
+i;j
+Þjd
+i;j
+¼ jy
+i;j
+ x
+0
+i
+j; 8ðj; y
+i;j
+Þ 2 C
+i
+g:
+(1)
+Step 3 Merge all the sets D
+i
+into D and utilize the frequency
+information of each point to calculate its weighted dis-
+tance. Namely,
+D ¼
+ðj; d
+j
+Þjd
+j
+¼
+P
+8D
+i
+d
+i;j
+P
+8D
+i
+Iðj; D
+i
+Þ
+; 8ðj; Þ 2
+[
+8D
+i
+D
+i
+(
+)
+:
+(2)
+Iðj; D
+i
+Þ is the identity function which returns 1 iff
+there is some ðj; Þ 2 D
+i
+, otherwise returns 0.
+Step 4 Sort the tuples in set D according to their weighted
+distances d
+j
+in a non-decreasing order,
+then return the
+first k elements as the result of x’s approximate k-NN.
+As shown above,
+the core operations of PANNS are in
+the Steps 2 and 3 which first calculate the relative projected
+distance between the query point and each potential candi-
+dates
+in the projected space,
+then weigh the distances
+based on the frequency in the target
+clusters.
+In fact,
+the
+weighting scheme in Step 3 simply calculates the average
+of the relative distance of every given point, hence we refer
+to it as average weighting scheme in the following discussion
+for convenience.
+Although the average weighting scheme seem to present
+a viable solution,
+our evaluations show that the effective-
+ness of k-NN search is greatly affected by minor misclassifi-
+cation
+errors
+making
+the
+particular
+task
+much
+more
+complex.
+For example,
+given a query point x,
+even though
+the point y is actually very far away from x in the original
+space,
+it is still highly likely that y will be included in the
+final result as long as y’s projected value appears to be very
+close to x
+0
+i
+in just one of the RP-trees. To avoid such errors,
+we have to consider that the probability of a point to be an
+actual
+k-NN should increase
+accordingly if
+that
+point
+appears in several target clusters C
+i
+.
+We adopt
+another new weighting scheme called cubic
+weighting scheme in PANNS implementation. As such in the
+cubic weighting scheme, we empirically update the calcula-
+tion of the weighted distance as follows:
+D ¼
+ðj; d
+j
+Þjd
+j
+¼
+P
+8D
+i
+d
+i;j
+ð
+P
+8D
+i
+Iðj; D
+i
+ÞÞ
+3
+; 8ðj; Þ 2
+[
+8D
+i
+D
+i
+(
+)
+:
+(3)
+By so doing,
+we give much more weight on the points
+which have multiple occurrences in different C
+i
+by assum-
+ing that such points are more likely to be the true k-NN.
+To measure
+the
+effectiveness
+of
+the
+two weighting
+schemes,
+we perform the following experiments wherein
+Fig. 6. The number of
+true nearest
+neighbours found as a function of
+the search space size,
+while the average leaf
+cluster
+size remains
+approximately constant. The random subset serves as the baseline for
+comparison.
+226
+IEEE TRANSACTIONS ON BIG DATA,
+VOL. 2,
+NO. 3,
+JULY-SEPTEMBER 2016
+only the projected space is used for searching for k-NN.
+The
+experiment
+set-up remains
+the
+same
+as
+that
+has
+been presented in Section 4.3.
+The results are illustrated
+in Fig.
+7 which corresponds to using the cubic weighting
+scheme and Fig.
+8 which corresponds to using the aver-
+age weighting scheme.
+Note that
+both figures
+use the
+same scale on y-axis for the purpose of comparison.
+The
+dramatic
+effect
+of
+the
+different
+weighting schemes
+is
+exposed by comparing the results in both figures.
+The
+cubic weighting scheme has more predictable behaviours
+and is
+much more
+superior
+to the
+average
+weighting
+scheme regarding the searching accuracy.
+Interestingly, by comparing Fig. 7 to Fig. 4, we notice that
+the accuracy does not
+improve as much as we expected
+when the size of search space increases.
+Moreover,
+we can
+even observe a consistent decrease in all the cases in Fig.
+8
+despite
+of
+the
+increased search space.
+We
+hypothesize
+that
+as the cluster size grows the amount
+of
+points with
+multiple occurrences in different
+clusters grows affecting
+the updated weighting distance. However, a more thorough
+investigation is reserved for our future research in order to
+gain a better understanding of such behaviours.
+In general,
+the results of using cubic weighting scheme
+confirm that it is feasible to use only the projected space in
+the actual
+system implementation.
+Fig.
+7 shows that
+the
+accuracy is already able to reach over 30 percent by using
+only 30 trees, and 50 percent by using 150 trees.
+Furthermore,
+the results above also indicate that using
+more trees
+with smaller
+clusters
+is
+arguably the more
+effective way (if
+it
+is not
+the only way)
+to improve the
+accuracy than using larger
+clusters
+whenever
+only the
+projected space is used.
+The reason is because enlarging
+search space does not
+necessarily lead to any significant
+improvement in accuracy in such context.
+4.5
+Caching to Scale Up
+Even though our indexing algorithm is able to significantly
+reduce the index size, the index will eventually become too
+big to fit into memory when the corpus grows from millions
+to trillions of documents. One engineering solution is using
+MMAP provided in operating systems
+which maps
+the
+whole file from hard-disk to memory space without actually
+loading it
+into the physical
+memory.
+The loading is only
+triggered by a cache miss event due to accessing a specific
+chunk of data which does not happen to be in the memory.
+Loading and eviction are handled automatically by the
+operating system.
+With MMAP technology,
+we can effectively access large
+data sets with limited memory.
+However,
+the performance
+of using MMAP is subject
+to the data access pattern.
+For
+example, search performance may degrade if the access pat-
+tern is truly random on a huge index.
+In practice,
+this is
+highly unlikely since the pattern of user requests follows a
+clear Zipf-like distribution [10],
+[13] with strong temporal
+and spatial locality [37]. In other words,
+1)
+most
+users
+are
+interested in a
+relatively
+small
+amount of popular articles;
+2)
+most of the articles that an individual user is reading
+at any given time are similar.
+In vector-based language models,
+similar
+articles
+are
+clustered together in a small part of the whole space. These
+two observations imply that only a small part of the index
+trees is frequently accessed at any given time,
+which leads
+to the actual performance being much better than that of a
+uniformly distributed access pattern.
+5
+P
+RELIMINARY
+E
+VALUATION
+Because scalability is the main challenge confronting Kvasir,
+the evaluation revolves around two questions as below.
+1)
+How fast can we build a database from scratch using
+the library we developed for Apache Spark?
+2)
+How fast
+can the search function in Kvasir serve
+users’ requests?
+In the following,
+we present the results of our prelimi-
+nary evaluation.
+Fig.
+7.
+The number of
+true nearest
+neighbours found in the projected
+space for different number of trees using the cubic weighting scheme.
+Using more trees improves the accuracy, but enlarging the search space
+by using larger clusters only brings marginal benefits. Note that only the
+projected space is used for searching for k-NN.
+Fig.
+8.
+The number of
+true nearest
+neighbours found in the projected
+space for different number of trees using the original
+average weighting
+scheme. Neither using more trees nor using larger clusters can improve
+the searching accuracy. Note that only the projected space is used for
+searching for k-NN.
+WANG ET AL.: KVASIR: SCALABLE PROVISION OF SEMANTICALLY RELEVANT WEB CONTENT ON BIG DATA FRAMEWORK
+227
+The evaluation is performed on a small testbed of 10 Dell
+PowerEdge M610 nodes. Each node has 2 quad-core CPUs,
+32 GB memory,
+and is connected to a 10-Gbit network.
+All
+the nodes
+run Ubuntu SMP with a 3.2.0 Linux kernel.
+ATLAS (Automatically Tuned Linear Algebra System)
+is
+installed on all the nodes to support fast linear algebra oper-
+ations. Three nodes are used for running Crawlers, five for
+running our Spark library,
+and the rest
+two for running
+KServer
+to serve users’
+requests as web servers.
+In this
+paper,
+we only report the results on using Wikipedia data
+set.
+News data set leads to consistently better performance
+due to its smaller size.
+5.1
+Database Building Time
+We evaluate the efficiency of the backend system using our
+Apache Spark library,
+which includes text cleaning,
+model
+building, and indexing the three phases. We first perform a
+sequential
+execution on a single CPU to obtain a baseline
+benchmark.
+With only one CPU,
+it takes over 35 hours to
+process the Wikipedia data set. Using 5 CPUs to parallelize
+the computation,
+it takes about 9 hours which is almost 4
+times improvement. From Table 2, we can see that the total
+building speed is
+improved sublinearly.
+The
+reason is
+because the overhead from I/O and network operations
+eventually replace CPU overhead and become the main bot-
+tleneck in the system.
+By examining the time usage and checking the compo-
+nent-wise overhead,
+DLSA contributes most of the compu-
+tation time while Cleaner contributes the least.
+Cleaner’s
+tasks are easy to parallelize due to its straightforward struc-
+ture,
+but
+there are only marginal
+improvements after 10
+CPUs since most of the time is spent in I/O operations and
+job scheduling.
+For DLSA,
+the parallelizm is achieved by
+dividing a tall matrix into smaller chunks then distributing
+the computation on multiple nodes. The partial calculations
+need to be exchanged among the nodes to obtain the final
+result,
+and therefore the penalty of the increased network
+traffic will
+eventually overrun the benefit
+of
+parallelizm.
+Further investigation reveals that the percent of time used
+in transmitting data increases from 10.5 to 37.2 percent
+(from 5 CPUs to 20 CPUs).
+On the other hand,
+indexing
+phase scales very well
+by using more computation nodes
+because PANNS does not
+require exchanging too much
+data among the nodes.
+5.2
+Accuracy and Scalability of Searching
+Service time represents the amount of time needed to pro-
+cess a request,
+which can also be used to calculate server
+throughput.
+Throughput
+is arguably the most
+important
+metric to measure the scalability of a service. We tested the
+service time of KServer by using one of the two web servers
+in the aforementioned testbed.
+During normal operations,
+a KServer shall see a stream
+of requests consisting of both URLs and pieces of text from
+users,
+and the KServer shall
+be responsible for translating
+them into corresponding vectors
+using the LSA model.
+However, in our evaluation of the search scalability, content
+fetching via a URL is completely unnecessary and brings no
+insights at all in result analysis because the dominant factor
+becomes network conditions rather than the quality of
+a
+search
+algorithm.
+Therefore
+we
+let
+the
+client
+submit
+requests directly in their vector format.
+The KServer only
+performs the search operations using PANNS whenever a
+request vector arrives.
+The request set is generated by ran-
+domly selecting 5  10
+5
+entries from Wikipedia dataset.
+We model
+the content
+popularity with a Zipf distribu-
+tion,
+whose probability mass function is fðxÞ ¼
+1
+x
+a
+P
+n
+i¼1
+i
+a
+,
+where x is the item index,
+n is the total
+number of items
+in the database,
+and a controls the skewness of the distri-
+bution.
+Smaller values of a lead to more uniform distribu-
+tions while larger a values assign more mass to elements
+with small
+i.
+It has been empirically demonstrated that in
+real-world data following a power-law distribution,
+the a
+values typically range between 0.9 and 1.0 [10], [12].
+We plug in different
+a to generate the request
+stream.
+The next request is sent out as soon as the results of the pre-
+vious one is successfully received.
+Round trip time (RTT)
+depends on network conditions and is irrelevant to the effi-
+ciency of the backend, hence is excluded from total service
+time.
+In the evaluations,
+we still
+access the original
+high
+dimensional space in order to identify the true k-NN in the
+last step of linear search. But it is worth noting that Kvasir is
+able to work well
+by using only the projected space,
+the
+improved scalability comes at the price of degraded accu-
+racy. Table 3 summarizes our results.
+We also experiment with various index configurations to
+understand how index impacts the server performance. The
+index is configured with two parameters:
+the maximum
+cluster size c and the number of search trees t.
+Note that c
+determines how many random vectors we will
+draw for
+each search tree, which further impacts the search precision.
+The first row in Table 3 lists all the configurations.
+In gen-
+eral, for a realistic a ¼ 0:9 and index ð20; 256Þ, the through-
+put can reach 1052 requests per second (i.e.,
+1000
+7:6
+ 8) on a
+node of 8 CPUs.
+From Table 3,
+we can see that including more RP-trees
+improves the search accuracy but also increases the index
+size.
+Since we only store the random seed for all
+random
+vectors which is practically negligible,
+the growth of index
+size is mainly due to storing the tree structures.
+The time
+overhead of
+searching also grows sublinearly with more
+trees.
+However,
+since searching in different trees are inde-
+pendent
+and can be easily parallelized,
+the performance
+can be further improved by using more CPUs. Given a spe-
+cific index configuration,
+the service time increases as a
+decreases,
+which attests
+our
+arguments
+in Section 4.5.
+Namely, we can exploit the highly skewed popularity distri-
+bution and utilize caching techniques to scale up the system.
+TABLE 2
+The Time Needed (in Hours) for Building an LSA-Based
+Database from Wikipedia Raw Text Corpus
+# of CPUs
+Cleaner
+DLSA
+PANNS
+Total
+1
+1.32
+20.23
+13.99
+35.54
+5
+0.29
+6.14
+2.86
+9.29
+10
+0.19
+4.22
+1.44
+5.85
+15
+0.17
+3.14
+0.98
+4.29
+20
+0.16
+2.61
+0.77
+3.54
+The time is decomposed to component-wise level.
+Search index uses 128 RP-
+trees with cluster size of 20 points.
+228
+IEEE TRANSACTIONS ON BIG DATA,
+VOL. 2,
+NO. 3,
+JULY-SEPTEMBER 2016
+As we mentioned, given a fixed number of trees, increas-
+ing the cluster size is equivalent to reducing the number of
+random projections,
+and vice versa.
+We increase the maxi-
+mum cluster size from 20 to 80 and present the results in the
+right half of Table 3. Though the intuition is that the preci-
+sion should deteriorate with less random projections,
+we
+notice that the precision is improved instead of degrading.
+The reason is two-fold:
+first,
+large cluster size reduces the
+probability of misclassification for those projections close to
+the split
+point.
+Second,
+since we perform linear
+search
+within a cluster,
+larger cluster enables us to explore more
+neighbours which leads to higher probability to find the
+actual
+nearest
+ones.
+Nonetheless,
+also due to the linear
+search in larger clusters,
+the gain in the accuracy comes at
+the price of inflated searching time.
+Nonetheless, given a fixed aggregated cluster size, we can
+improve both searching performance and accuracy at
+the
+same time by using a larger number of trees with smaller
+cluster size. For example, both index configurations ð20; 64Þ
+and ð80; 16Þ lead to the similar aggregated cluster size after
+taking the union of
+leaf
+clusters which is 20  64 ¼ 80
+16 ¼ 1280.
+However,
+the
+configuration ð20; 64Þ
+is
+more
+attractive due to the following reasons. First, the accuracy of
+ð20; 64Þ is higher than that of ð80; 16Þ, i.e., 84:7 percent versus
+71:3 percent. Second, as we mentioned, searching in different
+trees can be performed in parallel, therefore using more trees
+will not degrade the searching performance. Moreover, our
+experiments (in Section 4.3) also show that using more trees
+in general
+renders smaller aggregated cluster due to the
+increased overlapping between the
+individual
+clusters,
+which further explains why configuration ð20; 64Þ is always
+faster than configuration ð80; 16Þ. Similar results can also be
+observed by comparing the following configuration pairs:
+ð20; 128Þ to ð80; 32Þ, or ð20; 256Þ to ð80; 64Þ.
+5.3
+Scalability on Increasing Data Sets
+To test
+the scalability of
+Kvasir,
+we use a much larger
+data set from Yahoo company called L1 - Yahoo! N-Grams
+(version 2.0) data set
+7
+, we refer to it as L1 data set for short in
+the following discussion.
+L1 data set contains 14:6 million
+documents (126 million unique sentences,
+3:4 billion run-
+ning words).
+The data set
+was crawled from over 12; 000
+news-oriented sites over a period of
+10 months between
+February 2006 and December 2006. L1 data set does not con-
+tain any raw HTML documents but only has n-gram files
+(n ¼ 1;
+2; 3; 4; 5).
+This does not pose a problem in evalua-
+tions since the text cleaning phase only has marginal contri-
+bution to the total
+building time (please refer to Table 2).
+Moreover, we only use 1-gram file in our evaluation.
+In order to gain an understanding on the performance of
+Kvasir on larger data sets, we randomly select certain num-
+ber of documents from L1 data set to make a new text cor-
+pus,
+and gradually increase the corpus size from 4 million
+to 14 million. Then we study the total building time, query
+time, query accuracy respectively as a function of increasing
+data size, as Fig. 9 shows.
+In Fig.
+9a,
+we can see that the total amount of building
+time grows accordingly as the corpus size increases, and the
+growth is basically linear with negligible variations.
+Error
+bars in the figure show the variations in the building time
+which are often caused by the stragglers [53] among worker
+processes. In general, such variations depend on both work-
+load and traffic load in a cluster and are usually small
+in
+most
+cases.
+Doubling the number of CPUs used in index
+building (e.g.,
+from 20 to 40)
+can significantly reduce the
+total building time about 45 percent. Together with Table 2,
+the results show that Kvasir has a very good horizontal scal-
+ability over a resource pool.
+In Fig. 9b, we present the Whisker plot of query time as a
+function of increasing corpus size.
+The average query time
+is 11:2 ms for the smallest
+corpus size of 4 million docu-
+ments,
+and this number increases to 12:7 ms for 14 million
+documents.
+Even though the corpus size increases almost
+three times,
+the actual
+query time only slightly increases
+about
+13:3 percent
+(i.e.,
+1:5
+ms
+in its
+absolute
+value).
+To explain such small degradation, first recall a search oper-
+ation consists of “search in RP-trees” and ”search in aggre-
+gated leaf
+clusters” two steps.
+The reason of
+the slow
+growth in query time can be explained in two fold:
+First,
+the depth of a binary search tree for 4 million documents is
+17:6 levels while for 14 million documents it is 19:4 levels
+on average (given the leaf
+cluster size is 20).
+Two more
+search levels only introduce negligible overhead in practical
+searching time. Second, when the original high dimensional
+space is accessed,
+the linear search in the aggregated leaf
+clusters
+constitutes
+the
+most
+time-consuming
+step
+in
+PANNS. However, since the tree configuration remains the
+same ð20
+; 256Þ throughout the evaluations, namely a cluster
+TABLE 3
+Scalability Test on Kserver with Different Index Configurations and Request Patterns
+ðc; tÞ
+(20,16)
+(20,32)
+(20,64)
+(20,128)
+(20,256)
+(80,16)
+(80,32)
+(80,64)
+(80,128)
+(80,256)
+Index (MB)
+361
+721
+1445
+2891
+5782
+258
+519
+1039
+2078
+4155
+Precision (%)
+68.5
+75.2
+84.7
+89.4
+94.9
+71.3
+83.6
+91.2
+95.6
+99.2
+a
+1
+¼ 1:0
+ms
+2.2
+3.7
+4.5
+5.9
+6.8
+4.6
+7.9
+11.2
+13.7
+16.1
+a
+2
+¼ 0:9
+ms
+3.4
+4.3
+6.0
+6.8
+7.6
+7.2
+9.5
+14.9
+15.3
+17.1
+a
+3
+¼ 0:8
+ms
+4.3
+4.9
+6.7
+7.9
+8.4
+9.1
+11.7
+15.2
+17.4
+17.9
+a
+4
+¼ 0:7
+ms
+5.5
+6.3
+7.4
+8.5
+9.3
+11.6
+13.4
+16.1
+17.7
+18.5
+a
+5
+¼ 0:6
+ms
+6.1
+6.7
+7.9
+8.8
+9.8
+13.9
+16.0
+18.5
+19.8
+21.1
+a
+6
+¼ 0:5
+ms
+6.7
+7.3
+8.2
+9.0
+10.3
+16.6
+17.8
+19.9
+20.4
+23.1
+ðc; tÞ in the first row, c represents the maximum cluster size, and t represents the number of RP-trees. Zipf-ða; nÞ is used to model the content popularity. The
+results confirm our analysis in Section 4.3 that using a larger number of trees of smaller clusters improves both the searching performance and accuracy. For
+example, compare ð20; 64Þ to ð80; 16Þ, or compare ð20; 128Þ to ð80; 32Þ.
+7.
+http://webscope.sandbox.yahoo.com/#datasets
+WANG ET AL.: KVASIR: SCALABLE PROVISION OF SEMANTICALLY RELEVANT WEB CONTENT ON BIG DATA FRAMEWORK
+229
+size of 20 and 256 search trees,
+the aggregated set will also
+remain roughly the same size.
+Without accessing the origi-
+nal space,
+the linear search in the last step can be skipped.
+In either case, the impact on the searching time is marginal,
+which further shows the capability of Kvasir in handling
+large text corpora.
+Fig. 9c plots the impact of corpus size on the accuracy of
+searching.
+Given a fixed search tree
+configuration (i.e.,
+ð20; 256Þ
+used as
+before),
+the
+search accuracy
+slightly
+degrades from 94:2 to 91:2 percent even though the docu-
+ments increase from 4 million to 14 million. In theory, increas-
+ing the number of data points (or documents) in a unit high
+dimensional ball leads to an increased density, which can fur-
+ther increase the probability of misclassification as explained
+in Section 4.2. However, since using both multiple projections
+and multiple search trees can effectively ameliorate the nega-
+tive effects of misclassification,
+the actual impact of a large
+corpus becomes small,
+only 3 percent drop in search accu-
+racy.
+The degradation in search accuracy is much slower
+than the increase in corpus
+size,
+which again indicates
+Kvasir’s good scalability on large corpora.
+Moreover,
+using
+more RP-trees can certainly improve the accuracy. Our fur-
+ther investigation shows that using the RP-tree configuration
+ð20; 400Þ is able to bring the accuracy back to 95 percent.
+Note that in this evaluation we are heavily constrained
+by our available computational resources in the lab (refer to
+Section 5).
+Larger data sets can certainly be handled when
+more computation and storage resources are pooled in a
+cluster.
+The preliminary results above already show that
+Kvasir possesses good vertical and horizontal scalability.
+5.4
+Empirical Work on User Satisfaction
+A full study of user experience is already out of the scope of
+this paper due to our strong focus on architecture, data struc-
+ture and algorithm,
+therefore we only briefly share some
+empirical results. In information retrieval, user satisfaction is
+measured by Relevance metrics [14].
+Human assessors are
+required to manually label
+the
+relevant
+documents
+in
+the search results for each given information need.
+With
+the labelled data, multiple metrics are available to measure
+the relevance,
+from the well-known precision and recall to
+mean average precision,
+precision@k,
+R precision,
+and etc.
+[36] Note that the classic metric recall is no longer important
+for modern web scale IR systems because most users only
+consume the results on first several
+pages.
+Therefore,
+pre-
+cision@k, which measures the percent of relevant documents
+among the top k search results, becomes an important mea-
+sure especially for ranked results.
+We performed a preliminary user experiment in the Com-
+puter Lab at Cambridge University. Five users were invited
+to participate, and each was asked to perform 50 queries via
+Kvasir.
+The user can decide what
+to query but
+the query
+must be a link to an Internet article containing meaningful
+content.
+Kvasir
+returns
+top 10 results,
+and the user
+is
+required to manually check the content of every result then
+mark it either {0: not relevant} or {1: relevant}. Table 4 provides
+two example queries. The first one is a news article from The-
+Guardian on a famous stock market crisis in 2010.
+The first
+result links to a Wikipedia article which has a full description
+of the crisis, the rest come from various sources. The second
+example uses an article on “Merge sort” as query, and all the
+results are from Wikipedia itself. In both cases, all the results
+have strong relevance to the content of the query articles.
+Table 5 further presents the values of precision@k in each
+user test.
+Kvasir achieves promising results in all five user
+tests.
+On average,
+Kvasir’s precision@k reached as high as
+93:8 percent. We further investigated on the results marked
+as “non-relevant” by users. It turned out that 107 out of 154
+negatives were due to the fact that a page was removed by
+the website so that users could not access the content to eval-
+uate.
+By excluding such failure cases,
+the precision@k can
+increase to 98:0 percent.
+6
+D
+ISCUSSIONS AND
+F
+UTURE
+W
+ORK
+Kvasir aims to provide a scalable platform of intelligent con-
+tent
+provision.
+It
+is by no means constrained by browser
+Fig. 9. Building time, query time, and accuracy as a function of increased
+data size.
+As we can see,
+building time increases linearly as data set
+grows,
+but
+using more CPUs decreases the building time effectively.
+Increasing data set
+appears to have marginal
+impacts on both query
+time and accuracy,
+which indicates Kvasir’s scalability on large text
+corpora.
+230
+IEEE TRANSACTIONS ON BIG DATA,
+VOL. 2,
+NO. 3,
+JULY-SEPTEMBER 2016
+frontends.
+In fact,
+many interesting applications
+can be
+developed as frontends (e.g., mobile phone apps, enterprise
+search engines, twitter bots, and etc.) thanks to Kvasir’s flex-
+ible RESTful API and powerful backend. The recommended
+content come from the data sets maintained by the backend.
+We mainly focused on addressing the implementation
+issues in the present paper, along with some empirical eval-
+uations
+and discussions
+on the performance,
+scalability,
+and user satisfaction of Kvasir.
+It is worth noting that we
+can improve the current design in many ways. For example,
+new content keeps flowing into Kvasir.
+However,
+we need
+not necessarily to rebuild the LSA model
+and index from
+scratch whenever new documents arrive. LSA space can be
+adjusted on the fly for incremental
+updates [8].
+Then,
+the
+trees are updated by adding the new points to the corre-
+sponding leaf cell. In fact, we are actively optimising Kvasir
+to integrate aforementioned techniques to support dynamic
+data flows.
+The results from KServer are ranked based on cosine sim-
+ilarity at
+the moment.
+However,
+finer-grained and more
+personalized re-ranking can be
+implemented by taking
+users’
+both long-term and short-term preferences
+into
+account.
+Such functionality can be achieved by extending
+one-class SVM or utilizing other techniques like reinforce-
+ment
+learning [21].
+Kvasir
+provides
+a scalable
+Internet
+service via a RESTful API.
+Content providers can integrate
+Kvasir service on their website to enhance users’ experience
+by automatically providing similar
+articles
+on the same
+page.
+Besides,
+more optimizations can be done at frontend
+side via caching and compression to reduce the traffic
+overhead.
+Furthermore,
+a thorough measurement
+on user
+satisfaction should be performed with the involvement of
+HCI experts after a larger deployment of Kvasir.
+Currently,
+Kvasir does not provide full-fledged security
+and privacy support.
+For
+security,
+malicious
+users
+may
+launch DDoS attacks by submitting a huge amount of ran-
+dom requests quickly. Though limiting the request rate can
+mitigate such attacks to some extent, DDoS attacks are diffi-
+cult to defend against in general. For privacy, Kvasir needs
+tracking a user’s browsing history to provide personalized
+results. However, a user may not want to store such private
+information on the server. Finer-grained policy is needed to
+provide flexible privacy configurations.
+Security and pri-
+vacy definitely deserve more thorough investigations in our
+future work.
+7
+C
+ONCLUSION
+In this paper, we presented Kvasir which provides seamless
+integration of LSA-based content provision into web brows-
+ing.
+To build Kvasir
+as
+a scalable Internet
+service,
+we
+addressed various technical challenges in the system imple-
+mentation. Specifically, we proposed a parallel RP-tree algo-
+rithm and implemented stochastic SVD on Spark to tackle
+the scalability challenges in index building and searching.
+The proposed solutions were evaluated on the testbed and
+scaled well on multiple CPUs. The results showed that Kva-
+sir can easily achieve millisecond query speed for a 14 mil-
+lion document repository thanks to its novel design. Kvasir
+is
+an open-source project
+and is
+currently under
+active
+development.
+The key components of
+Kvasir
+are imple-
+mented as an Apache Spark library, and all the source code
+are publicly accessible on Github.
+A
+CKNOWLEDGMENTS
+This research was co-supported by the Academy of
+Finland
+under “The Finnish Centre of Excellence in Computational
+Inference Research (COIN)”.
+R
+EFERENCES
+[1]
+G. Adomavicius and A. Tuzhilin, “Toward the next generation of
+recommender systems: A survey of the state-of-the-art and possi-
+ble extensions,” IEEE Trans.
+Knowl.
+Data Eng.,
+vol.
+17,
+no.
+6,
+pp. 734–749, Jun. 2005.
+[2]
+E.
+M.
+Airoldi,
+D.
+M.
+Blei,
+S.
+E.
+Fienberg,
+and E.
+P.
+Xing,
+“Mixed
+membership stochastic blockmodels,” J.
+Mach.
+Learn.
+Res.,
+vol.
+9,
+pp. 1981–2014, 2008.
+[3]
+A.
+Andoni
+and P.
+Indyk,
+“Near-optimal
+hashing algorithms for
+approximate nearest neighbor in high dimensions,” in Proc.
+47th
+Annu. IEEE Symp. Found. Comput. Sci., 2006, pp. 459–468.
+[4]
+T. Berners-Lee, J. Hendler, O. Lassila, et al., “The semantic web,”
+Sci. Amer., vol. 284, no. 5, pp. 28–37, 2001.
+[5]
+M.
+Berry,
+S.
+Dumais,
+and G.
+O’Brien,
+“Using linear algebra for
+intelligent
+information retrieval,”
+SIAM Rev.,
+vol.
+37,
+no.
+4,
+pp. 573–595, 1995.
+TABLE 4
+An Illustration of Kvasir Search Results
+Query article from theguardian.com: The 2010 ’flash crash’:
+how it unfolded
+Rank
+Page Title
+Source
+#1
+2010 Flash Crash
+Wikipedia
+#2
+High-frequency Trading
+Wikipedia
+#3
+Flash Crash, Could it happen again?
+CNN
+#4
+Stock market crash
+Wikipedia
+#5
+Algorithmic trading
+Wikipedia
+#6
+US options craft rules to fend off turmoil
+Thomson Reuters
+#7
+Are machines running exchanges
+CNN
+#8
+A dark magic: The rise of the robot traders
+BBC
+#9
+Market Structure: Perception Versus Reality
+Markets Media
+#10
+Volatility Time Horizon Contracts
+Markets Media
+Query article from en.wikipedia.org: Merge sort
+Rank
+Page Title
+Source
+#1
+Spreadsort
+Wikipedia
+#2
+Insertion sort
+Wikipedia
+#3
+Selection sort
+Wikipedia
+#4
+Funnelsort
+Wikipedia
+#5
+Quicksort
+Wikipedia
+#6
+Divide and conquer algorithms
+Wikipedia
+#7
+Bubble sort
+Wikipedia
+#8
+Sorting algorithms
+Wikipedia
+#9
+Best, worst and average case
+Wikipedia
+#10
+Linked list
+Wikipedia
+The query is a link to an Internet article with its page title and domain specified
+on the first row of each table. Only page titles of the top 10 returned results are
+presented due to space limit.
+TABLE 5
+For Each User (One Column), the Average and Standard Error
+of Precision@k of 50 Queries Are Presented
+precision@k
+user #1
+user #2
+user #3
+user #4
+user #5
+Average
+0.9360
+0.9260
+0.9380
+0.9560
+0.9360
+StdError
+0.1005
+0.0986
+0.0805
+0.0644
+0.0663
+In total,
+250 queries are performed and 2,500 articles are manually assessed
+and labelled by five test users.
+WANG ET AL.: KVASIR: SCALABLE PROVISION OF SEMANTICALLY RELEVANT WEB CONTENT ON BIG DATA FRAMEWORK
+231
+[6]
+D.
+M.
+Blei,
+A.
+Y.
+Ng,
+and M.
+I.
+Jordan,
+“Latent
+Dirichlet
+allocation,” J. Mach. Learn. Res., 3, pp. 993–1022, Mar. 2003.
+[7]
+J.
+Bobadilla,
+F.
+Ortega,
+A.
+Hernando,
+and
+A.
+Gutirrez,
+“Recommender systems survey,” Knowledge-Based Syst.,
+vol.
+46,
+pp. 109–132, 2013.
+[8]
+M. Brand, “Fast low-rank modifications of the thin singular value
+decomposition,” Linear Algebra Appl., vol. 415, pp. 20–30, 2006.
+[9]
+J.
+S.
+Breese,
+D.
+Heckerman,
+and C.
+Kadie,
+“Empirical analysis of
+predictive algorithms for
+collaborative filtering,” in Proc.
+14th
+Conf. Uncertainty Artif. Intell., 1998, pp. 43–52.
+[10]
+L. Breslau, P. Cao, L. Fan, G. Phillips, and S. Shenker, “Web cach-
+ing and Zipf-like distributions:
+Evidence and implications,” in
+Proc.
+18th Annu.
+Joint
+Conf.
+IEEE Comput.
+Commun.
+Soc.,
+1999,
+pp. 126–134.
+[11]
+R.
+Burke,
+“Hybrid
+recommender
+systems:
+Survey
+and
+experiments,” User
+Modeling User-Adapted Interaction,
+vol.
+12,
+no. 4, pp. 331–370, 2002.
+[12]
+M. Cha, H. Kwak, P. Rodriguez, Y.-Y. Ahn, and S. Moon, “I tube,
+You Tube,
+everybody tubes:
+Analyzing the world’s largest user
+generated content
+video system,” in Proc.
+7th ACM SIGCOMM
+Conf. Internet Meas., 2007, pp. 1–14.
+[13]
+M.
+Cha,
+H.
+Kwak,
+P.
+Rodriguez,
+Y.-Y.
+Ahn,
+and S.
+Moon,
+“Analyzing the video popularity characteristics of large-scale user
+generated content
+systems,” IEEE/ACM Trans.
+Netw.,
+vol.
+17,
+no. 5, pp. 1357–1370, Oct. 2009.
+[14]
+C. L. Clarke, M. Kolla, G. V. Cormack, O. Vechtomova, A. Ashkan,
+S. B
+€
+uttcher, and I. MacKinnon, “Novelty and diversity in informa-
+tion retrieval
+evaluation,” in Proc.
+31st
+Annu.
+Int.
+ACM SIGIR
+Conf. Res. Develop. Inform. Retrieval, 2008, pp. 659–666.
+[15]
+P.
+Cremonesi,
+A.
+Tripodi,
+and R.
+Turrin,
+“Cross-domain recom-
+mender systems,” in Proc. IEEE 11th Int. Conf. Data Mining Work-
+shops, 2011, pp. 496–503.
+[16]
+S.
+Dasgupta and Y.
+Freund,
+“Random projection trees and low
+dimensional
+manifolds,” in Proc.
+40th Annu.
+ACM Symp.
+Theory
+Comput., 2008, pp. 537–546.
+[17]
+S.
+Dasgupta and K.
+Sinha,
+“Randomized partition trees for exact
+nearest neighbor search,” Algorithmica, vol. 72, pp. 237–263, 2013.
+[18]
+C.
+M.
+De Vries,
+L.
+De Vine,
+S.
+Geva,
+and R.
+Nayak,
+“Parallel
+streaming signature em-tree: A clustering algorithm for web scale
+applications,” in Proc.
+24th Int.
+Conf.
+World Wide
+Web,
+2015,
+pp. 216–226.
+[19]
+S.
+Deerwester,
+S.
+T.
+Dumais,
+G.
+W.
+Furnas,
+T.
+K.
+Landauer,
+and
+R. Harshman, “Indexing by latent semantic analysis,” J. Amer. Soc.
+Inform. Sci., vol. 41, no. 6, p. 391, 1990.
+[20]
+W.
+B.
+Frakes and R.
+Baeza-Yates,
+Eds.,
+Information Retrieval:
+Data
+Structures and Algorithms,
+Englewood Cliffs,
+NJ,
+USA:
+Prentice-
+Hall, 1992.
+[21]
+D.
+Glowacka,
+T.
+Ruotsalo,
+K.
+Konyushkova,
+K.
+Athukorala,
+S. Kaski, and G. Jacucci, “Scinet: A system for browsing scientific
+literature through keyword manipulation,” in Proc.
+ACM Int.
+Conf. Intell. User Interfaces Companion, 2013, pp. 61–62.
+[22]
+D. Goldberg, D. Nichols, B. M. Oki, and D. Terry, “Using collabo-
+rative filtering to weave an information tapestry,” Commun. ACM,
+vol. 35, no. 12, pp. 61–70, Dec. 1992.
+[23]
+K.
+Hajebi,
+Y.
+Abbasi-Yadkori,
+H.
+Shahbazi,
+and H.
+Zhang,
+“Fast
+approximate nearest-neighbor
+search with k-nearest
+neighbor
+graph,” in Int. Joint Conf. Artificial Intell., 2011, pp. 1312–1317.
+[24]
+N. Halko, P. G. Martinsson, and J. A. Tropp, “Finding structure with
+randomness: Probabilistic algorithms for constructing approximate
+matrix decompositions,” SIAM Rev., vol. 53, pp. 217–288, 2011.
+[25]
+M.
+Hall,
+E.
+Frank,
+G.
+Holmes,
+B.
+Pfahringer,
+P.
+Reutemann,
+and
+I. H. Witten, “The weka data mining software: An update,” ACM
+SIGKDD Exploration Newslett., vol. 11, no. 1, pp. 10–18, Nov. 2009.
+[26]
+J.
+He,
+W.
+Liu,
+and S.-F.
+Chang,
+“Scalable similarity search with
+optimized kernel hashing,” in Proc. 16th ACM SIGKDD Int. Conf.
+Knowl. Discovery Data Mining, 2010, pp. 1129–1138.
+[27]
+T. Hofmann, “Probabilistic latent semantic indexing,” in Proc. 26th
+Annu.
+Int.
+ACM SIGIR Conf.
+Res.
+Develop.
+Inf.
+Retrieval,
+1999,
+pp. 50–57.
+[28]
+D. Huynh, S. Mazzocchi, and D. Karger, “Piggy bank: Experience
+the semantic web inside your web browser,” The Semantic Web,
+vol. 5, pp. 16–27, 2005.
+[29]
+V. Hyv
+€
+onen, T. Pitk
+€
+anen, S. Tasoulis, L. Wang, T. Roos, and J. Cor-
+ander,
+“Technical
+report:
+Fast
+k-nn search,” Dept.
+Comput.
+Sci.,
+arXiv:1509.06957, University of Helsinki, Finland, 2015.
+[30]
+H.
+Jegou,
+M.
+Douze,
+and C.
+Schmid,
+“Product
+quantization for
+nearest neighbor search,” IEEE Trans.
+Pattern Anal.
+Mach.
+Intell.,
+vol. 33, no. 1, pp. 117–128, Jan. 2011.
+[31]
+Y.
+Jia,
+J.
+Wang,
+G.
+Zeng,
+H.
+Zha,
+and X.-S.
+Hua,
+“Optimizing
+kd-trees for scalable visual
+descriptor indexing,” in Proc.
+IEEE
+Conf. Comput. Vision Pattern Recognition, 2010, pp. 3392–3399.
+[32]
+J. M. Kleinberg, “Authoritative sources in a hyperlinked environ-
+ment,” J. ACM, vol. 46, no. 5, pp. 604–632, Sep. 1999.
+[33]
+Y. Koren and R. Bell, “Advances in collaborative filtering,” in Rec-
+ommender System Handbook,
+F.
+Ricci,
+L.
+Rokach,
+B.
+Shapira,
+and
+P.
+B.
+Kantor,
+Ed.,
+New York,
+NY,
+USA:
+Springer,
+2011,
+pp.
+145–
+186.
+[34]
+B. Li, Q.
+Yang, and X.
+Xue,
+“Can movies and books collaborate?:
+Cross-domain collaborative filtering for sparsity reduction,” in
+Proc. 21st Int. Joint Conf. Artif. Intell., 2009, pp. 2052–2057.
+[35]
+T. Liu, A.
+W. Moore, A.
+Gray, and K. Yang, “An investigation of
+practical
+approximate
+nearest
+neighbor
+algorithms,”
+in Proc.
+Advances Neural Inform. Process. Syst., 2004, pp. 825–832.
+[36]
+C.
+D.
+Manning,
+P.
+Raghavan,
+H.
+Sch
+€
+utze,
+et
+al.,
+Introduction to
+Information Retrieval.
+Cambridge,
+U.K.:
+Cambridge Univ.
+Press,
+2008.
+[37]
+L.
+Wang,
+S.
+Bayhan,
+J.
+Ott,
+J.
+Kangasharju,
+A.
+Sathiaseelan,
+and
+J.
+Crowcroft,
+“Pro-Diluvian:
+Understanding scoped-flooding for
+content discovery in information-centric networking,” in Proc. 2nd
+Int. Conf. Inform.-Centric Netw., 2015, pp. 9–18.
+[38]
+M.
+Muja and D.
+Lowe, “Scalable nearest neighbor algorithms for
+high dimensional
+data,” IEEE Trans.
+Pattern Anal.
+Mach.
+Intell.,
+vol. 36, no. 11, pp. 2227–2240, Nov. 2014.
+[39]
+M.
+Muja and D.
+G.
+Lowe,
+“Fast approximate nearest neighbors
+with automatic algorithm configuration,” in Proc.
+Int.
+Conf.
+Com-
+put. Vision Theory and Appl., 2009, pp. 331–340.
+[40]
+O.
+Okun,
+Ed.,
+Supervised and Unsupervised Ensemble Methods and
+Their Applications. Berlin, Germany: Springer-Verlag, 2008.
+[41]
+L.
+Page,
+S.
+Brin,
+R.
+Motwani,
+and T.
+Winograd,
+“The PageRank
+citation ranking: Bringing order to the web,” Stanford Univ., Stan-
+ford, CA, USA, 1999.
+[42]
+R.
+Rehurek and P.
+Sojka,
+“Software framework for topic model-
+ling with large corpora,” in Proc.
+LREC Workshop New Challenges
+NLP Frameworks, 2010, pp. 45–50.
+[43]
+P.
+Resnick and H.
+R.
+Varian,
+“Recommender systems,” Commun.
+ACM, vol. 40, no. 3, pp. 56–58, Mar. 1997.
+[44]
+(2015). [Online]. Avaiable: Scalanlp, http://www.scalanlp.org/
+[45]
+(2015). [Online]. Avaiable: scikit-learn toolkit,
+http://scikit-learn.
+org/
+[46]
+R.
+Sproull,
+“Refinements
+to
+nearest-neighbor
+searching
+ink-
+dimensional trees,” Algorithmica, vol. 6, no. 1-6, pp. 579–589, 1991.
+[47]
+S.
+Tasoulis,
+L.
+Cheng,
+N.
+Valimaki,
+N.
+J.
+Croucher,
+S.
+R.
+Harris,
+W.
+P.
+Hanage,
+T.
+Roos,
+and J.
+Corander,
+“Random projection
+based clustering for population genomics,” in Proc. IEEE Int. Conf.
+Big Data, 2014, pp. 675–682.
+[48]
+J. Wang, S. Kumar, and S.-F. Chang, “Semi-supervised hashing for
+scalable image retrieval,” in Proc.
+IEEE Conf.
+Comput.
+Vision Pat-
+tern Recognition, Jun. 2010, pp. 3424–3431.
+[49]
+J.
+Wang,
+J.
+Wang,
+G.
+Zeng,
+Z.
+Tu,
+R.
+Gan,
+and S.
+Li,
+“Scalable
+k-NN graph construction for visual
+descriptors,” in Proc.
+IEEE
+Conf. Comput. Vision Pattern Recognition, 2012, pp. 1106–1113.
+[50]
+L.
+Wang,
+“Kvasir project.
+(2015).
+[Online].
+Available:
+http://cs.
+helsinki.fi/u/lxwang/kvasir
+[51]
+L. Wang, S. Tasoulis, T. Roos, and J. Kangasharju, “Kvasir: Seam-
+less integration of latent semantic analysis-based content provi-
+sion into web browsing,” in Proc.
+24th Int.
+Conf.
+World Wide Web
+Companion, 2015, pp. 251–254.
+[52]
+H. Xu, J. Wang, Z. Li, G. Zeng, S. Li, and N. Yu, “Complementary
+hashing for approximate nearest neighbor search,” in Proc.
+IEEE
+Int. Conf. Comput. Vision, 2011, pp. 1631–1638.
+[53]
+M. Zaharia, M. Chowdhury, T. Das, A. Dave, J. Ma, M. McCauley,
+M.
+J.
+Franklin,
+S.
+Shenker,
+and I.
+Stoica,
+“Resilient
+distributed
+datasets:
+A fault-tolerant
+abstraction
+for
+in-memory
+cluster
+computing,” in Proc. 9th USENIX Conf. Netw. Syst. Des. Implemen-
+tation, 2012, p. 2.
+[54]
+M. Zaharia, M. Chowdhury, M. J. Franklin, S. Shenker, and I. Sto-
+ica,
+“Spark:
+Cluster computing with working sets,” in Proc.
+2nd
+USENIX Conf. Hot Topics Cloud Comput., 2010, p. 10.
+232
+IEEE TRANSACTIONS ON BIG DATA,
+VOL. 2,
+NO. 3,
+JULY-SEPTEMBER 2016
+Liang Wang received the BEng degree in com-
+puter science and mathematics from Tongji
+Uni-
+versity,
+Shanghai,
+China,
+in 2003.
+Later,
+he
+received the MSc and PhD degrees in computer
+science from University of
+Helsinki,
+Finland,
+in
+2011 and 2015 respectively.
+He is a research
+associate at the Computer Laboratory, University
+of
+Cambridge,
+United Kingdom.
+His research
+interests include system and network optimisa-
+tion, information-centric networks, machine learn-
+ing, and big data frameworks.
+Sotiris Tasoulis received the diploma in mathe-
+matics and the MSc degree in mathematics of
+computers and decision making from the Univer-
+sity of Patras, Greece, in 2009. He received the
+PhD degree from the University of
+Thessaly,
+Greece, in 2013. In the same year he joined Hel-
+sinki
+Institute for
+Information Technology and
+Department
+of Computer Science of
+the Univer-
+sity of
+Helsinki
+as a post
+doctoral
+researcher in
+Knowledge discovery in Big Data. Since Septem-
+ber
+2015 Sotiris
+has
+been a lecturer
+at
+the
+Department of Applied Mathematics, Liverpool
+John Moores University,
+United Kingdom. His research interests are machine learning in big data
+applications, large scale data mining, dimensionality reduction and unsu-
+pervised learning.
+Teemu
+Roos
+received
+the
+MSc
+and
+PhD
+degrees in computer science from the University
+of
+Helsinki,
+Finland,
+in 2001 and 2007,
+respec-
+tively. He is an assistant professor at the Helsinki
+Institute
+for
+Information
+Technology
+and
+the
+Department of Computer Science, the University
+of
+Helsinki,
+Finland.
+His
+research
+interests
+include the theory and applications of probabilis-
+tic
+graphical
+models,
+information theory,
+and
+machine learning.
+Jussi
+Kangasharju received the MSc degree
+from the Helsinki
+University of
+Technology in
+1998. He received the Diplome d’Etudes Appro-
+fondies (DEA) from the Ecole Superieure des Sci-
+ences Informatiques (ESSI) in Sophia Antipolis in
+1998. He received the PhD degree from the Uni-
+versity of Nice Sophia Antipolis/Institut Eurecom
+in 2002 . He joined Darmstadt University of Tech-
+nology, first as post-doctoral
+researcher in 2002,
+and from 2004 onwards as assistant
+professor.
+Since June 2007 he has been a professor at the
+department of computer science, University of Helsinki. Between 2009
+and 2012 he was the director of the Future Internet research program at
+Helsinki
+Institute for Information Technology. His research interests are
+information-centric
+networks,
+content
+distribution,
+opportunistic
+net-
+works, and green ICT. He is a member of the IEEE and the ACM.
+"
+For more information on this or any other computing topic,
+please visit our Digital Library at www.computer.org/publications/dlib.
+WANG ET AL.: KVASIR: SCALABLE PROVISION OF SEMANTICALLY RELEVANT WEB CONTENT ON BIG DATA FRAMEWORK
+233

@@ -1,0 +1,1376 @@
+﻿LSTM based Conversation Models
+Yi Luan
+1
+, Yangfeng Ji
+2
+, Mari Ostendorf
+1
+1
+Department of Electrical Engineering, University of Washington, Seattle, WA 98195
+2
+School of Interactive Computing, Georgia Institute of Technology, Atlanta, GA 30332
+luanyi@uw.edu, jiyfeng@gatech.edu, ostendor@uw.edu
+Abstract
+In this paper,
+we present a conversational model that incorpo-
+rates both context and participant role for two-party conversa-
+tions.
+Different architectures are explored for integrating par-
+ticipant
+role and context
+information into a Long Short-term
+Memory (LSTM) language model.
+The conversational model
+can function as a language model
+or
+a language generation
+model.
+Experiments on the Ubuntu Dialog Corpus show that
+our model can capture multiple turn interaction between partic-
+ipants.
+The proposed method outperforms a traditional LSTM
+model as measured by language model perplexity and response
+ranking.
+Generated responses show characteristic differences
+between the two participant roles.
+1.
+Introduction
+As automatic language understanding and generation technol-
+ogy improves,
+there is increasing interest
+in building human-
+computer conversational systems, which can be used for a vari-
+ety of applications such as travel planning,
+tutorial systems or
+chat-based technical support.
+Most work has emphasized un-
+derstanding or generating a word sequence associated with a
+single sentence or speaker turn, potentially leveraging the previ-
+ous turn. Beyond local context, language use in a goal-oriented
+conversation reflects the global topic of discussion,
+as well as
+the respective role of each participant.
+In this work,
+we intro-
+duce a conversational language model that incorporates both lo-
+cal and global context together with participant role.
+In particular,
+participant
+roles (or speaker
+roles)
+impact
+content of a sentence in terms of both the information to be com-
+municated and the interaction strategy, affecting both meaning
+and conversational structure.
+For example,
+in broadcast news,
+speaker roles are shown to be informative for discovering the
+story structures [1]; they impact speaking time and turn-taking
+[2]; and they are associated with particular phrase patterns [3].
+In online discussions,
+speaker role is useful
+for detecting au-
+thority claims [4].
+Other work shows that in casual conversa-
+tions,
+speakers with different
+roles are likely to use different
+discourse markers [5].
+For the Ubuntu technical support data
+used in this study,
+Table 1 illustrates differences in the distri-
+butions of frequent
+words for the poster vs.
+responder roles.
+The P
+OSTER
+role tends to raise questions using words any-
+one, how.
+The R
+ESPONDER
+role tends to use directive words
+(you, you’re), hedges (may, might) and words related to problem
+solving (sudo, check).
+Specifically, we propose a neural network model that builds
+on recent
+work in response generation,
+integrating different
+methods that have been used for capturing local (previous sen-
+tence) context and more global context, and extending the net-
+work architecture to incorporate role information.
+The model
+can be used as a language model,
+as in speech recognition or
+translation,
+but our focus here is on response generation.
+Ex-
+periments are conducted with Ubuntu chat logs, using language
+model
+perplexity and response ranking,
+as well
+as qualitative
+analysis.
+2.
+Related Work
+Data-driven methods are now widely used for building conver-
+sation systems.
+With the popularity of social
+media,
+such as
+Twitter,
+Sina Weibo,
+and online discussion forums,
+it is easier
+to collect conversation text [6, 7].
+Several different data-driven
+models have been proposed to build conversation systems.
+Rit-
+ter et al. [8] present a statistical machine translation based con-
+versation system.
+Recently,
+neural network models have been
+explored.
+The flexibility of neural network models opens the
+possibility of integrating different kinds of information into the
+generation procedure.
+For example, Sordoni et al. [9] present a
+way to integrate contextual information via feed-forward neural
+networks.
+Li et al. propose using Maximum Mutual Informa-
+tion (MMI) as the objective function in neural
+models in or-
+der to produce more diverse and interesting responses.
+Shang
+et al. [10] introduce the attention mechanism into an encoder-
+decoder network for a conversation model.
+Most similar to our
+work is the Semantic Controlled LSTM (SC-LSTM) proposed
+by Wan et al. [11], where a Dialog-act component is introduced
+into the LSTM cell to guide the generated content. In this work,
+we utilize the role information to bias response generation with-
+out modifying LSTM cells.
+Efficiently capturing local
+and global
+context
+remains a
+open problem in language modeling.
+Different ways of model-
+ing document-level context has been explored in [12] and [13]
+based on the LSTM framework.
+Luan et
+al.
+[14] proposed a
+multi-scale recurrent architecture to incorporate both word and
+turn level context for spoken language understanding tasks.
+In
+this paper,
+we use a similar approach as [16],
+explicitly using
+Latent
+Dirichlet
+Analysis (LDA) as global-context
+feature to
+feed into RNNLM.
+Early work on incorporating local
+context
+in conversa-
+tional
+language modeling is described in [17] conditioned on
+the most recent word spoken by other speakers.
+Hutchinson et
+al. [18, 19] improve log-bilinear language model by introducing
+a multi-factor sparse matrix that could capture speaker role and
+topic information.
+In addition, Huang et al. [20] show that lan-
+guage models with role information significantly reduce word
+error rate in speech recognition.
+Our work differs from these
+approaches in using an LSTM. Recently,
+Li et al. propose us-
+ing an additional vector to LSTM in order to capture personal
+characteristics of a speaker [21]. In this work, we utilize both a
+global topic vector and role information,
+where a role-specific
+weight matrix biases the word distributions for different roles.
+arXiv:1603.09457v1 [cs.CL] 31 Mar 2016
+p(w|P oster)/p(w|Responder)
+hi, hello, anyone, hey, guys, ideas, thanks, thank, my, how, am, ??, cannot, I’m, says
+p(w|Responder)/p(w|P oster)
+you’re, your, probably, you, may, might, sudo, ->, search, sure, ask, maybe, most, check, try
+Table 1: Top 15 words based on the role likelihood ratio out of the subset with word count > 6k.
+3.
+Model
+In this section, we propose an LSTM based framework that in-
+tegrating participant role and global topic of the conversation.
+As discussed in section 1,
+the assumption is,
+given the same
+context,
+each role has its own preference of picking words to
+generate a response.
+Each generated response should be both
+topically related to the current conversation and coherent with
+the local context.
+3.1.
+Recurrent Neural Network Language Models
+We start building a response generation model [9] by using a
+recurrent neural network language model (RNNLM) [22].
+In
+general,
+a RNNLM is a generative model of sentences.
+For a
+sentence consisted of word sequence
+x
+1
+, . . . , x
+I
+, the probabil-
+ity of
+x
+i
+given
+x
+1
+, . . . , x
+i−1
+, x
+≤i−1
+is
+p(x
+i
+|x
+≤i−1
+) ∝ g
+τ
+(h
+i
+)
+(1)
+where
+h
+i
+is the current hidden state and
+g
+τ
+(·)
+is the probability
+function parameterized by
+τ
+:
+g
+τ
+(h
+i
+) =
+softmax
+(W
+τ
+h
+i
+),
+(2)
+where
+W
+τ
+is the output layer parameter. The hidden state
+h
+i
+is
+computed recurrently as
+h
+i
+= f
+θ
+(x
+i
+, h
+i−1
+) .
+(3)
+f
+θ
+(·)
+is a nonlinear function parameterized by
+θ
+.
+We use an
+LSTM [23] since it is good at capturing long-term dependency,
+which is an objective for our conversation model.
+3.2.
+Conversation Models with Speaker Roles
+To build a conversation model with different participant roles,
+we extend a RNNLM in two respects.
+First,
+to capture the
+variability from different participant roles, we incorporate role-
+based information into the generation procedure.
+Second,
+to
+model a conversation instead of single turns, our model adjoins
+RNNLMs for all turns in sequence to model the whole conver-
+sation.
+More specifically,
+consider two adjacent
+turns
+1
+x
+t−1
+=
+{x
+t−1,i
+}
+N
+t−1
+i=1
+and
+x
+t
+= {x
+t,i
+}
+N
+t
+i=1
+with their participant role
+r
+t−1
+and
+r
+t
+respectively.
+N
+t
+is the number of words in the
+t
+-th turn.
+To build a single model for the entire conversation,
+we simply concatenate the RNNLMs for all sentences in order.
+Concatenation changes the way of computing the first hidden
+state in each utterance (except the first utterance in the conver-
+sation).
+Considering the two turns
+x
+t−1
+and
+x
+t
+, after concate-
+nation, the computation of the first hidden state in turn
+x
+t
+,
+h
+t,1
+,
+is
+h
+t,1
+= f
+θ
+x
+t,1
+, h
+t−1,N
+t−1
+
+.
+(4)
+As we will see from section 4, this simple solution can capture
+the long-term contextual information.
+1
+In our formulation, we use one turn as the minimal unit as multiple
+sentences in one turn share the same role.
+We introduce the role-based information by defining a role-
+dependent function
+g
+τ,r
+(·)
+. For example, the probability of
+x
+t,i
+given
+x
+t,i−1
+, . . . , x
+1,1
+, x
+≤t,≤i−1
+and its role
+r
+t
+is
+p(x
+t,i
+|x
+≤t,≤i−1
+, r
+t
+) ∝ g
+τ,r
+t
+(h
+t,i
+) .
+(5)
+where the
+g
+τ,r
+t
+(·)
+is also parameterized by role
+r
+t
+.
+In our im-
+plementation, we use
+g
+τ,r
+t
+(h
+t,i
+) =
+softmax
+(W
+τ
+(W
+r
+t
+h
+t,i
+)),
+(6)
+where
+W
+τ
+∈ R
+V ×H
+,
+W
+r
+t
+∈ R
+H×H
+,
+V, H
+are the vocabu-
+lary size and hidden layer dimension respectively.
+Even
+W
+τ
+is shared across the entire conversation model,
+W
+r
+t
+is role-
+specific.
+This linear transformation defined in Eq. 6 is easy to
+train in practice and appears to capture role information.
+This
+model is named the R-C
+ONV
+model,
+as the role-based infor-
+mation is introduced in the output layer.
+Despite the difference between the two models,
+they can
+be learned in the same way,
+which is similar
+to training a
+RNNLM [22]. Following the way of training a language model,
+the parameters could be learned by maximizing the following
+objective function
+X
+k
+X
+t
+`(x
+t,k+1
+, y
+t,k
+)
+(7)
+where
+y
+t,k
+is the prediction of
+x
+t,i+1
+.
+`(·, ·)
+can be any loss
+function for classification task. We choose cross entropy [24] as
+the loss function
+`(·, ·)
+, because it is a popular objective func-
+tion used in training neural language models.
+As a final comment, if we eliminate the role information, R-
+LDA-C
+ONV
+will be reduced to an RNNLM.
+To demonstrate
+the utility of role-based information,
+we will use an RNNLM
+over conversations as a baseline model.
+3.3.
+Incorporating global topic context
+In order to capture long-span context of the conversation,
+in-
+spired by [16], we explicitly include a topic vector representing
+all previous dialog turns.
+We use Latent Dirichlet Allocation
+(LDA) to achieve a compact vector-space representation.
+This
+procedure maps a bag-of-words representation of a document
+into a low-dimensional
+vector which is conventionally inter-
+preted as a topic representation.
+For each turn
+x
+t
+, we compute
+the LDA representation for all previous turns
+s
+t
+= f
+LDA
+(x
+1
+, x
+2
+, . . . , x
+t−1
+)
+(8)
+where
+f
+LDA
+(·)
+is the LDA inference function as in [15]. Then
+s
+t
+is concatenated with hidden layer
+h
+t,i
+to predict
+x
+t,i
+.
+p(x
+t,i
+|x
+≤t,≤i−1
+) ∝ g
+τ
+
+[h
+>
+t,i
+s
+>
+t
+]
+>
+
+.
+(9)
+This model is named LDA-C
+ONV
+.
+We assume that by includ-
+ing
+s
+t
+into output layer, the predicted word would be more topi-
+cally related with the previous turns, thus allowing the recurrent
+part to learn more local context information.
+Figure 1:
+The R-LDA-C
+ONV
+model.
+The turn-level
+LDA
+feature
+s
+t
+is concatenated with word-level hidden layer
+h
+t,i
+and
+the output weight matrix
+W
+r
+t
+is role specific.
+When incorporating both the global
+topic vector and the
+role factor, the conditional probability of
+x
+t,i
+is
+p(x
+t,i
+|x
+≤t,≤i−1
+, r
+t
+) ∝ g
+τ,r
+t
+
+[h
+>
+t,i
+s
+>
+t
+]
+>
+
+.
+(10)
+We call this model, illustrated in Figure 1, R-LDA-C
+ONV
+.
+4.
+Experiments
+We evaluate our model from different aspects on the Ubuntu Di-
+alogue Corpus [7], which provides one million two-person con-
+versations extracted from Ubuntu chat logs.
+The conversations
+are about getting technical support for various Ubuntu-related
+problems.
+In this corpus, each conversation contains two users
+with different roles, P
+OSTER
+: the user in this conversation who
+initializes the conversation by proposing a technical problem;
+R
+ESPONDER
+: the other user who tries to provide technical sup-
+port.
+For a conversation, we replace the user of each turn with
+the corresponding role.
+4.1.
+Experimental setup
+Our models are trained in a subset of the Ubuntu Dialogue Cor-
+pus, in which each conversation contains 6 - 20 turns.
+The re-
+sulting data contains 216K conversations in the training set, 10k
+conversations in the test set and 13k conversations in the devel-
+opment set.
+We use a Twitter tokenizer [25] to parse all utter-
+ances in the conversations. The vocabulary is constructed on the
+training set with filtering out low-frequency tokens and replac-
+ing them with “UNKNOWN”.
+The vocabulary size is fixed to
+include 20K most frequent words.
+We did not filter out emoti-
+cons, instead we treat them as single tokens.
+The LDA model is trained using all conversations in train-
+ing data,
+where each conversation is treated as an individual
+training instance.
+We use Gensim [26] for both training and in-
+ference.
+There are three hyper-parameters in our models:
+the
+dimension of word representation
+K
+, the hidden dimension
+H
+and the number of topics
+M
+in LDA model. We use grid search
+over
+K, H ∈ {16, 32, 64, 128, 256}
+,
+M ∈ {50, 100}
+, and se-
+lect the best combination for each model using the perplexity on
+Model
+K
+H
+M
+Perplexity
+Baseline
+32
+128
+-
+54.93
+R-C
+ONV
+256
+128
+-
+48.89
+LDA-C
+ONV
+256
+128
+100
+51.13
+R-LDA-C
+ONV
+256
+128
+50
+46.75
+Table 2:
+The best perplexity numbers of the three models on
+the development set.
+Metric
+Baseline
+R-C
+ONV
+LDA-C
+ONV
+R-LDA-C
+ONV
+Recall@1
+0.12
+0.15
+0.13
+0.16
+Recall@2
+0.22
+0.25
+0.24
+0.26
+Table 3: The performance of response ranking with Recall@
+K
+.
+the development set.
+We use stochastic gradient descent with
+the initial learning rate
+λ = 0.1
+to train all the models.
+4.2.
+Evaluation Metrics
+Evaluation on response generation is an emerging research field
+in data-driven conversation modeling.
+Due to the variety of
+possible responses for a given context,
+it
+is too conservative
+to only compare the generated response with the ground truth.
+For a reasonable evaluation, the
+n
+-gram based evaluation met-
+rics including B
+LEU
+[27] and
+∆
+B
+LEU
+[28] require multiple ref-
+erences for one given context.
+One the other hand,
+there are
+indirect evaluation methods,
+for example,
+ranking based eval-
+uation [7,
+10] or qualitative analysis [29].
+In this paper,
+we
+use both ranking-based evaluation (Recall@
+K
+[30]) across all
+models, and leave the
+n
+-gram based evaluation for future work.
+To compute the Recall@K metric of one model given
+K
+,
+the
+model is used to select the top-
+K
+candidates, and it is counted
+as correct if the ground-truth response is included.
+In addition
+to Recall@K,
+we also evaluate the different models based on
+test set perplexity.
+To understand the chat
+conversations
+requires
+intensive
+knowledge of Ubuntu even for human readers.
+Therefore,
+the
+qualitative analysis focuses mainly on the capacity of captur-
+ing role information, not the justification of responses as valid
+answers to the technical questions.
+4.3.
+Quantative Evaluation
+Experiments in this section compare the performance of LDA-
+C
+ONV
+,
+R-C
+ONV
+and R-LDA-C
+ONV
+to the baseline LSTM
+system.
+4.3.1.
+Perplexity
+The best perplexity numbers from the three models are shown
+in Table 2.
+R-LDA-C
+ONV
+gives the lowest perplexity among
+the four models,
+nearly 8 points improvement
+over the base-
+line model.
+Comparing role vs. global topic, role has a bigger
+improvement on perplexity of
+11%
+reduction for role vs.
+7%
+for LDA topic.
+Combining both leads to a
+15%
+reduction in
+perplexity.
+To simplify the comparison, in the following exper-
+iments, we only use the best configuration for each model.
+4.3.2.
+Response ranking
+The
+task is
+to rank the
+ground-truth response
+with some
+randomly-selected sentences for a given context.
+For each test
+sample,
+we use the previous
+t − 1
+sentences as context,
+try-
+ing to select the best
+t
+th sentence.
+We randomly select 9 turns
+from other conversations in the dataset, replacing their role with
+the ground truth label.
+As we noticed that sentences from the
+background channel,
+like “yes”,
+“thank you”,
+could fit almost
+all the conversations with various context.
+To distinguish the
+background channel from some contentful sentences, we sam-
+ple the negative examples with the ground-truth sentence length
+as a constraint — samples with the similar length (
+±
+2 words)
+are selected as negative examples.
+The Recall@
+K
+are shown in Table 3.
+Both R-C
+ONV
+and
+LDA-C
+ONV
+are better than baseline result,
+while R-LDA-
+C
+ONV
+gives the best performance overall.
+Both role factors
+and topic feature are acting positively in ranking ground-truth
+responses.
+Even though no role information is explicitly used
+in the baseline model, the contextual information itself could be
+a useful hint to rank the ground-truth response higher.
+There-
+fore,
+the performance of the baseline model is still better than
+random guess. Again, role has a bigger effect than topic, and the
+combination gives the best results, but differences in Recall@
+K
+performance are small.
+4.4.
+Qualitative Analysis
+For qualitative analysis, the best R-LDA-C
+ONV
+model is used
+to generate role-specific responses,
+and we examined a num-
+ber of examples to determine whether the generated response
+fit into the expected speaker role.
+We include two examples in
+Table 4 and Table 5 due to the page limitations.
+For each case,
+we have responses generated for each of the possible roles:
+a
+further question for the P
+OSTER
+and a potential solution for the
+R
+ESPONDER
+.
+As we can see from the context part of Table 4,
+different
+roles clearly have different behaviors during the conversation.
+Ignoring the validity of this potential
+solution,
+this generated
+response is consistent
+with our
+expectation of
+the R
+ESPON
+-
+DER
+role.
+The response of P
+OSTER
+seems quite plausible.
+The reply of R
+ESPONDER
+is clearly the right style but more
+domain information in the topic vector could lead to a more
+useful solution.
+Table 5 shows another example to demonstrate the differ-
+ence between the P
+OSTER
+and R
+ESPONDER
+roles.
+In this
+example,
+the response for the R
+ESPONDER
+is not a potential
+solution but a question to the P
+OSTER
+.
+Unlike the generated
+question for the P
+OSTER
+role in the previous example,
+the
+purpose of R
+ESPONDER
+’s question is to ask some further de-
+tails in order to provide a simpler solution.
+The P
+OSTER
+’s re-
+sponse also fits well in the local context as well as global topic
+of ubuntu installation,
+claiming the difficulty of implementing
+the P
+OSTER
+’s suggestion.
+At the same time, the generated re-
+sponses also show the necessity of incorporating certain domain
+knowledge into a domain-specific conversation system,
+which
+will be explored in future work.
+5.
+Summary
+We propose an LSTM-based conversation model
+by incorpo-
+rating role factor
+and topic feature to model
+different
+word
+distribution for different
+roles.
+We present
+three models:
+R-
+C
+ONV
+, LDA-C
+ONV
+and R-LDA-C
+ONV
+, by incorporating role
+factors and topic features into output
+layer.
+We evaluate the
+model
+using both perplexity and response ranking.
+Both R-
+C
+ONV
+and LDA-C
+ONV
+outperform the baseline model on all
+tasks.
+The model
+R-LDA-C
+ONV
+gives the best performance
+by combining the two components.
+In addition, the generation
+results demonstrate the topical coherence and differences in re-
+sponses associated with different roles.
+Besides role and topic,
+our model structure can be generalized to include more super-
+vised information.
+For future work,
+we would incorporate su-
+pervised domain knowledge into our model to improve the topic
+relevance of the response.
+Role
+Utterance
+Context
+P
+OSTER
+hey people .
+i
+have a disk from someone who
+accidentally overwrote his ext3 partition with a
+ntfs partition ...... any tips on how to recover files
+from the erased ext3 partition ? the ntfs partion
+was created using “ fast “ formatting ( i.e.
+only
+the partition table was erased )
+R
+ESPONDER
+you can rebuild a partition table .. brb
+P
+OSTER
+is that possible ? how ? and he also started writ-
+ing to the ntfs partition , so at least some data will
+be lost , hopefully some is still recoverable
+R
+ESPONDER
+at that point , he might as well write it off or pay
+a professional to do it
+P
+OSTER
+ere4si : is there some guide somewhere on how to
+make a live cd using the minimal iso ? it doesn’t
+even have a squashfs root filesystem
+Generation
+P
+OSTER
+can you p me to that ?
+R
+ESPONDER
+“ sudo fdisk -l
+“ then use the fstab of the new
+permissions .
+then use that combination of * to
+recover backup
+Ground truth
+R
+ESPONDER
+make an iso on usb bootable
+Table 4: Response generation example (providing solution)
+Role
+Utterance
+Context
+P
+OSTER
+question : i am currently installing ubuntu . in the
+" prepare partitions " dialog box , should i check
+both ext3 ’ /’ and ext3 ’ /home ’ to be formatted ?
+R
+ESPONDER
+did you have a previous install of ubuntu on there
+P
+OSTER
+no
+R
+ESPONDER
+err kazol_ not mount , write to it i mean
+R
+ESPONDER
+then you can format them both
+Generation
+P
+OSTER
+i know , i don’t know how to do this . bad , even if
+i try an encrypted install of ubuntu ...
+this means
+roller failed to mount it , so not the default .
+R
+ESPONDER
+or something similar .
+are you trying to eject net
+crapped on there ?
+Ground truth
+R
+ESPONDER
+ok thanks
+Table 5:
+Response generation example (clarification of
+the
+problem)
+6.
+References
+[1]
+Regina Barzilay,
+Michael
+Collins,
+Julia Hirschberg,
+and Steve
+Whittaker.
+The rules behind roles:
+Identifying speaker role in
+radio broadcasts.
+In AAAI/IAAI, pages 679–684, 2000.
+[2]
+B Hutchinson, B. Zhang, and M. Ostendorf.
+Unsupervised broad-
+cast conversation speaker role labeling.
+In ICASSP, pages 5322–
+5325, 2010.
+[3]
+B. Hutchinson B. Zhang, M. A. Marin and M. Ostendorf.
+Learn-
+ing phrase patterns for text
+classification.
+IEEE Trans.
+Audio,
+Speech and Language Processing, 21(6):1180–1189, 2013.
+[4]
+Alex Marin, Bin Zhang, and Mari Ostendorf. Detecting forum au-
+thority claims in online discussions.
+In Proceedings of the Work-
+shop on Languages in Social Media, pages 39–47. Association for
+Computational Linguistics, 2011.
+[5]
+Janet M Fuller. The influence of speaker roles on discourse marker
+use.
+Journal of Pragmatics, 35(1):23–45, 2003.
+[6]
+Hao Wang, Zhengdong Lu, Hang Li, and Enhong Chen. A Dataset
+for Research on Short-Text
+Conversations.
+In EMNLP,
+pages
+935–945, 2013.
+[7]
+Ryan Lowe,
+Nissan Pow,
+Iulian Serban,
+and Joelle Pineau.
+The Ubuntu Dialogue Corpus:
+A Large Dataset
+for
+Research
+in Unstructured Multi-Turn Dialogue Systems.
+arXiv preprint
+arXiv:1506.08909, 2015.
+[8]
+Alan Ritter, Colin Cherry, and William B Dolan.
+Data-driven re-
+sponse generation in social
+media.
+In Proceedings of
+the Con-
+ference on Empirical Methods in Natural Language Processing,
+pages 583–593. Association for Computational Linguistics, 2011.
+[9]
+Alessandro Sordoni,
+Michel Galley,
+Michael Auli,
+Chris Brock-
+ett,
+Yangfeng Ji,
+Margaret
+Mitchell,
+Jian-Yun Nie,
+Jianfeng
+Gao,
+and Bill
+Dolan.
+A neural
+network approach to context-
+sensitive generation of conversational responses.
+arXiv preprint
+arXiv:1506.06714, 2015.
+[10]
+Lifeng Shang,
+Zhengdong Lu,
+and Hang Li.
+Neural
+Re-
+sponding Machine for Short-Text
+Conversation.
+arXiv preprint
+arXiv:1503.02364, 2015.
+[11]
+Tsung-Hsien Wen,
+Milica Gasic,
+Nikola Mrksic,
+Pei-Hao Su,
+David Vandyke,
+and Steve Young.
+Semantically Conditioned
+LSTM-based Natural Language Generation for Spoken Dialogue
+Systems.
+arXiv preprint arXiv:1508.01745, 2015.
+[12]
+Yangfeng Ji, Trevor Cohn, Lingpeng Kong, Chris Dyer, and Jacob
+Eisenstein.
+Document context language models.
+arXiv preprint
+arXiv:1511.03962, 2015.
+[13]
+Rui Lin, Shujie Liu, Muyun Yang, Mu Li, Ming Zhou, and Sheng
+Li. Hierarchical recurrent neural network for document modeling.
+In Proceedings of the 2015 Conference on Empirical Methods in
+Natural Language Processing, pages 899–907, 2015.
+[14]
+Yi Luan, Shinji Watanabe, and Bret Harsham.
+Efficient learning
+for spoken language understanding tasks with word embedding
+based pre-training.
+In Sixteenth Annual Conference of the Inter-
+national Speech Communication Association, 2015.
+[15]
+David M Blei, Andrew Y Ng, and Michael I Jordan. Latent dirich-
+let allocation.
+the Journal of machine Learning research, 3:993–
+1022, 2003.
+[16]
+Tomas Mikolov and Geoffrey Zweig. Context dependent recurrent
+neural network language model.
+In SLT, pages 234–239, 2012.
+[17]
+G.
+Ji and J. Bilmes.
+Multi-speaker language modeling.
+In HLT
+NAACL, 2004.
+[18]
+Brian Hutchinson.
+Rank and sparsity in language processing.
+PhD thesis, 2013.
+[19]
+Brian Hutchinson, Mari Ostendorf, and Maryam Fazel.
+A Sparse
+Plus Low-Rank Exponential
+Language Model
+for Limited Re-
+source Scenarios.
+Audio,
+Speech,
+and Language Processing,
+IEEE/ACM Transactions on, 23(3):494–504, 2015.
+[20]
+Songfang Huang and Steve Renals.
+Modeling topic and role in-
+formation in meetings using the hierarchical Dirichlet process.
+In
+Machine Learning for Multimodal
+Interaction,
+pages 214–225.
+Springer, 2008.
+[21]
+Jiwei Li,
+Michel Galley,
+Chris Brockett,
+Jianfeng Gao,
+and Bill
+Dolan.
+A persona-based neural
+conversation model.
+arXiv
+preprint arXiv:1603.06155, 2016.
+[22]
+Tomas Mikolov,
+Martin Karafiát,
+Lukas Burget,
+Jan Cernock
+`
+y,
+and Sanjeev Khudanpur.
+Recurrent
+neural
+network based lan-
+guage model.
+In INTERSPEECH 2010,
+11th Annual
+Confer-
+ence of
+the International
+Speech Communication Association,
+Makuhari,
+Chiba,
+Japan,
+September 26-30,
+2010,
+pages 1045–
+1048, 2010.
+[23]
+Sepp Hochreiter and Jürgen Schmidhuber. Long short-term mem-
+ory.
+Neural computation, 9(8):1735–1780, 1997.
+[24]
+Kevin P Murphy.
+Machine learning: a probabilistic perspective.
+MIT press, 2012.
+[25]
+Olutobi Owoputi, Brendan O’Connor, Chris Dyer, Kevin Gimpel,
+Nathan Schneider,
+and Noah A Smith.
+Improved part-of-speech
+tagging for online conversational text with word clusters.
+Associ-
+ation for Computational Linguistics, 2013.
+[26]
+Radim
+ˇ
+Reh˚
+u
+ˇ
+rek and Petr Sojka.
+Software Framework for Topic
+Modelling with Large Corpora. In Proceedings of the LREC 2010
+Workshop on New Challenges for NLP Frameworks,
+pages 45–
+50, Valletta, Malta, May 2010. ELRA.
+http://is.muni.cz/
+publication/884893/en
+.
+[27]
+Kishore Papineni, Salim Roukos, Todd Ward, and Wei-Jing Zhu.
+BLEU: a method for automatic evaluation of machine translation.
+In Proceedings of the 40th annual meeting on association for com-
+putational linguistics, pages 311–318. Association for Computa-
+tional Linguistics, 2002.
+[28]
+Michel
+Galley,
+Chris Brockett,
+Alessandro Sordoni,
+Yangfeng
+Ji,
+Michael Auli,
+Chris Quirk,
+Margaret Mitchell,
+Jianfeng Gao,
+and Bill Dolan.
+deltaBLEU: A Discriminative Metric for Gen-
+eration Tasks with Intrinsically Diverse Targets.
+arXiv preprint
+arXiv:1506.06863, 2015.
+[29]
+Oriol
+Vinyals and Quoc Le.
+A Neural
+Conversational
+Model.
+arXiv preprint arXiv:1506.05869, 2015.
+[30]
+Christopher D Manning,
+Prabhakar Raghavan,
+Hinrich Schütze,
+et al.
+Introduction to information retrieval, volume 1.
+Cambridge
+university press Cambridge, 2008.

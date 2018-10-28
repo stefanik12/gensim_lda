@@ -1,0 +1,948 @@
+﻿1 
+Tracking word semantic change in biomedical literature 
+Erjia Yan
+1
+; Yongjun Zhu
+2 
+1
+College of Computing and Informatics, 3141 Chestnut Street, Drexel University, Philadelphia, PA 19104, 
+U.S.A.; Email: ey86@drexel; Phone: +1(215)895-1459 (corresponding author) 
+2
+Weill Cornell Medicine, Cornell University, New York, NY 10065, U.S.A.; Email: 
+yoz2008@med.cornell.edu 
+Abstract 
+Up to this point, research on written scholarly communication has focused primarily on syntactic, rather 
+than semantic, analyses. Consequently, we have yet to understand semantic change as it applies to 
+disciplinary discourse. The objective of this study is to illustrate word semantic change in biomedical 
+literature. To that end, we identify a set of representative words in biomedical literature based on word 
+frequency and word-topic probability distributions. A word2vec language model is then applied to the 
+identified words in order to measure word- and topic-level semantic changes. We find that for the 
+selected words in PubMed, overall, meanings are becoming more stable in the 2000s than they were in 
+the 1980s and 1990s. At the topic level, the global distance of most topics (19 out of 20 tested) is 
+declining, suggesting that the words used to discuss these topics are stabilizing semantically. Similarly, 
+the local distance of most topics (19 out of 20) is also declining, showing that the meanings of words 
+from these topics are becoming more consistent with those of their semantic neighbors. At the word 
+level, this paper identifies two different trends in word semantics, as measured by the aforementioned 
+distance metrics: on the one hand, words can form clusters with their semantic neighbors, and these 
+words, as a cluster, coevolve semantically; on the other hand, words can drift apart from their semantic 
+neighbors while nonetheless stabilizing in the global context. In relating our work to language laws on 
+semantic change, we find no overwhelming evidence to support either the law of parallel change or the 
+law of conformity. 
+Keywords: PubMed; semantic change; topic modeling; skip-gram; word2vec 
+1 Introduction 
+Human languages are fundamentally complex and dynamic. In English, some words have been used 
+consistently with fixed meanings over a long period of time, while others have evolved more rapidly. 
+Some patterns are discernible within this differential evolution: for instance, scholars have found that 
+frequently used words change more slowly, whereas polysemous words (i.e., a word or phrase with 
+several meanings) change more quickly [1]. Because of the dynamic nature of words and their uses, we 
+need contexts to understand the ideas they convey
+—
+particularly historical ideas and the history of 
+concepts, or “word etymology” in Jatowt and Duh’s [2] sense of the term. Until now, studies in this vein 
+have generally been limited to isolated, small-scale investigations of individual words or grammatical 
+patterns [2]. Accordingly, full historical texts often go unanalyzed because of a lack of access and a 
+paucity of proper analytical tools. 
+2 
+Word semantic change is one of several forms of historical linguistic change; others include sound 
+change and changes in grammar and syntax [3]. Word semantic change, as Traugott and Dasher put it 
+[4], “examines how new meanings arise through language use, especially the various ways in which 
+speakers and writers experiment with uses of words and constructions in the flow of strategic 
+interaction with addressees.” It is argued that word semantic change is the least understood [5], but it 
+can be studies through a few linguistic laws [1, 3], including the law of differentiation, which dictates 
+that synonyms tend to differentiate in meaning over time; the law of parallel change, which observes 
+that related words tend to undergo parallel changes; the law of innovation, which holds that 
+polysemous words tend to have higher rates of semantic change; and the law of conformity, which 
+prescribes an inverse power-law relationship between word frequency and rate of semantic change. 
+These laws are grounded in classical linguistic literature; recently, however, two advances have made it 
+possible to examine word semantic change and to verify these laws with large-scale empirical data. First, 
+the availability of large collections of dynamic textual data has greatly facilitated scholars’ computational 
+investigations of language change [6]. Projects such as Google Books [7] and the Corpus of Historical 
+American English [8] offer extensive coverage, with texts dating back to the early 1800s. Academic 
+databases, such as Web of Science, have also made an effort to index their collections back to the first 
+decade of the twentieth century [9, 10]. Second, the advanced computational methods developed in the 
+last few years have, for the first time, given researchers the ability to harness large dynamic data. 
+Various methods have been developed and applied to the analysis of word semantic change [1, 11, 12]. 
+Levy, Goldberg [13] argued that the choice of parameters is of vital importance to the performance of 
+these methods, with no single method holding a clear advantage over the others. Topic modeling 
+techniques has the ability of detecting hidden topics from a collection of documents and allow for the 
+modeling of topic evolution [14, 15]; unlike linguistic approaches, which are more concerned with word 
+meaning changes, these models focus on a collection of words that co-occur frequently in a data set. 
+Moreover, rather than measuring word meaning changes, topic models are primarily used to assess the 
+popularity of topics (i.e., number of documents under a topic over time). The use of topic models to 
+trace word meaning changes has been criticized on the grounds that these models do not explicitly 
+model changes within a topic, nor control how far a topic can drift from its original meaning [16]. There 
+are also other methods to assess word semantic change using statistical or linguistic methods. [3, 6, 16-
+20]. 
+Among these methods, word2vec has gained popularity as a tool for understanding word semantic 
+change. Word2vec is a distributed word representation technique [21, 22]. It was proposed by Mikolov 
+and colleagues [23] and its main advantage is that it significantly reduces computational complexity 
+compared to other available methods. In their paper introducing word2vec, Mikolov et al [23] proposed 
+two models: the continuous bag-of-words (CBOW) model, which does not consider word orders; and the 
+continuous skip-gram model, which assigns different weights based on the proximity of words in a 
+window. Brigadir, Greene [24] have since found that while CBOW tends to train faster, skip-gram 
+performs better on semantic tasks. 
+The goal of this paper is to reveal word semantic change in biomedical literature by employing word2vec 
+on a large empirical data set of PubMed publications. The biomedical domain was selected primarily 
+3 
+because the availability of large, publicly available data sets makes it possible to gain access to data and 
+replicate research. Prior efforts to understand word semantic change have utilized Google Books Ngram 
+data [25], but it is not yet clear whether those patterns of word semantic change apply to a different 
+communication genre, such as scientific publications. This paper is driven to examine semantic change in 
+words and their associated topics in biomedical research over the past 30 years. The search for evidence 
+to support or dispute the language laws on semantic change provides further motivation for this study. 
+This paper makes a novel contribution by informing our understanding of the dynamic changes of word 
+meanings in the specific setting of scholarly communication. 
+2 Data 
+Abstracts of 18,777,129 articles published in the last 30 years (1987-2016) were downloaded from 
+PubMed. The number of yearly publications ranges from approximately 360,000 for 1987 to more than 
+1,000,000 in each of the most recent three years (2014-2016). The yearly distribution of publications 
+and tokens can be found in the appendix table. Although a wide time range is desirable, we set the 
+range to 30 years because the limited nature of data from 1986 and earlier would adversely affect the 
+word2vec model’s reliability. 
+We used Natural Language Toolkit (NLTK; [26]) to preprocess downloaded abstracts. NLTK’s sentence 
+tokenizer was used to divide abstracts into lists of sentences. Then, sentences were tokenized into lists 
+of tokens using NLTK’s word tokenizer. Tokenization is the process of decomposing a text (e.g., a 
+sentence) into a list of tokens, which are the smallest units in the natural language processing. Stop 
+words were removed from the obtained lists of tokens using the stop word list provided by NLTK
+1
+. In the 
+last step, all tokens were lowercased. We used word2vec and Latent Dirichlet Allocation (LDA) 
+implementations provided in the gensim package [27] to train the appropriate models (i.e., word2vec 
+model and LDA model). LDA is one of the topic modeling techniques that assume each document is a 
+mixture of topics. When implementing LDA, metrics such as perplexity can be used to measure the 
+performance of LDA: perplexity compares LDA models with different numbers of topics and guides the 
+choice of optimal topic size. Empirically, however, these metrics tend to suggest large numbers of topics 
+to optimize topic models (i.e., from a few hundred to a few thousand). Such large numbers make it 
+challenging to gain an informative understanding of individual topics. Previous empirical studies, taking 
+a more pragmatic approach, have typically set the number of topics at a fixed quantity, ranging from 
+fewer than 10 topics [28, 29], to a few dozen topics [30-33], to up to 100 topics [34, 35]. In the current 
+study, we set the number of topics at 20 based on two considerations: this size makes it possible to gain 
+insights on individual topics, while it also provides sufficient cross-topic diversity. 
+To select a set of representative terms for the entire PubMed data set, we first identified the top 500 
+words based on their frequencies in PubMed after a stop word list was applied. We then ran a topic 
+model to the entire data set, and identified, for each topic, 25 words with the highest probabilities (500 
+words in total) based on word-topic probabilistic distributions. For such distributions, each word has a 
+probability value to be associated with every topic given a list of topics. For instance, word w
+i
+has word-
+1
+http://www.nltk.org/book/ch02.html 
+4 
+topic probabilistic distribution (p
+1
+, p
+2
+,…p
+20
+) where p
+1
++p
+2
++…+p
+20
+=1. Assuming p
+8
+is the highest probability, 
+then w
+i
+is assigned to topic 8. We merged the two lists to form the final list of words for semantic 
+distance calculation. Because a word can be in both the "most frequent" list and the "highest 
+probability" list, the total number of words is 761. In this way, each topic will have at least 25 words, 
+including the most representative ones in terms of both frequency and topic probability. The full list of 
+words and their topic associations may be found in the appendix file “Words and topics”. 
+This selection approach, however, has a few limitations. First, although most of the included words are 
+technical-relevant terms, some are too broadly used to have specific medical meanings. This is a 
+deliberate tradeoff, since we have tried to minimize subjective decisions about which words to include 
+and which to exclude (apart from applying the stop word list). Second, the number of words included in 
+the study is somewhat small, potentially limiting the generalizability of our findings. A few prior studies 
+on word semantic change have employed ranked lists to show which words experienced the most 
+significant changes over the past hundred years [2, 11]; other studies, similar in design, have employed a 
+one-decade time window [2, 3]. In both cases, the significance of the change may be quantified by 
+calculating the cosine similarity, for instance, 
+cos(w
+𝑖
+(
+1900
+)
+, w
+𝑖
+(2009)
+)
+, for each word w
+i
+that occurred in 
+both 1900 and 2009. Our study, in contrast to previous research, assesses semantic change on the basis 
+of a moving one-year window for each year between 1987 and 2016 (
+cos(w
+𝑖
+(
+𝑡
+)
+, w
+𝑖
+(𝑡+1)
+)
+). Another 
+difference is that the current study also calculates a local distance that, for each of the 761 words, first 
+identifies the 20 most similar words among millions of tokens, then assesses word semantic change (key 
+concepts such as local distance and word semantic change are operationalized in Section 3). These 
+differences have made it quite computationally demanding to obtain interpretable results in this study: 
+it took about three weeks for a cloud computing facility with 16 virtual CPUs and 16GB RAM to complete 
+the distance calculation. In the future, we aim to develop more scalable similarity measures to reduce 
+the computational cost of such calculations. 
+3 Methods and definitions 
+In this section, we give a brief mathematical introduction to the algorithm behind the continuous skip-
+gram model using the notations of Goldberg and Levy [36]. In this model, we consider the conditional 
+probabilities 
+𝑝(𝑐|𝑤)
+given a data set of words 
+𝑤
+and their contexts 
+𝑐
+. The goal is to maximize the 
+probability by setting the parameter 
+𝜃
+in 
+𝑝(𝑐|𝑤; 𝜃)
+: 
+arg max
+𝜃
+∏ 𝑝(𝑐|𝑤; 𝜃)
+(𝑤,𝑐)∈𝐷
+where 
+𝐷
+contains word and context pairs extracted from the data set. 
+𝑝(𝑐|𝑤; 𝜃)
+can be parametrized 
+using the softmax function such that 
+𝑝
+(
+𝑐
+|
+𝑤; 𝜃
+)
+=
+𝑒
+𝑣
+𝑐
+𝑣
+𝑤
+∑
+𝑒
+𝑣
+𝑐
+𝑣
+𝑤
+𝑐′∈𝐶
+where 
+𝑣
+𝑐
+and 
+𝑣
+𝑤
+are vector representations 
+of 
+𝑐
+and 
+𝑤
+. We refer to [36, 37] for descriptions of parameter setting. The parameters are set as follows: 
+10 (negative sample size), 1e-4 (sub-sampling), 5 (minimum-count), 0.05 (learning rate), 200 (vector 
+dimension), and 30 (context window size). 
+We give operational definitions to several key concepts in this research. 
+5 
+•
+word semantic change: word semantic change examines the extent to which a word’s meaning 
+changes over time. Such changes are intangible but can be assessed through different measures, 
+mostly based on the cosine similarity. For instance, we employed a global measure and a local 
+measure to assess word semantic change; both measures follow from the work of Hamilton, 
+Leskovec [38] and are introduced below. 
+•
+global distance: the global distance between a word in year 
+𝑡
+and year 
+𝑡 + 1
+is calculated as 
+cos(w
+𝑖
+(
+𝑡
+)
+, w
+𝑖
+(𝑡+1)
+)
+, where 
+w
+𝑖
+(𝑡)
+and 
+w
+𝑖
+(𝑡+1)
+are word vectors of word 
+w
+𝑖
+over all dimensions in 
+𝑡
+and 
+𝑡 + 1
+. 
+•
+local distance: to measure a word’s local distance between 
+𝑡
+and 
+𝑡 + 1
+, we first identify the 
+𝑘
+nearest neighbors of 
+w
+𝑖
+based on cosine similarity in 
+𝑡
+and 
+𝑡 + 1
+; these are labeled as 
+𝑁
+𝑘
+(
+w
+𝑖
+(
+𝑡
+)
+)
+. 
+We then compute a second-order similarity for 
+w
+𝑖
+(
+𝑡
+)
+from the neighbor sets: 
+s
+(
+𝑡
+)
+(
+𝑗
+)
+=
+cos(w
+𝑖
+(
+𝑡
+)
+, w
+𝑗
+(𝑡)
+)
+for any
+w
+𝑗
+∈ 𝑁
+𝑘
+(
+w
+𝑖
+(
+𝑡
+)
+) ∪ 𝑁
+𝑘
+(
+w
+𝑖
+(
+𝑡+1
+)
+)
+. The local distance change for 
+w
+𝑖
+given its 
+nearest 
+𝑘
+neighbors between 
+𝑡
+and 
+𝑡 + 1
+can then be computed as 
+cos(s
+𝑖
+(
+𝑡
+)
+, s
+𝑖
+(𝑡+1)
+)
+. We set 
+𝑘
+as 
+20 in this study. 
+•
+global word vector: as mentioned above, in the word2vec model, 200 dimensions were set, 
+which means for word i in year t, it has a distribution for each of the 200 dimensions. This 1 by 
+200 vector 
+w
+𝑖
+(𝑡)
+is referred to as the global word vector for word i. 
+•
+semantic neighbor: top k words with the highest cosine similarity of a target word 
+𝑁
+𝑘
+(
+w
+𝑖
+(
+𝑡
+)
+)
+. 
+To analyze word semantic change, we employed a linear regression model. In this model, slope 
+measures the intensity of the linear trend line, in which a higher absolute value suggests a stronger 
+intensity. R-squared measures the goodness of fit of the trend line, i.e., the portion of variations of the 
+data the trend line explains, with a higher value suggests a better fit. P-value measures whether the 
+linear trend line is different from a line with zero coefficients, in which lower values suggest higher 
+differences. 
+To test the law of differentiation and the law of parallel change, we identified several groups of 
+synonymous words within our overall word list. In related previous research [3], synonymous relations 
+extracted from English Synonyms and Antonyms were used to test the two laws; however, because this 
+book was published in 1896 [39], it does not have sufficient coverage for emerging synonymous 
+relations between 1987 and 2016 (the time frame of the current study). Instead, we used an online 
+thesaurus API
+2
+which sources its synonymy data from WordNet, a leading lexical database of more than 
+155,000 words and 206,000 word-sense pairs [40]. WordNet is updated regularly, and the latest version 
+was released in 2006, providing sufficient coverage for words and their synonymous relations within the 
+timespan of interest. Because synonymous relations can be rather liberal in WordNet (for instance, the 
+word “agent” has more than one dozen synonyms, some of which are quite diverse in meaning such as 
+“factor” and “businessperson”), two coders manually prepared a more coherent subset of synonymous 
+words from the API’s output, resulting in 21 groups of synonymous words (87 words in total). Those 
+synonymous words were included only when a consensus of inclusion was reached between the two 
+coders. 
+2
+https://words.bighugelabs.com/api.php 
+6 
+4 Results 
+4.1 Topic-level analysis 
+We first examine the overall trend of all the selected words under global distance and local distance 
+(Figure 1). The blue lines in the middle of Figure 1 shows the average distance and the colored shadows 
+show 0.5 standard deviation (SD, in blue), 1 SD (in green), and 2 SD (in red). The duration for global 
+distance is from 1988 to 2016. Because the local distance calculation involves the use of second-order 
+similarity, the duration for local distance is from 1988 to 2015. 
+Figure 1. Global distance (left panel) and local distance (right panel) for the list of 761 words 
+Figure 1 shows that both global distance and local distance of the selected words are declining. The 
+result suggests that for the selected representative words in PubMed, overall, meanings are becoming 
+more stable in the 2000s than they were in the 1980s and 1990s. The lowest average was recorded in 
+2007 for global distance (distance=0.1871) and there is an apparent distance gain from 2007 to 2016. 
+The average global distance in 2016 (distance=0.2126), for instance, is comparable to that in 2001 
+(distance=0.2115). The trend of the average local distance, on the other hand, is more monotonic. The 
+lowest point was recorded in 2015 (distance=0.0917). 
+We now delve into the topic-level word semantic changes. Figure 2 shows the average global distance 
+for each of the 20 topics from 1988 to 2016; Figure 3 shows the average local distance for each topic 
+from 1988 to 2015. Topics are labeled with the five most frequently occurring words in a given topic. 
+7 
+Figure 2. Global distance for words in each of the 20 topics
+3
+Visually, except for topic 18 (studies-drug-evidence-result-order), the average distance of all other topics 
+is declining, suggesting that these topics, as represented by a set of high-frequency words, are becoming 
+more stable in terms of words’ meanings. The stabilization of meanings is more evident in a few topics; 
+for instance, we see a clear downward trend in topics 15 (rate-mean-years-mm-range), 7 (protein-
+binding-dna-gene-proteins), and 6 (mice-receptor-alpha-receptors-male). The list of slopes for all 20 
+topics can be seen in Table 1. 
+When examining the average distance of words in a topic, topics 18 (studies-drug-evidence-result-order), 
+11 (results-time-method-values-single), and 9 (activity-effect-effects-response-rat) have the highest 
+average distance. This indicates that the meanings of individual words associated with these topics are 
+evolving, which in turn suggests that these topics are rapidly changing. On the other hand, topics 10 
+(blood-disease-associated-pressure-function), 1 (therapy-tumor-cancer-antigen-lung), and 8 (antibodies-
+isolated-antibody-positive-infection) result in the lowest average distance, indicating that individual 
+words’ meanings for these topics are comparatively consistent over the years. 
+3
+High resolution images for Figures 2, 3, and 9 can be found at http://www.pages.drexel.edu/~ey86/p/IJMI/
+8 
+Judging by standard deviations, while most topics exhibited similar levels of distance variance, there is a 
+noticeable change of variance for several topics. For instance, the variance is decreasing for topics 2 
+(group-levels-rats-control-plasma), 5 (normal-age-children-weight-women), and 6 (mice-receptor-alpha-
+receptors-male), but it scales up over time for topics 10 (blood-disease-associated-pressure-function) 
+and 13 (health-part-care-state-areas). The results suggest that words’ meanings in respective topics in 
+the former group are converging, whereas words’ meanings in respective topics in the latter group are 
+diverging. 
+Figure 3. Local distance for words in each of the 20 topics 
+We now turn to the local distance measure. Except for topic 15 (rate-mean-years-mm-range), the 
+average distance of all other topics is declining, albeit gradually. This shows that the meanings of 
+representative words for these topics are becoming more consistent with those of their semantic 
+neighbors. The trend of cohesion between words and their semantic neighbors is most evident in topics 
+20 (uptake-eyes-emotional-discrimination-corneal), 12 (study-data-factors-population-relationship), and 
+6 (mice-receptor-alpha-receptors-male). Topic 6 has one of the smallest slope measurements for both 
+global and local distances, suggesting that the semantics of selected words in this topic are becoming 
+more stable—not only with global word vectors but also with local, neighboring words. 
+9 
+Words in topics 20 (uptake-eyes-emotional-discrimination-corneal), 17 (conditions-degrees-sites-change-
+content), and 19 (acid-enzyme-membrane-release-synthesis) have the highest average local distance, 
+indicating that individual words’ meanings within these topics are more likely to shift when using their 
+semantic neighbors as the benchmark. In contrast, topics 9 (activity-effect-effects-response-rat), 14 
+(patients-treatment-cases-clinical-patient), and 2 (group-levels-rats-control-plasma) display the lowest 
+average local distance, indicating that individual words’ meanings for these topics are quite consistent 
+with their semantic neighbors over the years. It is noteworthy that topic 9, which has the lowest average 
+local distance, also has high average global distance: it is possible that the semantics of words in a topic 
+are evolving in relation to global word vectors while remaining unaffected by a small set of more 
+semantically proximate words. 
+In our analysis of global distance, we found that the variance of topics 5 (normal-age-children-weight-
+women) and 6 (mice-receptor-alpha-receptors-male) was trending downward over time. The same 
+pattern applies for these two topics as measured by local distance. The results suggest that words’ 
+meanings in the two topics are converging in reference to both global word vectors and local semantic 
+neighbors. 
+Table 1 summarizes dynamic changes of global distance and local distance of each topic as characterized 
+by slope, r-squared, and p-value. 
+Table 1. Slope, r-squared, p-value of topics measured by global distance and local distance 
+Global Distance 
+Local Distance 
+Topics 
+Slope 
+R
+2
+p-value 
+Slope 
+R
+2
+p-value 
+1: therapy-tumor-cancer-antigen-lung 
+-0.0020 
+0.46 
+5.66E-05 
+-0.0018 
+0.50 
+2.47E-05 
+2: group-levels-rats-control-plasma 
+-0.0031 
+0.63 
+2.72E-07 
+-0.0007 
+0.17 
+2.98E-02 
+3: tissue-formation-bone-lesions-pattern 
+-0.0021 
+0.53 
+6.76E-06 
+-0.0017 
+0.45 
+1.01E-04 
+4: cells-cell-human-growth-vitro 
+-0.0036 
+0.74 
+2.75E-09 
+-0.0011 
+0.26 
+6.00E-03 
+5: normal-age-children-weight-women 
+-0.0031 
+0.72 
+5.24E-09 
+-0.0020 
+0.68 
+5.56E-08 
+6: mice-receptor-alpha-receptors-male 
+-0.0042 
+0.81 
+3.75E-11 
+-0.0024 
+0.50 
+2.40E-05 
+7: protein-binding-dna-gene-proteins 
+-0.0044 
+0.79 
+1.17E-10 
+-0.0013 
+0.45 
+8.71E-05 
+8: antibodies-isolated-antibody-positive-infection 
+-0.0027 
+0.65 
+1.31E-07 
+-0.0019 
+0.56 
+4.36E-06 
+9: activity-effect-effects-response-rat 
+-0.0021 
+0.43 
+1.21E-04 
+-0.0015 
+0.42 
+1.89E-04 
+10: blood-disease-associated-pressure-function 
+-0.0017 
+0.35 
+7.75E-04 
+-0.0015 
+0.50 
+2.53E-05 
+11: results-time-method-values-single 
+-0.0015 
+0.37 
+4.22E-04 
+-0.0015 
+0.53 
+1.13E-05 
+12: study-data-factors-population-relationship 
+-0.0022 
+0.37 
+5.03E-04 
+-0.0026 
+0.69 
+4.02E-08 
+13: health-part-care-state-areas 
+-0.0036 
+0.63 
+2.48E-07 
+-0.0014 
+0.50 
+2.40E-05 
+14: patients-treatment-cases-clinical-patient 
+-0.0023 
+0.43 
+1.05E-04 
+-0.0013 
+0.58 
+2.44E-06 
+15: rate-mean-years-mm-range 
+-0.0046 
+0.64 
+1.61E-07 
+0.0002 
+0.02 
+5.08E-01 
+16: changes-system-subjects-muscle-stimulation 
+-0.0032 
+0.75 
+1.11E-09 
+-0.0012 
+0.35 
+8.71E-04 
+17: conditions-degrees-sites-change-content 
+-0.0028 
+0.64 
+2.16E-07 
+-0.0022 
+0.60 
+1.53E-06 
+10 
+18: studies-drug-evidence-result-order 
+0.0011 
+0.14 
+4.40E-02 
+-0.0016 
+0.58 
+2.14E-06 
+19: acid-enzyme-membrane-release-synthesis 
+-0.0029 
+0.66 
+1.04E-07 
+-0.0013 
+0.27 
+4.47E-03 
+20: uptake-eyes-emotional-discrimination-corneal 
+-0.0038 
+0.77 
+3.24E-10 
+-0.0029 
+0.74 
+4.81E-09 
+As mentioned in the preceding paragraphs, except for topic 18 (global distance) and topic 15 (local 
+distance), all other topics have a negative slope. Regressions for all topics are statistically significant at 
+the 0.05 level as indicated by the p-value, with the exception of the local distance for topic 15. For most 
+regressions, the coefficient of determination is able to account for about 50% or more of variances, with 
+the exception of topics 10, 11, 12, and 18 (global distance) and topics 2, 4, 15, 16, and 19 (local distance). 
+This suggests that words in these topics are more susceptible to semantic fluctuations. 
+4.2 Word-level analysis 
+At the word level, we first use a scatter plot and a residual plot to show the relationship between words’ 
+slopes measured by global distance and by local distance (Figure 4). 
+Figure 4. Scatter plot and residual representation of the relationship between global change and local 
+change for the 761 words. 
+11 
+Figure 4 shows only a weak correlation between global and local distance trends for individual words; no 
+clear pattern emerges from the scatter plot (the correlation coefficient is merely 0.015). The results 
+suggest that words can behave quite differently in the global and local semantic contexts. A word can 
+become increasingly coherent with its semantic neighbors while becoming more volatile with regard to 
+global word vectors, or vice versa. We identified words in both groups: words such as “research”, 
+“disease”, “current”, “associated”, “cohort”, and “potential” had the highest slopes measured by global 
+distance but the lowest slopes measured by local distance. Words such as “domain”, “mean”, “ranged”, 
+“protein”, “amino”, “receptors”, and “community” had the lowest slopes measured by global distance 
+but the highest slopes measured by local distance. This dual behavior shows that, on the one hand, 
+words can form clusters with their semantic neighbors, and these words, as a cluster, coevolve 
+semantically; on the other hand, words can drift apart from their semantic neighbors while nonetheless 
+stabilizing within the global context. 
+Figures 5 to 8 shows the dynamics of semantic distance for eight sets of top-10 words, as selected on 
+the basis of slope of global distance (Figure 5), slope of local distance (Figure 6), average of global 
+distance (Figure 7), and average of local distance (Figure 8). Lines in these figures are denoted by 
+different colors and shapes of markers; lines are also annotated with words at the lowest or highest 
+point of each line. 
+Figure 5. 10 words with the smallest global-distance slopes (left panel); 10 words with the largest global-
+distance slopes (right panel) 
+While words in the left panel of Figure 5 have become more concrete over the last 30 years, words in 
+the right panel have become more ambiguous—in the setting of biomedical research. The result 
+suggests that the use context of words such as “domain”, “upregulated”, and “measured” has become 
+12 
+more consistent over the years. Looking at the words in the right panel, it is not surprising to see that 
+what is considered “potential”, “recent”, “effective”, or even “therapeutic” has changed over the years. 
+Figure 6. 10 words with the smallest local-distance slopes (left panel); 10 words with the largest local-
+distance slopes (right panel) 
+We see in the left panel of Figure 6 that “nps” (perhaps “new psychoactive substance”) and 
+“upregulated” are also the ones with the smallest global-distance slopes, showing that the two words 
+have more consistent semantics at both global and local levels. The left panel also includes words such 
+as “vegf” (vascular endothelial growth factor) and “biomarkers”, suggesting that these are among the 
+most notable words converging with their semantic neighbors. Contrariwise, words in the right panel 
+are ones with a notable diverging trend from their semantic neighbors. These include generic words (e.g. 
+“median” and “mean”) as well as more specialized words such as “protein”, “microm”, and “diabetes”. 
+13 
+Figure 7. 10 words with smallest average global distance (left panel); 10 words with largest average 
+global distance (right panel) 
+Words with the smallest average global distance in Figure 7 (left panel) are those with specialized 
+meanings, such as “glucose”, “sperm”, and “hepatitis”; this may be because such words are less 
+susceptible to semantic changes over time. For instance, the distance of “visual” and “ventricular” 
+changed by less than 8% between 2005 and 2006. The same graph shows that despite their already low 
+average distance, these words are becoming even more unambiguous. Words with the largest average 
+global distance (right panel) are words with rather generic semantics, such as “study”, “access”, and 
+“recent”. While most of the top 10 words fluctuated in global distance, a few words including “recent”, 
+“important”, and “present” are also among the ones with the highest slope measured by global distance, 
+according with the observation that what is deemed new and important in biomedical research has 
+changed over the past 30 years. 
+14 
+Figure 8. 10 words with smallest average local distance (left panel); 10 words with largest average local 
+distance (right panel) 
+Words with the smallest average local distance in Figure 7 (left panel) are seemingly generic words, but 
+what may distinguish these words from those in the right panel of Figure 6 is that these words are 
+primarily used to report experiments and results, rather than overall descriptions of the studies (for 
+which the words in Figure 6, right panel, might be used). The results suggest that the ways biomedical 
+researchers describe their experimental methods and findings remain relatively steady over the years. 
+On the other hand, words with the highest average local distance (right panel) are generic words, not 
+associated with any specialty or research design. 
+5 Discussion 
+5.1 Patterns of word semantic change 
+This paper found that for the selected representative words in PubMed, overall, meanings are becoming 
+more stable in the 2000s than they were in the 1980s and 1990s, notwithstanding a mild distance gain 
+from 2007 to 2016. At the topic level, the global distance of most topics (19 of 20) is declining, 
+suggesting that the meanings of representative words in these topics are becoming more stable over 
+time. This stabilization of meanings is most evident in topics 15 (rate-mean-years-mm-range), 7 (protein-
+binding-dna-gene-proteins), and 6 (mice-receptor-alpha-receptors-male). We also considered the 
+average global distance over the years; this measure was especially low for topics 10 (blood-disease-
+associated-pressure-function), 1 (therapy-tumor-cancer-antigen-lung), and 8 (antibodies-isolated-
+antibody-positive-infection), while topics 18 (studies-drug-evidence-result-order), 11 (results-time-
+method-values-single), and 9 (activity-effect-effects-response-rat) had the highest average distance. A 
+low average distance suggests that words’ semantics in those topics are consistent over the past 20 
+years; a high average distance suggests that individual words’ meanings are evolving. Like the global 
+distance, the local distance of most topics (19 of 20) is declining, showing that the meanings of words 
+15 
+from these topics are becoming more consistent with those of their semantic neighbors. Among these 
+topics, topic 6 (mice-receptor-alpha-receptors-male) had one of the smallest slopes measured by both 
+global distance and local distance, suggesting that the semantics of selected words in this topic are 
+becoming more stable, as measured both by global word vectors and by semantic neighbors. 
+At the level of individual words, we found no clear pattern relating global distance and local distance; 
+this indicates that a word can become more coherent with its semantic neighbors even as it becomes 
+more dynamic with regard to global word vectors, or vice versa. Using global distance, we identified a 
+number of words whose semantics are becoming more concrete (e.g., “domain” and “upregulated”) as 
+well as those whose meanings are becoming more ambiguous in the context of biomedical research (e.g., 
+“potential”, “recent”, and “therapeutic”). Additionally, our local distance analysis revealed that words 
+such as “vegf” and “biomarkers” are converging with their semantic neighbors, while words such as 
+“protein”, “microm”, and “diabetes” are diverging from theirs. 
+Visualizations of the words’ average global distance revealed low values for specialized words such as 
+“glucose”, “sperm”, and “hepatitis”, which are less susceptible to semantic changes over time. On the 
+other hand, generic words such as “study”, “access”, and “recent” displayed the highest average global 
+distance. It is worth noting that words used to describe experiments and results (e.g., “results”, 
+“decreased”, “assess”, and “correlation”) did not seem to change relative to their semantic neighbors, 
+indicating that the ways biomedical researchers describe their experiments and results remain relatively 
+steady over the years. 
+5.2 Linguistic laws 
+In the current study, polysemous words as identified by Hamilton, Leskovec [1] did in fact display higher 
+rates of semantic change. For instance, the right panel of Figure 5 lists a number of words that had the 
+highest slopes—these are also the ones with a high polysemy score, as calculated by Hamilton, Leskovec 
+[1]
+4
+. This study did not, however, find enough evidence to support the “law of conformity”; rather, it 
+found only a weak relationship between the word’s frequency and rate of semantic change (r-
+squared=0.056). This is likely due to the small number of words included in this study, all of which are 
+also high on the frequency spectrum. 
+The law of differentiation and the law of parallel change make opposite predictions regarding the 
+semantic change of synonyms: in examples provided in [3], “fragile” and “frail” were synonyms in the 
+1890s, but their semantics had differentiated one century later; “imminent” and “impending,” on the 
+other hand, experienced parallel change, with meanings changing from “menacing” to “incipient” over 
+the course of a century. Figure 9 shows the global distance for words in each synonymous group. We 
+inserted the average global distance of all 761 words as a benchmark (“Global Mean”). 
+4
+http://nlp.stanford.edu/projects/histwords/data_description.html 
+16 
+Figure 9. Semantic change patterns of 21 groups of synonymous words 
+We see in Figure 9 that synonymous words in most groups seem to have coevolved over the past 30 
+years. Nonetheless, when using the global mean as a benchmark, we found only two groups—group 8 
+(“assessment” and “evaluation”) and group 14 (“maximum”, “maximal”, and “peak”)—whose average 
+correlation coefficient was greater than the average correlation coefficient between the global mean 
+and individual words of that group. Meanwhile, “medium” and “average” in group 5 and “genotype”, 
+“gene”, and “dna” in group 11 have higher correlations with words in their respective groups than with 
+the global mean, but when other synonymous words are added, a different picture emerges: the words’ 
+semantic change patterns correlate more closely with the global mean than with each other. The results 
+suggest that while synonymous words seem to coevolve semantically, their coevolving patterns are not 
+significant if we consider the global mean as a benchmark. Thus, although the law of parallel change was 
+supported in a few cases, this study did not find overwhelming evidence to support this law across the 
+entire corpus. 
+As for the law of differentiation, among the 21 groups of synonymous words, two groups—group 9 
+(“experiments” and “research”) and group 17 (“therapeutic” and “curative”)—resulted in negative 
+correlation coefficients between the synonymous words (-0.393 for group 9 and -0.392 for group 17). 
+The majority of groups, however, have strong, positive correlations between the synonymous words 
+(average coefficient=0.65). Thus, these results provide no strong evidence to support the law of 
+differentiation. 
+6 Conclusion 
+In this study, we identified a set of representative words in biomedical literature based on word 
+frequency and word-topic probability distributions. We then applied a skip-gram word2vec model to the 
+identified words to reveal word- and topic-level semantic change. Our word and topic lists were based 
+17 
+on data collected from PubMed, the single largest bibliographic data repository available to the public. 
+We believe that with the continued success of the open data movement, more high-quality publication 
+data sets will become freely available to researchers. 
+This study found evidence to support the law of innovation (the assertion that polysemous words are 
+more likely to change semantically over time). We did not, however, find a consistent set of evidence to 
+support the law of conformity, the law of differentiation, or the law of parallel change. Nor did we find 
+major “semantic shifters” whose meanings have drastically changed over the years, such as “gay” and 
+“fatal” identified in Hamilton, Leskovec [1]; most of these major shifts took place before or around the 
+early 1900s, well before the 30-year period sampled in our research. Despite its ambiguous findings 
+regarding language laws, we believe that this work contributes to a greater effort to understand the 
+linguistic context of scientific publications—a mission to bridge the gap between scientific data and 
+knowledge. Future work in this direction will involve bringing in disciplinary perspective to gain insights 
+on disciplinary epistemological differences suggested by word semantic changes. 
+Acknowledgement 
+This project was made possible in part by the Institute of Museum and Library Services (Grant Award 
+Number: RE-07-15-0060-15), for the project titled “Building an entity-based research framework to 
+enhance digital services on knowledge discovery and delivery”. 
+References 
+1. 
+Hamilton, W.L., J. Leskovec, and D. Jurafsky, Diachronic Word Embeddings Reveal Statistical 
+Laws of Semantic Change. arXiv preprint arXiv:1605.09096, 2016. 
+2. 
+Jatowt, A. and K. Duh. A framework for analyzing semantic change of words across time. in 
+Proceedings of the 14th ACM/IEEE-CS Joint Conference on Digital Libraries. 2014. IEEE Press. 
+3. 
+Xu, Y. and C. Kemp. A Computational Evaluation of Two Laws of Semantic Change. in CogSci. 
+2015. 
+4. 
+Traugott, E.C. and R.B. Dasher, Regularity in semantic change. Vol. 97. 2001: Cambridge 
+University Press. 
+5. 
+Crowley, T. and C. Bowern, An introduction to historical linguistics. 2010: Oxford University Press. 
+6. 
+Frermann, L. and M. Lapata, A Bayesian Model of Diachronic Meaning Change. Transactions of 
+the Association for Computational Linguistics, 2016. 4: p. 31-45. 
+7. 
+Lin, Y., et al. Syntactic annotations for the google books ngram corpus. in Proceedings of the ACL 
+2012 system demonstrations. 2012. Association for Computational Linguistics. 
+8. 
+Davies, M. The Corpus of Historical American English: 400 million words, 1810-2009. 2010; 
+Available from: http://corpus.byu.edu/coha. 
+9. 
+Larivière, V., Y. Gingras, and É. Archambault, The decline in the concentration of citations, 1900–
+2007. Journal of the American Society for Information Science and Technology, 2009. 60(4): p. 
+858-862. 
+10. 
+Larivi
+è
+re, V., É. Archambault, and Y. Gingras, Long
+‐
+term variations in the aging of scientific 
+literature: From exponential growth to steady
+‐
+state science (1900
+–
+2004). Journal of the 
+American Society for Information Science and technology, 2008. 59(2): p. 288-296. 
+11. 
+Kim, Y., et al., Temporal analysis of language through neural language models. arXiv preprint 
+arXiv:1405.3515, 2014. 
+18 
+12. 
+Kulkarni, V., et al. Statistically significant detection of linguistic change. in Proceedings of the 
+24th International Conference on World Wide Web. 2015. ACM. 
+13. 
+Levy, O., Y. Goldberg, and I. Dagan, Improving distributional similarity with lessons learned from 
+word embeddings. Transactions of the Association for Computational Linguistics, 2015. 3: p. 211-
+225. 
+14. 
+Thomas, S.W., et al. Modeling the evolution of topics in source code histories. in Proceedings of 
+the 8th working conference on mining software repositories. 2011. ACM. 
+15. 
+Wijaya, D.T. and R. Yeniterzi. Understanding semantic change of words over centuries. in 
+Proceedings of the 2011 international workshop on DETecting and Exploiting Cultural diversiTy 
+on the social web. 2011. ACM. 
+16. 
+Recchia, G., et al., Tracing Shifting Conceptual Vocabularies Through Time. 2011. 
+17. 
+Huijnen, P., et al. A digital humanities approach to the history of science. in Workshops at the 
+International Conference on Social Informatics. 2013. Springer. 
+18. 
+Betti, A. and H. van den Berg, Modelling the history of ideas. British Journal for the History of 
+Philosophy, 2014. 22(4): p. 812-835. 
+19. 
+Eisenstein, J., et al., Diffusion of lexical change in social media. PloS one, 2014. 9(11): p. e113114. 
+20. 
+Heyer, G., F. Holz, and S. Teresniak, Change of Topics over Time-Tracking Topics by their Change 
+of Meaning. KDIR, 2009. 9: p. 223-228. 
+21. 
+Manning, C.D., Computational linguistics and deep learning. Computational Linguistics, 2016. 
+22. 
+Niitsuma, H., Word2Vec is only a special case of Kernel Correspondence Analysis and Kernels for 
+Natural Language Processing. arXiv preprint arXiv:1605.05087, 2016. 
+23. 
+Mikolov, T., et al., Efficient estimation of word representations in vector space. arXiv preprint 
+arXiv:1301.3781, 2013. 
+24. 
+Brigadir, I., D. Greene, and P. Cunningham, Adaptive representations for tracking breaking news 
+on twitter. arXiv preprint arXiv:1403.2923, 2014. 
+25. 
+Ginter, F. and J. Kanerva, Fast Training of word2vec Representations Using N-gram Corpora. 
+2014, SLTC. 
+26. 
+Bird, S. NLTK: the natural language toolkit. in Proceedings of the COLING/ACL on Interactive 
+presentation sessions. 2006. Association for Computational Linguistics. 
+27. 
+Rehurek, R. and P. Sojka. Software framework for topic modelling with large corpora. in In 
+Proceedings of the LREC 2010 Workshop on New Challenges for NLP Frameworks. 2010. Citeseer. 
+28. 
+Sugimoto, C.R., et al., The shifting sands of disciplinary development: Analyzing North American 
+Library and Information Science dissertations using latent Dirichlet allocation. Journal of the 
+American Society for Information Science and Technology, 2011. 62(1): p. 185-204. 
+29. 
+Teh, Y.W., D. Newman, and M. Welling. A collapsed variational Bayesian inference algorithm for 
+latent Dirichlet allocation. in Advances in neural information processing systems. 2007. 
+30. 
+Yan, E., Research dynamics, impact, and dissemination: A topic
+‐
+level analysis. Journal of the 
+Association for Information Science and Technology, 2015. 66(11): p. 2357-2372. 
+31. 
+Nallapati, R., W. Cohen, and J. Lafferty. Parallelized variational EM for latent Dirichlet allocation: 
+An experimental evaluation of speed and scalability. in Data Mining Workshops, 2007. ICDM 
+Workshops 2007. Seventh IEEE International Conference on. 2007. IEEE. 
+32. 
+Bíró, I., et al. Linked latent dirichlet allocation in web spam filtering. in Proceedings of the 5th 
+International Workshop on Adversarial Information Retrieval on the Web. 2009. ACM. 
+33. 
+Perotte, A.J., et al. Hierarchically supervised latent Dirichlet allocation. in Advances in Neural 
+Information Processing Systems. 2011. 
+34. 
+Hoffman, M., F.R. Bach, and D.M. Blei. Online learning for latent dirichlet allocation. in advances 
+in neural information processing systems. 2010. 
+19 
+35. 
+Andrzejewski, D. and X. Zhu. Latent dirichlet allocation with topic-in-set knowledge. in 
+Proceedings of the NAACL HLT 2009 Workshop on Semi-Supervised Learning for Natural 
+Language Processing. 2009. Association for Computational Linguistics. 
+36. 
+Goldberg, Y. and O. Levy, word2vec explained: Deriving mikolov et al.'s negative-sampling word-
+embedding method. arXiv preprint arXiv:1402.3722, 2014. 
+37. 
+Chiu, B., et al., How to train good word embeddings for biomedical NLP. ACL 2016, 2016: p. 166. 
+38. 
+Hamilton, W.L., J. Leskovec, and D. Jurafsky, Cultural Shift or Linguistic Drift? Comparing Two 
+Computational Measures of Semantic Change. arXiv preprint arXiv:1606.02821, 2016. 
+39. 
+Fernald, J.C., ... English Synonyms and Antonyms. 1896: Рипол Классик. 
+40. 
+Fellbaum, C., WordNet. 1998: Wiley Online Library. 

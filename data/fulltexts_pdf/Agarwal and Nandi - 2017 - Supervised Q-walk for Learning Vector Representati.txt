@@ -1,0 +1,2240 @@
+﻿1
+Supervised Q-walk for Learning Vector
+Representation of Nodes in Networks
+Naimish Agarwal,
+IIIT-Allahabad (irm2013013@iiita.ac.in)
+G.C.
+Nandi,
+IIIT-Allahabad (gcnandi@iiita.ac.in)
+Abstract—Automatic feature learning algorithms
+are at
+the
+forefront of modern day machine learning research.
+We present
+a novel
+algorithm,
+supervised Q-walk,
+which applies Q-learning
+to generate random walks on graphs such that the walks prove
+to be
+useful
+for
+learning node
+features
+suitable
+for
+tackling
+with the node classification problem.
+We present another novel
+algorithm,
+k-hops neighborhood based confidence values learner,
+which learns confidence values of labels for unlabelled nodes in
+the network without
+first
+learning the node embedding.
+These
+confidence values
+aid in learning an apt
+reward function for
+Q-learning.
+We demonstrate the efficacy of
+supervised Q-walk approach
+over existing state-of-the-art random walk based node embedding
+learners
+in solving
+the
+single
+/
+multi-label
+multi-class
+node
+classification problem using several
+real
+world datasets.
+Summarising, our approach represents a novel state-of-the-art
+technique to learn features,
+for nodes in networks,
+tailor-made
+for dealing with the node classification problem.
+Index
+Terms—Node
+Embedding,
+Feature
+Learning,
+Deep
+Learning,
+Node Classification,
+Random Walks
+I.
+I
+NTRODUCTION
+Consider a social
+network of users where users have pro-
+fessions like scientist,
+manager,
+student,
+etc.
+Each user
+can
+be connected to sets of users from different
+professions.
+The
+problem is to predict the profession of users whose profession
+information is missing based upon their context in the network.
+Such a problem belongs to the class of problems called node
+classification problem.
+In node classification problem,
+the task is to predict
+the
+labels of those nodes in networks whose label
+information is
+missing.
+A node can have one or more labels associated with
+it,
+e.g.
+if the nodes are people, then the labels can be student,
+artist,
+dancer,
+etc.
+This problem seems to be solvable using
+supervised machine learning techniques. The downside is that
+we do not know the required set of features which need to be
+feeded into the machine learning system for performing node
+classification.
+In our work,
+we have developed a technique for learning
+features
+of
+nodes
+in networks,
+i.e.
+node embeddings.
+Our
+technique provides a supervised adaptation to node2vec [9] - a
+semi-supervised learning algorithm to learn continuous valued
+features of nodes in networks.
+Our algorithm is based on a simple intuition.
+We want that
+the nodes which have same labels should have very similar
+embeddings.
+Therefore,
+we would like to perform random
+walks on the nodes in the networks such that if the nodes on
+the random walk are
+u
+1
+, u
+2
+, u
+3
+, ..., u
+w
+l
+where
+w
+l
+is the walk
+length, then
+u
+i
+is very similar to
+u
+i−1
+where
+i = 2, 3, 4, ..., w
+l
+.
+To achieve the above intuition,
+we have laid out a two step
+approach to perform the random walks:
+1)
+We associate confidence values with all node-label pairs.
+The confidence values
+just
+give us
+a hint
+about
+the
+tentative labels for nodes.
+2)
+We first associate a reward function with every edge in
+the network.
+These reward functions are used by the
+Q-learning algorithm in learning the Q-values for each
+node-edge pair.
+These Q-values then guide the random
+walks in a way such that
+in the ideal
+scenario if
+the
+random walk is
+u
+1
+, u
+2
+, u
+3
+, ..., u
+w
+l
+, then the actual labels
+associated with the nodes are
+l, l, l, ..., l
+.
+The
+generated random walks
+are
+treated as
+sentences
+in
+a document.
+We then apply Skip-gram [18]
+with Negative
+Sampling [19]
+to learn the node embeddings.
+These node
+embeddings are then used to train a classifier
+for
+checking
+the goodness of the learnt embeddings.
+The related work is discussed in section §II.The details of
+the approach are given in section §III. The experimental details
+are mentioned in section §IV. The conclusion and future work
+are mentioned in section §V and section §VI respectively.
+II.
+R
+ELATED
+W
+ORK
+Graph Analytics field is pacing up due to the growth of large
+datasets in social network analysis [16][2][15], communication
+networks [14][13], etc. The area of node classification [6] has
+been approached earlier from different
+perspectives like fac-
+torization based approaches,
+random walk based approaches,
+etc.
+Factorization based techniques represent
+the edges in net-
+works as matrices. These matrices are factorized to obtain the
+embeddings. The matrix representation and its factorization are
+done using various techniques [24][3][1][8][20].
+These meth-
+ods may suffer from scalability issues for large graph datasets
+and sparse matrix representations need special attention.
+Random walk based approaches perform random walks on
+networks to obtain the embeddings.
+Two popular techniques
+are DeepWalk [22] and node2vec [9]. node2vec [9] is a semi-
+supervised algorithmic framework which showcases strategies
+to perform random walks
+such that
+nodes
+which are ho-
+mophilic and/or structurally equivalent end up getting similar
+embeddings.
+The random walks
+are guided by a heuristic
+which involves computing distance of the next possible nodes
+from the previous node given the current node. DeepWalk can
+be considered as
+a special
+case of
+node2vec with
+p = 1
+and
+q
+= 1
+where
+p, q
+are
+hyperparameters
+in node2vec
+arXiv:1710.00978v1 [cs.SI] 3 Oct 2017
+2
+which decide the tradeoff between depth-first and breadth-first
+sampling.
+Our approach falls under random walk based approaches.
+We compare our approach against
+node2vec in section §IV.
+Instead of
+using some hand-crafted random walk based ap-
+proach,
+we decided to learn how to do random walks using
+reinforcement
+learning.
+We perform random walks such that
+nodes which have same labels but
+are not
+necessarily struc-
+turally equivalent,
+end up getting embeddings close to one
+another in the embedding space. The random walks are guided
+by the Q-values of the node-action pairs.
+III.
+L
+EARNING
+V
+ECTOR
+R
+EPRESENTATION OF
+N
+ODES
+In section III-A,
+we define the problem formally.
+In sec-
+tion III-B,
+we propose a k-hops neighborhood based confi-
+dence values learner
+which learns the confidence values of
+labels for unlabelled nodes in the network.
+Using the learnt
+confidence values,
+we devise a reward function,
+which aids
+Q-walk,
+described in section III-C,
+to do random walks.
+The generated random walks
+are then fed into word2vec,
+which is briefly described in section III-D,
+to get
+the vector
+representation of nodes.
+A.
+Problem Definition
+Consider
+G = (V, E)
+where
+G
+can be any (un)directed,
+(un)weighted simple graph.
+We ignore self-loops and parallel
+edges.
+V
+is the set
+of
+vertices and
+E
+is the set
+of
+edges.
+V = V
+labelled
+∪ V
+unlabelled
+and
+V
+labelled
+∩ V
+unlabelled
+= φ
+where
+V
+labelled
+is the set
+of
+labelled vertices,
+V
+unlabelled
+is
+the set
+of
+unlabelled vertices and
+φ
+denotes empty set.
+Let
+v
+l
+=
+|V
+labelled
+|
+|V |
+.
+We want to learn a mapping
+f : V −→ R
+d
+such that for any
+u, v ∈ V
+if
+u
+and
+v
+have same labels,
+then
+||f (u) − f (v)||
+2
+distance is
+minimum.
+We use the same objective function
+and assumtions - conditional
+independence and symmetry in
+feature space,
+as used in node2vec [9].
+O
+f
+= max
+f
+X
+u∈V
+log P r(N
+S
+(u)|f (u))
+(1)
+In (1),
+we
+are
+maximizing over
+the
+log-probability of
+observing a network neighborhood
+N
+S
+(u)
+obtained by the
+sampling strategy
+S
+,
+which,
+in our
+case,
+is
+described in
+section III-C,
+starting at
+node
+u
+.
+In [9],
+the authors
+have
+derived that
+O
+f
+∝
+X
+u∈V
+X
+n
+i
+∈N
+S
+(u)
+f (n
+i
+).f (u)
+(2)
+The use of
+(1)
+is justified in our
+case since we want
+to
+minimize
+||f (u) − f (v)||
+2
+which is equivalent to maximizing
+f (u).f (v)
+.
+B.
+K-hops neighborhood based confidence values learner
+This algorithm is motivated by homophily [17] in networks.
+Entitites of similar kind tend to stay together, e.g. friends who
+share same interest,
+people in the same profession,
+etc.
+We
+use this heuristic to find the confidence values of labels for
+unlabelled nodes in the graph. It is imperative to compute the
+confidence values, since in their absence, the agent, as used in
+section III-C,
+would get
+confused in chosing the appropriate
+direction of the random walk.
+N (u, k) = {x | x ∈ V
+and
+x
+is
+k
+-hops away from
+u}
+(3)
+In (3),
+N (u, k)
+is the k-hops neighborhood for
+u ∈ V
+.
+For
+directed
+G
+,
+k
+-hops are based on the outgoing edges from
+u
+.
+L = {l
+i
+| l
+i
+is a label for
+i = 1, 2, ..., |L|}
+(4)
+In (4),
+L
+is the set of all labels in
+G
+and
+|L|
+is the cardinality
+of
+L
+.
+L
+actual
+(u) = {l | u
+is labelled
+l
+where
+l ∈ L}
+(5)
+In (5),
+L
+actual
+(u)
+is the set
+of labels associated with
+u ∈
+V
+labelled
+.
+t = 0, 1, 2, ..., T
+(6)
+In (6),
+t
+is the iteration counter for computing the confidence
+values and
+T
+is the maximum number of such iterations.
+C
+0
+(u, l) =
+
+
+
+
+
+1
+u ∈ V
+labelled
+and
+l ∈ L
+actual
+(u)
+0
+u ∈ V
+labelled
+and
+l
+/
+∈ L
+actual
+(u)
+0
+u ∈ V
+unlabelled
+∀l ∈ L
+(7)
+In (7),
+C
+0
+(u, l)
+is the initial
+confidence value associated
+with
+u ∈ V
+computed
+∀l ∈ L
+.
+C
+t
+(u, l)
+=
+
+
+
+
+
+
+
+
+
+C
+t−1
+(u, l)
+u ∈ V
+labelled
+|N (u,k)|
+X
+i
+C
+t−1
+(x
+i
+,l)
+|N (u,k)|
+u ∈ V
+unlabelled
+(8)
+In (8),
+C
+t
+(u, l)
+is the confidence value of
+u ∈ V
+for label
+l ∈ L
+at iteration
+t
+and
+x
+i
+∈ N (u, k)
+.
+C
+T
+(u, l)
+is the confidence with which we can state that
+u ∈ V
+has label
+l ∈ L
+.
+We denote
+k
+in
+k
+-hops neighborhood
+as
+k
+HN
+.
+C.
+Supervised Q-walk
+To generate random walks, we look at the graph as a Markov
+Decision Process (MDP)
+[4],
+where each node
+u ∈ V
+is a
+state, outgoing edges from
+u
+are the actions possible at
+u
+. The
+probability of reaching the neighbor
+u
+0
+by taking the action
+(u, u
+0
+)
+is
+1
+.
+Imagine an agent
+at
+u
+which has to decide the
+next node
+u
+0
+. To aid the agent in taking the right decision, we
+perform Q-learning [27]. So, the agent decides
+u
+0
+based upon
+the Q-value
+Q(u, (u, u
+0
+))
+. Hence, the generated random walks
+are called Q-walks.
+The Q-walks are supervised because the
+reward function (9) depends on the confidence values,
+learnt
+in a supervised way,
+as per section III-B.
+R(u, a, u
+0
+) = −
+|L|
+X
+i=1
+|C
+T
+(u
+0
+, l
+i
+) − C
+T
+(u, l
+i
+)|
+(9)
+3
+In (9),
+R(u, a, u
+0
+)
+is the reward obtained when the agent
+moves from
+u
+to
+u
+0
+along the edge
+a
+where
+u, u
+0
+∈ V , a =
+(u, u
+0
+) ∈ E
+and
+l
+i
+∈ L
+. The closer the reward is to
+0
+, the more
+similar
+u
+0
+is to
+u
+.
+j = 0, 1, 2, ..., J
+(10)
+In (10),
+j
+is the iteration counter in Q-learning and
+J
+is the
+maximum number of such iterations.
+Q
+0
+(u, a) = 0 ∀u ∈ V
+and
+a ∈ E
+(11)
+In (11),
+Q
+0
+(u, a)
+is the initial
+Q-value for the node-action
+pair
+(u, a)
+.
+α
+j
+=
+α
+j−1
+1 + j
+(12)
+Q
+j
+(u, a) = Q
+j−1
+(u, a) + α
+j
+(R(u, a, u
+0
+)+
+γ max
+a
+0
+Q
+j−1
+(u
+0
+, a
+0
+) − Q
+j−1
+(u, a))
+(13)
+In (12)
+and (13),
+α
+j
+is the learning rate for
+epoch
+j
+,
+α
+0
+is user-defined,
+and
+γ
+is the discount
+factor.
+In (12),
+we are
+updating the learning rate
+α
+at each iteration such that its value
+decreases with number of iterations and the difference between
+Q
+j
+(u, a)
+and
+Q
+j−1
+(u, a)
+diminishes over time, in other words,
+Q-values converge.
+r
+n
+∼
+Uniform
+(0, 1)
+(14)
+a =
+
+
+
+arg max
+a
+0
+Q
+J
+(u
+0
+, a
+0
+)
+r
+n
+≤ p
+Q
+(u,
+random
+(u
+0
+)) ∈ E
+r
+n
+> p
+Q
+(15)
+The agent needs to decide the action when it is at
+u
+. It first
+samples a random number as per (14), then it decides upon the
+action as per (15).
+In (15),
+p
+Q
+is the exploitation probability
+and
+u
+0
+∈ N (u, 1)
+.
+We generate
+r
+random walks of length
+w
+l
+each
+∀u ∈ V
+.
+D.
+word2vec
+The generated random walks can be considered as sentences
+in a text
+document.
+As per
+(1),
+we have to maximize the
+probability of
+the context
+nodes given the node
+u ∈ V
+.
+To
+achieve this,
+we use Skip-gram [18] with Negative Sampling
+[19].
+We denote the context
+window size as
+w
+s
+and number
+of epochs as
+e
+.
+IV.
+E
+XPERIMENTS
+A.
+Datasets
+We provide a brief
+overview of
+the datasets which were
+used to perform the experiments.
+1)
+Yeast:
+Yeast
+[7] dataset
+is a protein-protein interaction
+network of budding yeast.
+It has
+2361
+nodes,
+7182
+edges and
+13
+classes.
+It
+is an undirected and unweighted network.
+It
+offers a single-label multi-class classification problem.
+Figure 1.
+Mean F1 scores of supervised Q-walk against the baseline node2vec
+for different settings of the discount factor
+γ
+with fixed
+p
+Q
+= 0.8
+,
+k
+HN
+= 1
+,
+r = 24
+,
+w
+l
+= 100
+,
+d = 256
+,
+w
+s
+= 20
+,
+e = 100
+,
+v
+l
+= 0.8
+,
+α
+0
+= 1
+,
+J = 100
+,
+T = 3
+,
+k
+NN
+= 3
+.
+Figure 2.
+Mean F1 scores of supervised Q-walk against
+baseline node2vec
+for different settings of the exploitation probability
+p
+Q
+with fixed
+k
+HN
+= 1
+,
+r = 24
+,
+w
+l
+= 100
+,
+d = 256
+,
+w
+s
+= 20
+,
+e = 100
+,
+v
+l
+= 0.8
+,
+α
+0
+= 1
+,
+J = 100
+,
+T = 3
+,
+k
+NN
+= 3
+,
+γ = 0.9
+.
+2)
+BlogCatalog:
+BlogCatalog [25] dataset
+is a social
+net-
+work of
+bloggers.
+The labels
+associated with the bloggers
+refer to their interests which are obtained from the metadata
+information as available on BlogCatalog site.
+It
+consists of
+10312
+nodes,
+333983
+edges and
+39
+classes. It is an undirected
+and unweighted network.
+It
+offers a multi-label
+multi-class
+classification problem.
+3)
+Flickr:
+Flickr [25] dataset is a contact network of users
+on Flickr
+site.
+The labels associated with the users refer
+to
+their groups.
+It
+consists of
+80513
+nodes,
+5899882
+edges and
+195
+classes.
+It
+is an undirected and unweighted network.
+It
+offers a multi-label multi-class classification problem.
+4
+Table I
+M
+EAN
+F1
+SCORES OF SUPERVISED
+Q-
+WALK AND NODE
+2
+VEC ON DIFFERENT DATASETS WITH FIXED
+p
+Q
+= 0.8
+,
+k
+HN
+= 1
+,
+r = 24
+,
+w
+l
+= 100
+,
+d = 256
+,
+w
+s
+= 20
+,
+e = 100
+,
+v
+l
+= 0.8
+,
+α
+0
+= 1
+,
+J = 100
+,
+T = 3
+,
+k
+NN
+= 3
+,
+γ = 0.9
+,
+p = 0.25
+,
+q = 0.5
+.
+Supervised Q-walk
+node2vec
+% improvement
+Macro-F1
+Micro-F1
+Macro-F1
+Micro-F1
+Macro-F1
+Micro-F1
+Yeast
+0.2896
+0.3797
+0.2409
+0.3212
+20.21%
+18.21%
+BlogCatalog
+0.4051
+0.5420
+0.1984
+0.3062
+104.18%
+77.01%
+Flickr
+0.4340
+0.5505
+0.2087
+0.2853
+107.95%
+92.95%
+Figure 3.
+Mean F1 scores of supervised Q-walk against
+baseline node2vec
+for different settings of the word2vec epochs
+e
+with fixed
+k
+HN
+= 1
+,
+r = 24
+,
+w
+l
+= 100
+,
+d = 256
+,
+w
+s
+= 20
+,
+v
+l
+= 0.8
+,
+α
+0
+= 1
+,
+J = 100
+,
+T = 3
+,
+k
+NN
+= 3
+,
+γ = 0.9
+,
+p
+Q
+= 0.8
+.
+Figure 4.
+Mean F1 scores of supervised Q-walk against baseline node2vec for
+different settings of the ratio of labelled nodes
+v
+l
+, used for learning confidence
+values as per section III-B with fixed
+k
+HN
+= 1
+,
+r = 24
+,
+w
+l
+= 100
+,
+d = 256
+,
+α
+0
+= 1
+,
+J = 100
+,
+T = 3
+,
+k
+NN
+= 3
+,
+w
+s
+= 20, γ = 0.9
+,
+p
+Q
+= 0.8
+,
+e = 100
+.
+Figure 5.
+Mean F1 scores of supervised Q-walk against
+baseline node2vec
+for
+different
+settings of
+k
+HN
+,
+used for
+learning confidence values as per
+section III-B with fixed
+r = 24
+,
+w
+l
+= 100
+,
+d = 256
+,
+α
+0
+= 1
+,
+J = 100
+,
+T = 3
+,
+k
+NN
+= 3
+,
+γ = 0.9
+,
+p
+Q
+= 0.8
+,
+e = 100
+,
+w
+s
+= 20, v
+l
+= 0.8
+.
+Figure 6.
+Mean F1 scores of supervised Q-walk against
+baseline node2vec
+for different settings of node features representation dimensions
+d
+with fixed
+r = 24
+,
+w
+l
+= 100
+,
+α
+0
+= 1
+,
+J = 100
+,
+T = 3
+,
+k
+NN
+= 3
+,
+γ = 0.9
+,
+p
+Q
+= 0.8
+,
+e = 100
+,
+v
+l
+= 0.8
+,
+k
+HN
+= 1, w
+s
+= 20
+.
+5
+Figure 7.
+Mean F1 scores of supervised Q-walk against baseline node2vec for
+different settings of number of walks per node
+r
+with fixed
+w
+l
+= 100
+,
+α
+0
+= 1
+,
+J = 100
+,
+T = 3
+,
+k
+NN
+= 3
+,
+γ = 0.9
+,
+p
+Q
+= 0.8
+,
+e = 100
+,
+v
+l
+= 0.8
+,
+k
+HN
+= 1
+,
+d = 256, w
+s
+= 20
+.
+Figure 8.
+Mean F1 scores of supervised Q-walk against
+baseline node2vec
+for different settings of walk length
+w
+l
+with fixed
+r = 24, α
+0
+= 1
+,
+J = 100
+,
+T = 3
+,
+k
+NN
+= 3
+,
+γ = 0.9
+,
+p
+Q
+= 0.8
+,
+e = 100
+,
+v
+l
+= 0.8
+,
+k
+HN
+= 1
+,
+d = 256, w
+s
+= 20
+.
+B.
+Performance Evaluation
+We evaluate the performance by first computing the vector
+representation of nodes in the network using both node2vec
+and supervised Q-walk for
+specific hyperparameter
+settings.
+Then, we compute the mean of the macro and micro F1 scores
+obtained by performing 5 fold cross validation using k-nearest
+neighbors (k-NN) [10] classifier.
+We use k-NN for a couple
+of
+reasons.
+First,
+we are interested in showcasing that
+our
+learnt embeddings are similar for nodes with same labels, and
+such similarity can be measured by finding euclidean distance
+between the node embeddings of
+the concerned nodes,
+and
+this is in accordance with section III-A.
+Second,
+it
+is a non-
+linear classifier,
+therefore,
+the learnt embeddings need not be
+linearly separable for getting better classification performance.
+We denote
+k
+in k-NN as
+k
+NN
+.
+Figure 9.
+Mean F1 scores of supervised Q-walk against baseline node2vec for
+different
+settings of window size
+w
+s
+with fixed
+r = 24, α
+0
+= 1
+,
+J = 100
+,
+T = 3
+,
+k
+NN
+= 3
+,
+γ = 0.9
+,
+p
+Q
+= 0.8
+,
+e = 100
+,
+v
+l
+= 0.8
+,
+k
+HN
+= 1
+,
+d = 256, w
+l
+= 24
+.
+Figure 10.
+Mean F1 scores
+of
+node2vec against
+supervised Q-walk for
+different
+values of
+p
+and
+q
+with fixed
+p
+Q
+= 0.8
+,
+k
+HN
+= 1
+,
+r = 24
+,
+w
+l
+= 100
+,
+d = 256
+,
+w
+s
+= 20
+,
+e = 100
+,
+v
+l
+= 0.8
+,
+α
+0
+= 1
+,
+J = 100
+,
+T = 3
+,
+k
+NN
+= 3
+,
+γ = 0.9, w
+s
+= 20
+.
+C.
+Results
+It
+can be observed in figure 1 that
+values
+of
+γ
+around
+0.9
+provide higher
+performance than other
+values
+of
+γ
+on
+the
+Yeast
+dataset.
+For
+γ
+= 0
+,
+the
+F1 scores
+are
+better
+than a number of other
+γ
+values which signifies the aptness
+of
+the reward function (9),
+since (13)
+is
+then modified to
+Q
+j
+(u, a) = (1 − α
+j
+)Q
+j−1
+(u, a) + α
+j
+R(u, a, u
+0
+)
+,
+which does
+not include
+Q
+j−1
+(u
+0
+, a
+0
+)
+.
+For
+γ = 0
+,
+on BlogCatalog dataset,
+supervised Q-walk approach achieves mean Macro-F1 score of
+0.4198
+and mean Micro-F1 score of
+0.5528
+which are higher
+than the F1 scores for
+γ = 0.9
+as shown in table I.
+In figure 2,
+we can observe the tradeoff involved between
+exploration and exploitation.
+p
+Q
+= 0
+means that
+we do not
+make use of
+the learnt
+Q-values and have instead resorted
+to randomly explore the network,
+thereby,
+leading to poor
+performance.
+p
+Q
+= 1
+means that we always make the greedy
+choice by opting for
+the action which yields maximum Q-
+6
+value.
+This is complete exploitation policy which again leads
+to poor
+performance.
+p
+Q
+= 0.8
+rightly balances the trade-
+off between exploration and exploitation,
+thereby,
+leading to
+higher F1 scores compared with other values of
+p
+Q
+.
+In figure 3,
+we can observe that
+supervised Q-walk takes
+small number of epochs to give high F1 scores. In the case of
+Yeast dataset,
+e = 100
+was sufficient. There exists randomness
+in the curves
+which can be attributed to different
+weight
+initializations in word2vec in different runs of the experiment.
+The F1 scores stop improving after
+e = 100
+.
+It
+signifies that
+the model is trained and starts overfitting for
+e > 100
+.
+In figure 4, we can observe that supervised Q-walk approach
+performs better than node2vec given we use around and above
+50% labelled nodes for learning the confidence values as per
+section III-B.
+For lower values of
+v
+l
+,
+the performance is poor
+because the k-hops
+neighborhood based confidence values
+learner did not get enough labelled nodes for properly learning
+the confidence values. For higher values of
+v
+l
+, we can see that
+the performance improves.
+In a real world setting,
+it may not
+be necessary that we get
+v
+l
+= 0.9
+to train upon, instead, for all
+other experiments we choose
+v
+l
+= 0.8
+since
+80% − 20%
+split
+of training and test data is generally used in machine learning.
+It
+can be observed in figure 5 that
+k
+HN
+= 1
+is sufficient
+for
+learning good confidence
+values,
+in other
+words,
+the
+confidence values can be determined by just
+looking at
+the
+immediate neighbors of any node
+u ∈ V
+.
+It
+can be observed in figure 6 that
+d ∈ [2
+5
+, 2
+8
+]
+give high
+F1 scores. Supervised Q-walk approach gives better F1 scores
+than node2vec for different settings of dimensions.
+It
+can be
+observed in figure
+7 that
+supervised Q-walk
+approach gives high F1 scores for
+r = 18
+while node2vec
+gives high F1 scores for
+r = 24
+and low for
+r = 18
+.
+So,
+our approach takes lesser number of walks per node to give a
+better performance than node2vec.
+It
+can be observed in figure 8 and figure 9 that
+supervised
+Q-walk approach gives better F1 scores than node2vec. Values
+of
+w
+l
+around
+75
+and values of
+w
+s
+around
+20
+are good enough
+for our approach on the Yeast dataset.
+It
+can be observed in figure 10 that
+supervised Q-walk
+approach performs better
+than node2vec hyperparameterised
+by different combinations of
+p
+and
+q
+which control the degree
+of
+Depth First
+Sampling (DFS)
+and Breadth First
+Sampling
+(BFS).
+The mean F1 scores are calculated for
+specific hyperpa-
+rameter settings which leaves room for improvement
+by fine
+tuning the hyperparameters through cross validation with grid
+search or random search [5] over the hyperparameter space.
+D.
+Technologies Deployed
+All
+the experiments were carried out
+on a server housing
+48 core Intel
+Xeon @
+2.5
+GHz processor,
+252 GB RAM
+with Ubuntu 16.04.
+The experiments were coded in Python
+3.6,
+using 3rd party libraries - NetworkX [11],
+Numpy [26],
+Matplotlib [12],
+Scikit-learn [21] and Gensim [23].
+V.
+C
+ONCLUSION
+We have presented a novel supervised Q-walk approach to
+generate random walks guided by Q-values and assisted by k-
+hops neighborhood based confidence values learner.
+We have
+shown experimentally that
+the node embeddings learnt
+from
+our approach are similar for the nodes with the same labels.
+We have also shown that our approach outperforms node2vec
+in the node classification task.
+VI.
+F
+UTURE
+W
+ORK
+Supervised Q-walk works
+better
+in the cases
+where the
+assumption of
+homophily in networks
+holds
+true.
+In other
+networks,
+nodes which are structurally equivalent
+may have
+the same labels
+e.g.
+networks
+of
+bio-chemical
+compounds.
+Our
+work can be extended by composing another
+reward
+function
+R(u, a, u
+0
+) = R
+1
+(u, a, u
+0
+) + βR
+2
+(u, a, u
+0
+)
+where
+R
+1
+encourages homophily in networks,
+R
+2
+encourages structural
+equivalence of nodes and
+β
+is a hyperparameter which decides
+the tradeoff between homophily and structural equivalence.
+VII.
+A
+CKNOWLEDGEMENTS
+We
+acknowledge
+the
+valuable
+insights
+provided by Dr
+Robert West, Assistant Professor, Data Science Lab, School of
+Computer and Communication Sciences,
+EPFL,
+Switzerland.
+His lab had also provided us with the compute infrastructure
+for carrying out all the experiments.
+R
+EFERENCES
+[1]
+Amr Ahmed,
+Nino Shervashidze,
+Shravan Narayanamurthy,
+Vanja Josi-
+fovski,
+and Alexander J.
+Smola.
+Distributed large-scale natural
+graph
+factorization.
+In Proceedings of
+the 22Nd International
+Conference on
+World Wide Web, WWW ’13, pages 37–48, New York, NY, USA, 2013.
+ACM.
+[2]
+Lars Backstrom, Dan Huttenlocher, Jon Kleinberg, and Xiangyang Lan.
+Group formation in large social
+networks:
+Membership,
+growth,
+and
+evolution.
+In Proceedings
+of
+the 12th ACM SIGKDD International
+Conference on Knowledge Discovery and Data Mining, KDD ’06, pages
+44–54,
+New York,
+NY,
+USA,
+2006.
+ACM.
+[3]
+Mikhail
+Belkin and Partha Niyogi.
+Laplacian eigenmaps and spectral
+techniques
+for
+embedding and clustering.
+In Advances
+in Neural
+Information Processing Systems 14,
+pages 585–591.
+MIT Press,
+2001.
+[4]
+Richard Bellman.
+A Markovian Decision Process.
+Indiana Univ.
+Math.
+J.,
+6:679–684,
+1957.
+[5]
+James Bergstra and Yoshua Bengio. Random search for hyper-parameter
+optimization.
+J.
+Mach.
+Learn.
+Res.,
+13:281–305,
+February 2012.
+[6]
+Smriti
+Bhagat,
+Graham Cormode,
+and S.
+Muthukrishnan.
+Node classi-
+fication in social networks.
+CoRR,
+abs/1101.3291,
+2011.
+[7]
+D.
+Bu,
+Y.
+Zhao,
+L.
+Cai,
+H.
+Xue,
+X.
+Zhu,
+H.
+Lu,
+J.
+Zhang,
+S.
+Sun,
+L.
+Ling,
+N.
+Zhang,
+G.
+Li,
+and R.
+Chen.
+Topological
+structure analysis
+of
+the protein-protein interaction network in budding yeast.
+Nucleic
+Acids Research,
+31:2443–2450,
+2003.
+[8]
+Shaosheng Cao,
+Wei
+Lu,
+and Qiongkai
+Xu.
+Grarep:
+Learning graph
+representations with global structural information.
+In Proceedings of the
+24th ACM International on Conference on Information and Knowledge
+Management,
+CIKM ’15,
+pages 891–900,
+New York,
+NY,
+USA,
+2015.
+ACM.
+[9]
+Aditya Grover and Jure Leskovec.
+Node2vec: Scalable feature learning
+for networks.
+In Proceedings of the 22nd ACM SIGKDD International
+Conference on Knowledge Discovery and Data Mining, KDD ’16, pages
+855–864,
+New York,
+NY,
+USA,
+2016.
+ACM.
+[10]
+Gongde Guo,
+Hui
+Wang,
+David Bell,
+Yaxin Bi,
+and Kieran Greer.
+KNN Model-Based Approach in Classification, pages 986–996.
+Springer
+Berlin Heidelberg,
+Berlin,
+Heidelberg,
+2003.
+[11]
+Aric A.
+Hagberg,
+Daniel
+A.
+Schult,
+and Pieter
+J.
+Swart.
+Exploring
+network structure,
+dynamics,
+and function using NetworkX.
+In Pro-
+ceedings of
+the 7th Python in Science Conference (SciPy2008),
+pages
+11–15,
+Pasadena,
+CA USA,
+August 2008.
+[12]
+J.
+D.
+Hunter.
+Matplotlib:
+A 2d graphics environment.
+Computing In
+Science & Engineering,
+9(3):90–95,
+2007.
+7
+[13]
+Jure Leskovec, Daniel Huttenlocher, and Jon Kleinberg. Signed networks
+in social
+media.
+In Proceedings of
+the SIGCHI Conference on Human
+Factors in Computing Systems,
+CHI ’10,
+pages 1361–1370,
+New York,
+NY,
+USA,
+2010.
+ACM.
+[14]
+Jure Leskovec, Jon Kleinberg, and Christos Faloutsos.
+Graph evolution:
+Densification and shrinking diameters.
+ACM Trans.
+Knowl.
+Discov.
+Data,
+1(1),
+March 2007.
+[15]
+Jure Leskovec,
+Kevin J.
+Lang,
+Anirban Dasgupta,
+and Michael
+W.
+Mahoney.
+Community structure in large networks: Natural cluster sizes
+and the absence of large well-defined clusters.
+CoRR,
+abs/0810.1355,
+2008.
+[16]
+Jure Leskovec and Julian J. Mcauley.
+Learning to discover social circles
+in ego networks.
+In F.
+Pereira,
+C.
+J.
+C.
+Burges,
+L.
+Bottou,
+and K.
+Q.
+Weinberger, editors, Advances in Neural Information Processing Systems
+25,
+pages 539–547.
+Curran Associates,
+Inc.,
+2012.
+[17]
+Miller
+McPherson,
+Lynn Smith-Lovin,
+and James M Cook.
+Birds of
+a feather:
+Homophily in social
+networks.
+Annual
+Review of
+Sociology,
+27(1):415–444,
+2001.
+[18]
+Tomas Mikolov, Kai Chen, Greg Corrado, and Jeffrey Dean. Efficient es-
+timation of word representations in vector space.
+CoRR, abs/1301.3781,
+2013.
+[19]
+Tomas Mikolov,
+Ilya Sutskever,
+Kai
+Chen,
+Greg S Corrado,
+and Jeff
+Dean.
+Distributed representations
+of
+words
+and phrases
+and their
+compositionality.
+In C. J. C. Burges, L. Bottou, M. Welling, Z. Ghahra-
+mani,
+and K.
+Q.
+Weinberger,
+editors,
+Advances in Neural
+Information
+Processing Systems 26, pages 3111–3119. Curran Associates, Inc., 2013.
+[20]
+Mingdong Ou,
+Peng Cui,
+Jian Pei,
+Ziwei
+Zhang,
+and Wenwu Zhu.
+Asymmetric transitivity preserving graph embedding.
+In Proceedings
+of
+the 22Nd ACM SIGKDD International
+Conference on Knowledge
+Discovery and Data Mining,
+KDD ’16,
+pages 1105–1114,
+New York,
+NY,
+USA,
+2016.
+ACM.
+[21]
+F.
+Pedregosa,
+G.
+Varoquaux,
+A.
+Gramfort,
+V.
+Michel,
+B.
+Thirion,
+O. Grisel, M. Blondel, P. Prettenhofer, R. Weiss, V. Dubourg, J. Vander-
+plas,
+A.
+Passos,
+D.
+Cournapeau,
+M.
+Brucher,
+M.
+Perrot,
+and E.
+Duch-
+esnay.
+Scikit-learn:
+Machine learning in Python.
+Journal
+of
+Machine
+Learning Research,
+12:2825–2830,
+2011.
+[22]
+Bryan Perozzi,
+Rami
+Al-Rfou,
+and Steven Skiena.
+Deepwalk:
+Online
+learning of
+social
+representations.
+In Proceedings of
+the 20th ACM
+SIGKDD International
+Conference on Knowledge Discovery and Data
+Mining,
+KDD ’14,
+pages 701–710,
+New York,
+NY,
+USA,
+2014.
+ACM.
+[23]
+Radim
+ˇ
+Reh˚
+u
+ˇ
+rek and Petr Sojka.
+Software Framework for Topic Mod-
+elling with Large Corpora.
+In Proceedings of the LREC 2010 Workshop
+on New Challenges for NLP Frameworks, pages 45–50, Valletta, Malta,
+May 2010.
+ELRA.
+http://is.muni.cz/publication/884893/en.
+[24]
+Sam T.
+Roweis
+and Lawrence
+K.
+Saul.
+Nonlinear
+dimensionality
+reduction by locally linear embedding. SCIENCE, 290:2323–2326, 2000.
+[25]
+Lei Tang and Huan Liu. Relational learning via latent social dimensions.
+In Proceedings of the 15th ACM SIGKDD International Conference on
+Knowledge Discovery and Data Mining, KDD ’09, pages 817–826, New
+York,
+NY,
+USA,
+2009.
+ACM.
+[26]
+Stefan van der Walt, S. Chris Colbert, and Gael Varoquaux.
+The numpy
+array:
+A structure for
+efficient
+numerical
+computation.
+Computing in
+Science and Engg.,
+13(2):22–30,
+March 2011.
+[27]
+Christopher J.C.H. Watkins and Peter Dayan. Technical note: Q-learning.
+Machine Learning,
+8(3):279–292,
+1992.

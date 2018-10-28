@@ -1,0 +1,1191 @@
+﻿Explicit Neural Word Representation
+Case Study on Gender Bias in Wikipedia
+Navid Rekabsaz, Mihai Lupu, Allan Hanbury
+*
+Information & Software Engineering Group
+TU WIEN
+rekabsaz/lupu/hanbury@ifs.tuwien.ac.at
+Bhaskar Mitra
+†
+Microsoft, UCL
+Cambridge, UK
+bmitra@microsoft.com
+ABSTRACT
+Recent advances in word embedding provide significant benefit to
+various information processing tasks. Yet these dense representations
+and their estimation of word-to-word relatedness remain difficult
+to interpret and hard to analyze.
+As an alternative, explicit word
+representations propose vectors whose dimensions are easily inter-
+pretable, and recent methods show competitive performance to the
+dense vectors. We introduce a neural-based explicit representation,
+rooted in the conceptual ideas of the word2vec Skip-Gram model.
+The method provides interpretable explicit vectors while keeping
+the effectiveness of the Skip-Gram model. The evaluation of various
+explicit representations on word association collections shows that
+the newly proposed method outperforms the state-of-the-art explicit
+representations when tasked with ranking highly similar terms. As
+a case study on the use of our explicit representation, we show the
+degree of the existence of gender bias in the English language (used
+in Wikipedia) in regards to various occupations. By measuring the
+bias towards explicit Female and Male factors, the study quantifies a
+general tendency of the majority of the occupations to male and a
+strong bias in a few specific occupations (e.g. nurse) to female.
+ACM Reference format:
+Navid Rekabsaz,
+Mihai Lupu,
+Allan Hanbury and Bhaskar Mitra.
+2017.
+Explicit Neural Word Representation. In Proceedings of ACM International
+Conference on Information and Knowledge Management, Singapore, 2017
+(CIKM’17), 5 pages.
+DOI:
+1
+INTRODUCTION
+Word embedding i.e.
+representation of words in low-dimensional
+space has shown to benefit IR and NLP tasks like document re-
+trieval [
+15
+,
+19
+,
+20
+], query expansion [
+5
+], or sentiment analysis [
+18
+].
+The recent methods and studies in IR are reviewed in [
+14
+].
+The
+various word embedding methods share the fundamental idea that
+the vectors of the words with common contexts become more similar
+(given some geometric distance) to each other. In practice however,
+various approaches to implement this idea have shown considerably
+different performance in downstream tasks [21].
+*
+Funded by: Self-Optimizer (FFG 852624) in the EUROSTARS programme, funded
+by EUREKA, BMWFW and European Union, and ADMIRE (P 25905-N23) by FWF.
+Thanks to Joni Sayeler and Linus Wretblad for their contributions in SelfOptimizer.
+†
+The author is a part-time PhD student at University College London.
+Permission to make digital or hard copies of part or all of this work for personal or
+classroom use is granted without fee provided that copies are not made or distributed
+for profit or commercial advantage and that copies bear this notice and the full citation
+on the first page. Copyrights for third-party components of this work must be honored.
+For all other uses, contact the owner/author(s).
+CIKM’17, Singapore
+© 2017 Copyright held by the owner/author(s).
+.
+DOI:
+While easy to construct based on raw unannotated corpora, the
+word embeddings are hardly interpretable, especially in comparison
+to lexical semantics. It remains opaque what the dimensions of the
+vectors refer to,
+or which factors in language (corpus) cause the
+relatedness of two words. Having interpretable vectors would enable
+error resolution and better causal analysis.
+A natural solution to this problem is using explicit representa-
+tions of words i.e. vectors with clearly-defined dimensions, which
+can be words,
+windows of words,
+or documents.
+These vectors
+appeared decades ago as the initial form of word/document repre-
+sentations. In IR, the word-document matrix, populated with an IR
+weighting schema (e.g. TFIDF, BM25) has been extensively used,
+at least as a conceptual model.
+This matrix when being subjected
+to SVD matrix factorization produces the LSI model [
+4
+] with dense
+word/document representation. The well-known Pointwise Mutual
+Information (PMI) method is an alternative representation method,
+rooted in information theory, which provides a word-context matrix
+based on the co-occurrences between words in contexts.
+Despite high interpretability, the explicit representations might be
+too large to be stored in memory and have been often shown to be
+less effective in comparison to the low-dimensional dense vectors.
+In practice, the memory issue can be mitigated by suitable data struc-
+tures if the vectors are highly sparse.
+Regarding the effectiveness,
+Levy et al. [
+11
+] show competitive performance of a proposed explicit
+representation (Section 2) in comparison to the state-of-the-art word
+embeddings on a set of word association test collections.
+As an alternative approach to improve interpretability, some re-
+cent work [
+7
+,
+22
+] propose methods to increase the sparsity of the
+dense vectors. The rationale of these approaches is that by having
+more sparse vectors, it becomes more clear which dimension of the
+vectors might be referring to which concepts in language.
+In contrast to this approach, our first contribution is in line with
+previous studies [
+10
+,
+11
+] on providing fully interpretable vectors by
+proposing a novel explicit representation, based on the advancements
+in the neural word embedding methods.
+Our approach originates
+from the word2vec Skip-Gram model i.e. the proposed representa-
+tion benefits from interpretability and also the substantial subtleties
+of the Skip-Gram model (Section 3).
+We evaluate our method on the task of retrieving highly similar
+words to a given word, as an essential scenario in many IR tasks.
+We show that our proposed explicit representation, as similar to the
+Skip-Gram model, outperforms the state-of-the-art explicit vectors
+in selecting highly similar words (Section 4).
+As our next contribution, we show an application of explicit rep-
+resentations on demonstrating gender bias in the English language.
+We study bias of some gender-neutral occupations to male or female,
+CIKM’17, 2017, Singapore
+Navid Rekabsaz, Mihai Lupu, Allan Hanbury and Bhaskar Mitra
+based on the Wikipedia English corpus (Section 5).
+Our study is
+close to the work of Bolukbasi et al. [
+2
+]. In their work, they measure
+the gender bias of words by defining a gender direction vector, ob-
+tained by subtracting the vector of the word he from she in a dense
+word embedding model.
+In contrast to their approach, we use ex-
+plicit representations to quantify gender bias for two reasons: (1) the
+ability to analyze the cause of bias (2) the he and she vectors, used
+to measure gender bias in [
+2
+], are also biased towards the specific
+occupations (as occupations are biased to he or she); and therefore it
+does not provide a transparent approach to measure gender bias.
+Our analysis shows the high bias of some specific jobs to female-
+specific concepts which can potentially be propagated to information
+systems when using word representations.
+2
+BACKGROUND
+In this section, we review the word2vec Skip-Gram (
+SG
+) model as
+well as the state-of-the-art explicit representations.
+2.1
+Embedding with Negative Sampling
+The
+SG
+model starts with randomly initializing two sets of vectors:
+word (
+V
+) and context (
+e
+V
+) vectors, both of size
+|
+W
+|
+×d
+, where
+W
+is the
+set of words in the collection and
+d
+is the embedding dimensionality.
+The objective of
+SG
+is to find a set of
+V
+and
+e
+V
+—as the param-
+eters of an optimization algorithm—by increasing the conditional
+probability of observing a word
+c
+given another word
+w
+when they
+co-occur in a window, and decreasing it when they do not. In theory,
+this probability is defined as follows:
+p(c |w) =
+exp(V
+w
+e
+V
+c
+)
+Í
+c
+0
+∈W
+exp(V
+w
+e
+V
+c
+0
+)
+(1)
+where
+V
+w
+and
+e
+V
+c
+are the word vector of the word
+w
+and the context
+vector of the word
+c
+, respectively.
+Obviously, calculating the denominator of Eq. 1 is highly expen-
+sive and a bottleneck for scalability.
+One proposed approach for
+this problem is Noisy Contrastive Estimation (NCE) [
+16
+] method.
+The NCE method,
+instead of computing the probability in Eq. 1,
+measures the probability which contrasts the genuine distribution
+of the words-context pairs (given from the corpus) from a noisy
+distribution.
+The noisy distribution
+N
+is defined based on the uni-
+gram distribution of the words in the corpus.
+Formally, it defines
+a binary variable
+y
+,
+showing whether a given pair belongs to the
+genuine distribution:
+p(y = 1|w, c)
+. Further on, Mikolov et al. [
+13
+]
+proposed the Negative Sampling method by some simplifications in
+calculating
+p(y = 1|w, c)
+(further details are explained in the original
+papers), resulting in the following formula:
+p(y = 1|w, c) =
+exp(V
+w
+e
+V
+c
+)
+exp(V
+w
+e
+V
+c
+) + 1
+= σ (V
+w
+e
+V
+c
+)
+(2)
+where
+σ
+is the sigmoid function (
+σ (x) = 1/(1 + exp(−x))
+).
+Based
+on this probability, the cost function of the
+SG
+method is defined as
+follows:
+J = −
+Õ
+(w,c)∈X
+
+log p(y = 1|w, c) + k
+E
+ˇ
+c
+i
+∼N
+log p(y = 0|w,
+ˇ
+c
+i
+)
+
+(3)
+where
+X
+is the collection of co-occurrence pairs in the corpus,
+ˇ
+c
+i
+is each of the
+k
+sampled words from the noisy distribution
+N
+, and
+E
+denotes expectation value,
+calculated as the average for the
+k
+sampled words in every iteration.
+In addition, two preprocessing steps dampen the dominating ef-
+fect of very frequent words: First is subsampling which randomly
+removes an occurrence of word
+w
+in the corpus when the word’s cor-
+pus frequency
+#(w)
+is more than some threshold
+t
+with a probability
+value of
+1 −
+p
+t /#(w)
+. The second is context distribution smoothing
+(
+cds
+) which dampens the values of the probability distribution
+N
+by raising them to power
+α
+where
+α < 1
+.
+2.2
+Explicit Representation
+A well-known explicit representations is defined based on PMI. In
+this representation, for the word
+w
+, the value of the corresponding
+dimension to the context word
+c
+is defined as follows:
+PMI (w, c) = log
+p(w, c)
+p(w)p(c)
+(4)
+where
+p(w, c)
+is the probability of
+(w, c)
+in the co-occurrence collec-
+tion:
+#(w, c)/|X |
+and
+p(w)
+is the probability of the appearance of
+w
+with any other word:
+#(w, .)/|X |
+(same for
+p(c)
+).
+A widely-used alternative is Positive PMI (PPMI) which replaces
+the negative values with zero:
+PPMI (w, c) = max(PMI (w, c), 0)
+.
+Levy and Goldberg [
+10
+] show an interesting relation between
+PMI
+and
+SG
+representations, i.e. when the dimension of the vectors
+is very high (as in explicit representations), the optimal solution of
+SG
+objective function (Eq. 3) is equal to
+PMI
+shifted by
+log k
+. They
+call this representation Shifted Positive PMI (SPPMI):
+SPPMI (w, c) = max(PMI (w, c) − log(k), 0)
+(5)
+They further integrate the ideas of subsampling and
+cds
+into
+SPPMI
+.
+Subsampling is applied when creating the
+X
+set by randomly remov-
+ing very frequent words. The
+cds
+method adds a smoothing on the
+probability of the context word, as follows:
+PMI
+α
+(w, c) = log
+p(w, c)
+p(w)p
+α
+(c)
+p
+α
+(c) =
+#(w, .)
+α
+Í
+w
+0
+∈W
+#(w
+0
+, .)
+α
+(6)
+They finally show the competitive performance of the
+SPPMI
+model on word association tasks to the
+SG
+model.
+Their defini-
+tions of
+PPMI
+and
+SPPMI
+are the current state-of-the-art in explicit
+representations, against which we will compare our method.
+3
+EXPLICIT SKIP-GRAM
+Let us revisit the
+p(y = 1|w, c)
+probability in the Negative Sampling
+method (Eq. 2) i.e.
+the probability that the co-occurrence of two
+terms comes from the training corpus and not from the random dis-
+tribution. The purpose of this probability in fact shares a meaningful
+relation with the conceptual goal of the
+PMI
+-based representations
+i.e.
+to distinguish a genuine from a random co-occurrence.
+Based
+on this idea, an immediate way of defining an explicit representation
+would be to use Eq. 2 as follows:
+ExpSG(w, c) = p(y = 1|w, c) = σ (V
+w
+˜
+V
+c
+)
+(7)
+This Explicit Skip-Gram (ExpSG) representation assigns a value
+between 0 to 1 to the relation between each pair of words.
+It is
+however intuitive to consider that the very low values do not rep-
+resent a meaningful relation and can potentially introduce noise in
+computation. Such very low values can be seen in the relation of a
+word to very frequent or completely unrelated words. We can extend
+this idea to all the values of
+ExpSG
+,
+i.e.
+some portion (or all) of
+every relation contains noise.
+Explicit Neural Word Representation
+CIKM’17, 2017, Singapore
+To measure the noise in
+ExpSG(w, c)
+,
+we use the definition of
+noise probabilities in the Negative Sampling approach: the expec-
+tation value of
+p(y = 1|w, c)
+where
+c
+(or
+w
+) is randomly sampled
+from the dictionary for several times. Based on this idea, we define
+the Reduced Explicit Skip-Gram (RExpSG) model by subtracting the
+two expectation values from
+ExpSG
+:
+RExpSG(w, c) = ExpSG(w, c)− E
+ˇ
+c∼N
+p(y = 1|w,
+ˇ
+c)− E
+ˇ
+w∼N
+p(y = 1|
+ˇ
+w, c)
+(8)
+Since the expectation values can be calculated off-line, in contrast
+to Negative Sampling, we compute it over all the vocabulary:
+E
+ˇ
+w∼N
+p(y = 1|
+ˇ
+w, c) =
+Í
+|W |
+i=1
+#(
+ˇ
+w
+i
+) · σ (V
+ˇ
+w
+i
+e
+V
+c
+)
+Í
+|W |
+i=1
+#(
+ˇ
+w
+i
+)
+(9)
+For the sampling of the context word
+ˇ
+c
+, similar to
+SG
+and
+PMI
+α
+, we
+apply
+cds
+by raising frequency to the power of
+α
+, as follows:
+E
+ˇ
+c∼N
+p(y = 1|w,
+ˇ
+c) =
+Í
+|W |
+i=1
+#(
+ˇ
+c
+i
+)
+α
+· σ (V
+w
+e
+V
+ˇ
+c
+i
+)
+Í
+|W |
+i=1
+#(
+ˇ
+c
+i
+)
+α
+(10)
+Similar to
+PPMI
+, our last proposed representation removes the
+negative values.
+The Positive Reduced Explicit SkipGram (PREx-
+pSG) is defined as follows:
+PRExpSG(w, c) = max(RExpSG(w, c), 0)
+(11)
+Setting the values to zero in
+PRExpSG
+facilitates the use of effi-
+cient data structures i.e.
+sparse vectors.
+We analyze the efficiency
+and effectiveness of the explicit representations in the next section.
+4
+EVALUATION AND ANALYSIS
+To analyze the representations, we create a Skip-Gram model with
+300 dimensions on the Wikipedia dump file for August 2015 using
+the gensim toolkit [
+17
+]. As suggested by Levy et al. [
+11
+], we use a
+window of 5 words, negative sampling of
+k = 10
+, down sampling
+of
+t
+= 10
+−5
+, a
+cds
+value of
+α = 0.75
+, trained on 20 epochs, and
+filtering out words with frequency less than 100.
+The final model
+contains 199851 words. The same values are used for the common
+parameters in the
+PPMI
+and
+SPPMI
+representations.
+We conduct our experiments on 6 word association benchmark
+collections. Each collection contains a set of word pairs where the
+association between each pair is assessed by human annotators (an-
+notation score). The evaluation is done by calculating the Spearman
+correlation between the list of pairs scored by similarity values ver-
+sus by human annotations. The collections used are: WordSim353
+partitioned into Similarity and Relatedness [
+1
+]; MEN dataset [
+3
+];
+Rare Words dataset [12]; SCWS [9]; and SimLex dataset [8].
+The evaluation results for the explicit representations as well as
+SG
+are reported in Table 1. The bold values show the best perform-
+ing explicit representation and the values with underline refer to
+the best results among all representations.
+Based on the results,
+PRExpSG
+and
+SPPMI
+show very similar performance (in 3 bench-
+marks
+PRExpSG
+and in the other 3
+SSPMI
+shows the best perfor-
+mance), both considerably outperforming the other explicit repre-
+sentations.
+As also shown in previous studies [
+11
+],
+SG
+in general
+performs better than the best performing explicit representations.
+However, when considering downstream tasks, despite the per-
+vasive use of word association benchmarks, they do not provide a
+comprehensive assessment on many subtleties of representations
+Table 1: Word association evaluation.
+Best performing among
+explicit/all embeddings are shown with bold/underline.
+Method
+Sparsity
+WS Sim.
+WS Rel.
+MEN
+Rare
+SCWS
+SimLex
+PPMI
+98.6%
+.681
+.603
+.702
+.309
+.601
+.284
+SPPMI
+99.6%
+.722
+.661
+.704
+.394
+.571
+.296
+ExpSG
+0%
+.596
+.404
+.645
+.378
+.549
+.231
+RExpSG
+0%
+.527
+.388
+.606
+.311
+.507
+.215
+PRExpSG
+94.1%
+.697
+.626
+.711
+.406
+.614
+.272
+SG
+0%
+.770
+.620
+.750
+.488
+.648
+.367
+which might be crucial (see Faruqui et al.
+[
+6
+]).
+For example,
+in
+tasks such as query expansion [
+5
+] or the integration of embeddings
+in IR models [
+19
+,
+20
+],
+what is expected from an effective word
+representation is a set of highly similar words for each query word.
+To have a more relevant evaluation for these sort of tasks,
+we
+need to consider (1) the word similarity benchmarks (in contrast to
+relatedness) and (2) the effectiveness of the representation on highly
+similar words. Among the benchmarks, SimLex is a recent collec-
+tion, specifically designed to evaluate the concept of word similarity.
+In particular, SimLex’s creators criticize the WordSim353 Similarity
+collection as it does not distinguish between word similarity and
+relatedness [
+8
+].
+We therefore focus on the SimLex collection for
+further evaluations.
+To assess the effectiveness of representations
+on highly similar pairs, we extract subsets of the SimLex collection
+that have higher annotation score than a threshold, and calculate the
+Spearman correlation of the results, separately for each subset. We
+conduct evaluation on 10 subsets with the thresholds from 9 (highly
+similar) to 0 (all pairs).
+Figure 1a shows the evaluation results on the subsets for the
+SG
+,
+PRExpSG
+, and
+SPPMI
+representations. When the threshold is higher
+than 7, none of the models has significant correlation values (
+p <
+0.05
+) and are therefore not depicted. The non-significant results for
+PRExpSG
+and
+SPPMI
+are indicated with dashed lines. The
+SG
+model
+constantly shows high correlation values over all the thresholds.
+Interestingly, while the
+PRExpSG
+has slightly worse performance
+than
+SPPMI
+at lower thresholds, it reaches better correlation results
+at high thresholds. We argue that the better performance for highly
+similar pairs is due to the conceptual similarity of
+PRExpSG
+to the
+SG
+model i.e.
+PRExpSG
+benefits from the subtleties of the
+SG
+model.
+Finally, let us have a look at the sparsity of the explicit representa-
+tions, reported in Table 1. The
+PRExpSG
+and
+SPPMI
+representations
+are highly sparse, making them amenable to storage in volatile mem-
+ory in practical scenarios. It is also worth noticing that in contrast
+to
+SPPMI
+, in the
+PRExpSG
+vectors, there might be non-zero values
+also for pairs of terms that do not necessarily ever co-occur in text.
+This characteristic—inherited from the
+SG
+model—is arguable the
+reason for better performance in high-similarity values, by mitigating
+the sparseness problem of a corpus.
+5
+CASE STUDY: GENDER BIAS
+We have argued in the introduction that the main motivation for
+using explicit representations is in their ability to let us explain ob-
+servations made using word vectors.
+In this section, we study the
+application of explicit representations to demonstrating the gender
+bias of a set of occupations using the
+PRExpSG
+representation. To
+study the gender bias in occupations, we prepare a list of 350 occu-
+pations, from which 16 are female-specific (e.g. congresswoman),
+and 20 male-specific (e.g.
+congressman), and the rest are gender
+neutral (e.g. nurse, dancer, bookkeeper).
+CIKM’17, 2017, Singapore
+Navid Rekabsaz, Mihai Lupu, Allan Hanbury and Bhaskar Mitra
+0
+1
+2
+3
+4
+5
+6
+7
+Threshold of similarity scores
+0.00
+0.05
+0.10
+0.15
+0.20
+0.25
+0.30
+0.35
+0.40
+Spearman 
+ρ
+SG
+PRExpSG
+SPPMI
+(a) SimLex
+1
+2
+3
+Female factor 
+(
+λ
+f
+)
+0
+0.5
+1
+1.5
+2
+Male factor 
+(
+λ
+m
+)
+Bootmaker
+Sportsman
+Stonemason
+Brewer
+Roofer
+Repairer
+Plumber
+Tailor
+Stockbroker
+Carpenter
+Accountant
+Postman
+Fisherman
+Pharmacist
+Bookkeeper
+Photographer
+Dentist
+Teacher
+Nutritionist
+Flight_Attendant
+Obstetrician
+Psychotherapist
+Hairdresser
+Dancer
+Congresswoman
+Embroiderer
+Postmistress
+Dietician
+Barmaid
+Policewoman
+Mistress
+Dressmaker
+Waitress
+Stewardess
+Manicurist
+Nurse
+Housekeeper
+Midwife
+(b) Gender Bias (axes are multiplied by 100)
+Figure 1: (a) Correlation of subsets of SimLex for various similarity thresholds.
+(b) The inclination of occupations to gender factors.
+Gender-specific occupations are shown in green (light) and gender-neutral ones in red (dark). Gray area indicates gender-neutrality.
+To quantify gender bias, we first select a set of gender-specific
+words.
+These words are shortlisted from the gender-specific list,
+provided by Bolukbasi et al. [
+2
+] after filtering the occupations. The
+final list contains 32 female-specific words (e.g.
+she, her, woman)
+and 32 equivalent male-specific words (e.g. he, his, man)
+1
+.
+Using this gender-specific list, we define
+V
+f
+and
+V
+m
+as the vectors
+of female and male i.e. all the values are zero except the dimensions
+of female- or male-specific words. We then calculate the female/male
+factor
+λ
+f
+/
+λ
+m
+of each occupation
+w
+(the quantified tendency of
+w
+to each gender), by calculating the cosine function between their
+vectors:
+λ
+f
+(w) = cosine(V
+w
+, V
+f
+)
+and
+λ
+m
+(w) = cosine(V
+w
+, V
+m
+)
+.
+Since female and male factors have a non-zero value for every
+word, it is important to distinguish between low range values (which
+can occur for every random word) from truly gender-biased words.
+We therefore define gender-neutrality for a word when the difference
+between its gender factors is less than a threshold:
+|λ
+f
+− λ
+m
+|
+< ζ
+.
+To find this threshold, since the number of gender-specific words in
+English are limited, we assume that a randomly sampled word from
+the vocabulary is a gender-neutral word. This approach is similar to
+the one used in the Negative Sampling method. We can repeat this
+sampling for all the words and calculate the expected value of
+ζ
+by
+averaging
+|λ
+f
+(w) − λ
+m
+(w )|
+over the words.
+In our experiments, it
+results to
+ζ = 0.003
+.
+Figure 1b shows the results. The gender-specific occupations are
+colored in green,
+the gender-neutral ones in red,
+and the gender-
+neutrality area in gray. As shown, the gender-specific occupations
+correctly have inclination to the right-down (female) or top-left
+(male) depending on their genders. The figure reveals an interesting
+pattern in gender bias for the gender-neutral occupations. The major-
+ity of these occupations are inclined towards the male factor while
+in general having weak bias. Stockbroker, plumber, and stonemason
+are some of the male-biased occupations. On the other hand, there
+exist relatively few number of occupations with inclination to the
+female factor while some of them have very strong gender bias. For
+examples, gender-neutral occupations like housekeeper, nurse, and
+dressmaker are strongly conceived as ‘female jobs’!
+Finally, because of the interpretability characteristic of the explicit
+vectors, we can diagnose the bias by looking at the words which
+cause the bias in an occupation.
+For instance, for the occupation
+1
+The list of the occupations and gender-specific words are available in anonymous
+nurse, words like mother, grandmother, and sister have the highest
+effect in bias to female,
+while for dancer,
+words such as female,
+madam, and herself
+are the main causes of the bias.
+These obser-
+vations provide a quantification of gender bias in machine learned
+representations and enable future automated gender debiasing.
+6
+CONCLUSION
+In this paper, we propose a novel explicit representation of words
+by capturing the probability of genuine co-occurrence of the words,
+achieved from the word2vec Skip-Gram model. The proposed repre-
+sentation inherits the characteristics of the Skip-Gram model while
+making it possible to interpret the vector representations. The evalu-
+ation on term association benchmarks shows similar results to the
+state-of-the-art explicit representations, but our method outperforms
+the state-of-the-art in the scenario of retrieving top-similar words to
+a given word.
+Further on, we study the application of our explicit
+representation to quantifying gender bias for a set of occupations in
+the Wikipedia text. We observe a general tendency of the majority
+of jobs to the Male factor while strong bias in a few specific occu-
+pations to the Female factor. This study enables further research on
+algorithmic gender debiasing, especially by using explicit vectors.
+REFERENCES
+[1]
+E. Agirre, E. Alfonseca, K. Hall, J. Kravalova, M. Pa
+s¸
+ca, and A. Soroa. 2009.
+A study on similarity and relatedness using distributional and wordnet-based
+approaches. In Proc. of HTL-NAACL.
+[2]
+T. Bolukbasi, K. Chang, J. Zou, V. Saligrama, and A. Kalai. 2016.
+Man is to
+computer programmer as woman is to homemaker?. In Proc. of NIPS.
+[3]
+E. Bruni, N. Tran, and M. Baroni. 2014.
+Multimodal Distributional Semantics.
+JAIR (2014).
+[4]
+S.
+Deerwester,
+S.
+Dumais,
+G.
+Furnas,
+T.
+Landauer,
+and R.
+Harshman.
+1990.
+Indexing by latent semantic analysis.
+American society for inf. science (1990).
+[5]
+F. Diaz, B. Mitra, and N. Craswell. 2016.
+Query expansion with locally-trained
+word embeddings. Proc. of ACL (2016).
+[6]
+M. Faruqui, Y. Tsvetkov, P. Rastogi, and C. Dyer. 2016. Problems With Evaluation
+of Word Embeddings Using Word Similarity Tasks. In Proc. of ACL.
+[7]
+M. Faruqui, Y. Tsvetkov, D. Yogatama, C. Dyer, and N. A. Smith. 2015.
+Sparse
+Overcomplete Word Vector Representations. In Proc. of ACL.
+[8]
+F. Hill, R. Reichart, and A. Korhonen. 2016.
+Simlex-999: Evaluating semantic
+models with (genuine) similarity estimation.
+Computational Linguistics (2016).
+[9]
+E. Huang, R. Socher, C. Manning, and A. Y. Ng. 2012.
+Improving Word Repre-
+sentations via Global Context and Multiple Word Prototypes. In Proc. of ACL.
+[10]
+O.
+Levy and Y.
+Goldberg.
+2014.
+Neural word embedding as implicit matrix
+factorization. In Proc. of NIPS.
+[11]
+O. Levy, Y. Goldberg, and I. Dagan. 2015.
+Improving distributional similarity
+with lessons learned from word embeddings.
+TACL (2015).
+[12]
+T. Luong, R. Socher, and C. Manning. 2013.
+Better word representations with
+recursive neural networks for morphology.. In Proc. of CoNLL.
+Explicit Neural Word Representation
+CIKM’17, 2017, Singapore
+[13]
+T. Mikolov, K. Chen, G. Corrado, and J. Dean. 2013.
+Efficient estimation of word
+representations in vector space.
+arXiv preprint arXiv:1301.3781 (2013).
+[14]
+B. Mitra and N. Craswell. 2017.
+Neural Models for Information Retrieval.
+arXiv
+preprint arXiv:1705.01509 (2017).
+[15]
+B. Mitra, E. Nalisnick, N. Craswell, and R. Caruana. 2016.
+A dual embedding
+space model for document ranking.
+arXiv preprint arXiv:1602.01137 (2016).
+[16]
+A.
+Mnih and Y.
+Teh.
+2012.
+A fast
+and simple algorithm for training neural
+probabilistic language models. In Proc. of ICML.
+[17]
+R.
+ˇ
+Reh
+˚
+u
+ˇ
+rek and P. Sojka. 2010.
+Software Framework for Topic Modelling with
+Large Corpora. In Proc. of LREC W. on New Challenges for NLP.
+[18]
+N.
+Rekabsaz,
+M.
+Lupu,
+A.
+Baklanov,
+A.
+Hanbury,
+A.
+D
+¨
+ur,
+and L.
+Anderson.
+2017.
+Volatility Prediction using Financial Disclosures Sentiments with Word
+Embedding-based IR Models. In Proc. of ACL.
+[19]
+N. Rekabsaz, M. Lupu, and A. Hanbury. 2016.
+Generalizing Translation Models
+in the Probabilistic Relevance Framework. In Proc. of CIKM.
+[20]
+N. Rekabsaz, M. Lupu, and A. Hanbury. 2017.
+Exploration of a threshold for
+similarity based on uncertainty in word embedding. In Proc. of ECIR.
+[21]
+T. Schnabel, I. Labutov, D. Mimno, and T. Joachims. 2015.
+Evaluation methods
+for unsupervised word embeddings.. In EMNLP. 298–307.
+[22]
+Fei Sun, Jiafeng Guo, Yanyan Lan, Jun Xu, and Xueqi Cheng. 2016.
+Sparse word
+embeddings using l1 regularized online learning. In Proc. of IJCAI.

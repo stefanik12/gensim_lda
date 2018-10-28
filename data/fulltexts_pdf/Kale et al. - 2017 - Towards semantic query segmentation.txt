@@ -1,0 +1,639 @@
+﻿Towards Semantic Query Segmentation
+Ajinkya Kale, Thrivikrama Taula, Sanjika Hewavitharana, Amit Srivastava
+eBay Inc., 2065 Hamilton Ave, San Jose, CA
+{ajkale,ttaula,shewavitharana,amitsrivastava}@ebay.com
+ABSTRACT
+Query Segmentation is one of the critical components for under-
+standing users’ search intent in Information Retrieval tasks. It in-
+volves grouping tokens in the search query into meaningful phrases
+which help downstream tasks like search relevance and query un-
+derstanding.
+In this paper,
+we propose a novel approach to seg-
+ment user queries using distributed query embeddings. Our key
+contribution is a supervised approach to the segmentation task
+using low-dimensional feature vectors for queries, getting rid of
+traditional hand tuned and heuristic NLP features which are quite
+expensive.
+We benchmark on a 50,000 human-annotated web search engine
+query corpus achieving comparable accuracy to state-of-the-art
+techniques. The advantage of our technique is its fast and does not
+use external knowledge-base like Wikipedia for score boosting. This
+helps us generalize our approach to other domains like eCommerce
+without any fine-tuning. We demonstrate the effectiveness of this
+method on another 50,000 human-annotated eCommerce query
+corpus from eBay search logs. Our approach is easy to implement
+and generalizes well across different search domains proving the
+power of low-dimensional embeddings in query segmentation task,
+opening up a new direction of research for this problem.
+KEYWORDS
+Query Segmentation, Word Embeddings, eCommerce search, Neu-
+ral Information Retrieval
+1
+INTRODUCTION
+Query Segmentation involves the process of splitting the search
+query into meaningful continuous segments to assist search pre-
+cision and retrieval tasks. Search engines fetch high quality and
+most relevant results when they are able to identify the important
+phrases in the search query which need to be kept together for
+quality results.
+One way to achieve this is if the user is explicit
+about the phrases by adding quotes around the segments of the
+search query to indicate phrases. But this is hardly the pattern you
+see in real world search logs.
+Users expect the search engine to
+infer and understand these phrases.
+This ends up degrading the
+precision in most cases where the phrase as a whole is important
+to be kept together during retrieval like movie name,
+song title,
+brands etc. Consider a shopper looking for long sleeve summer dress.
+Permission to make digital or hard copies of part or all of this work for personal or
+classroom use is granted without fee provided that copies are not made or distributed
+for profit or commercial advantage and that copies bear this notice and the full citation
+on the first page. Copyrights for third-party components of this work must be honored.
+For all other uses, contact the owner/author(s).
+SIGIR 2017 Workshop on Neural Information Retrieval (Neu-IR’17), , August 7–11, 2017,
+Shinjuku, Tokyo, Japan
+© 2017 Copyright held by the owner/author(s).
+ACM ISBN 123-4567-24-567/08/06.
+https://doi.org/10.475/123_4
+She is looking for mainly summer dress which have long sleeves.
+The underlying search engine needs to know that the query is for a
+dress and specifically for summer wear which have long sleeve as an
+additional feature of the dress. The search experience is different
+if a user searches with quotes around the segments - "long sleeve"
+"summer" "dress" compared to the unquoted query.
+If the query
+is treated as a bag of words,
+the results might end up being less
+precise.
+In the long sleeve summer dress,
+the results are far from
+accurate if we show the user items which match long summer dress
+with short sleeves. Order plays a vital role in query segmentation
+which is lost in a bag of words model.
+Rest of the paper is organized as follows: Section 2 reviews past
+and recent work on query segmentation followed by the motiva-
+tion for our novel approach for semantic query segmentation in
+Section 3. Section 4 will describe our modeling architecture. Sec-
+tion 5 will cover our experiments and results on AOL web query
+corpus and on annotated eBay eCommerce query corpus. We pro-
+vide an in-depth analysis and comparison of our techniques with
+other query segmentation approaches. We close out in Section 6
+by discussing the issues we faced with annotation and some future
+research directions.
+2
+RELATED WORK
+Over the years, there has been a lot of interest in query segmenta-
+tion in the search engine space. Few of the initial query segmen-
+tation work were based on computing mutual information on the
+query terms. Risvik et al
+.
+[
+16
+] segments the query using connexity
+values that use the mutual information within a segment along
+with the segment’s frequency in the query logs. Huang et al
+.
+[
+7
+]
+use segment based Pairwise Mutual Information (PMI) to build
+a web-scale language model.
+Among other mutual information
+based techniques, Jones et al
+.
+[
+8
+] find query segments for effective
+query substitution. There are several other techniques to find effec-
+tive query segments based on Conditional Random Fields. Kiseleva
+et al
+.
+[
+9
+] user users’ click data along with the query to segment
+the queries in an unsupervised way.
+Guo et al
+.
+[
+4
+] use CRF tech-
+niques to segment the queries more as a query refinement task.
+This task involves spelling correction, stemming etc. as tasks that
+are solved in parallel to the query segment tasks which result in
+effective query refinement. Most of the current query segmentation
+techniques assume the queries to be corrected from a spell checker
+and stemmed if required. Using word embeddings, we will show
+that spelling corrections are handled implicitly while segmenting
+the queries and the semantic model is immune to common spelling
+mistakes.
+Tan and Peng [
+17
+] and Zhang et al
+.
+[
+18
+] suggest unsupervised
+methodologies to find quality query segments. Tan and Peng use
+the raw query frequencies using the Wikipedia corpus to build a
+language model via expectation maximization.
+They then boost
+the segmentation scores derived form this language model for a
+arXiv:1707.07835v1 [cs.IR] 25 Jul 2017
+query segment if its prominently featured in Wikipedia. Bergsma
+and Wang [
+1
+] treated query segmentation as a supervised learning
+tasks handcrafting few features like POS tag features,
+statistical
+features like query and phrase frequencies in web and query logs,
+context dependent features focusing on noun phrases. The authors
+also share 500 queries as a gold data set annotated by 3 human
+judges. Many subsequent works have used this data set. 500 queries
+is a rather small dataset for a web search query segmentation task
+and its hard to prove the generalization power of the model on
+it. Hagen et al
+.
+[
+6
+] introduce a 50K gold data set annotated by 10
+human judges. We use this gold data set for benchmarking query
+segmentation accuracies on web search queries. Hagen et al
+.
+[
+5
+]
+introduce a query segmentation method using the raw n-gram
+frequencies of the segments in the search query logs. They introduce
+a scoring function which computes the weighted sum of frequencies
+contained in the n-grams of a query. In their subsequent work [
+6
+]
+they boost the segmentation scores for the phrases that appear
+as Wikipedia titles on similar lines to Tan and Peng [
+17
+]. Parikh
+et al
+.
+[
+12
+] used the same n-gram based scoring function [
+5
+] on eBay
+eCommerce queries. They also introduce a few evaluation metrics
+to measure the quality of the query segments from an eCommerce
+point of view.
+The scoring function using raw n-gram frequencies mentioned
+in Hagen et al
+.
+[
+6
+] is an unsupervised approach which gives higher
+weight to long segments compared to shorter ones in order to
+compensate the power law distribution of occurrence frequencies.
+Though this is true in most cases, it does not work well for variations
+in word order for the same query. Bergsma and Wang [
+1
+] show that
+supervised techniques work well for query segmentation task but
+it requires handcrafting of features capturing the essence of the
+underlying data set. The only work to the best of our knowledge
+which talks about query segmentation in eCommerce setup is from
+Parikh et al
+.
+[
+12
+]. They use the naive n-gram scoring function [
+5
+]
+on eCommmerce queries.
+3
+MOTIVATION
+Word embeddings techniques such as word2vec [
+11
+], Glove [
+14
+]
+and fasttext [
+2
+] are used to capture low dimensional space repre-
+sentation of words. These representations help to learn semantics
+while they optimize for word context with their window-based
+training style. The output probabilities predict how likely it is to
+find each vocabulary word nearby the input word.
+Our approach uses this context optimization to identify the best
+possible segment boundaries in the query. Words in one segment n-
+gram appear more often in queries in the same context compared to
+words which do not belong to one segment. This helps to optimize
+for higher similarity for words in potentially same segment versus
+others in the vocabulary. Levy et al. demonstrate that word2vec
+implicitly factorizes a word-context PMI matrix [
+10
+]. PMI is known
+to be high for frequently co-occurring terms and low otherwise.
+This is the primary motivation of our approach to utilize word2vec
+style algorithms to learn query embeddings for segmentation.
+4
+CLASSIFIER ARCHITECTURE
+In this section we describe query segmentation as a supervised
+learning task using query embeddings as input features to the
+eBay Query Logs
+Query embeddings
+Classifier
+Training Data
+Human-annotated 
+Query Segments
+Token 1
+Token 2
+Token 3
+Token 4
+User Query
+Segment 1
+Segment 2
+Segment 3
+Segmented Query
+Offline 
+Online 
+Model
+Figure 1: Query Segmentation architecture
+classifier. For a query with
+N
+tokens, we will have
+N-1
+boundaries
+between the tokens. We train a binary classifier to make these
+N-1
+segmentation decisions.
+We demonstrate word embeddings model on two sets of query
+logs: web search queries and eBay eCommerce queries. As shown in
+Figure 1, after extracting queries from the query logs, we train the
+query embeddings. Section 5 will go into details on the embeddings
+learning parameters.
+Consider a query
+Q = W
+1
+W
+2
+W
+3
+W
+4
+... W
+N
+with
+N
+tokens. We
+model the query segmentation task as an independent decision
+making task to draw a segmentation break between the two words.
+For every pair of words
+W
+i
+, W
+i+1
+in a query we concatenate the
+2 vectors (
+D
+dimension each) representing
+W
+i
+and
+W
+i+1
+into a
+2D
+vector. This concatenated vector is the input to the binary classifier
+which decides to segment or not between W
+i
+and W
+i+1
+.
+5
+EXPERIMENTS
+5.1
+Performance Metrics
+We segment the queries and measure the performance of our model
+based on two metrics:
+•
+Segmentation Accuracy: Segmentation accuracy is the per-
+cent of the correct decisions made - whether to apply seg-
+mentation break or not for a combined set of segments in all
+queries. Its global score for the entire query set.
+•
+Query Accuracy: Query accuracy is the percent of the cor-
+rectly segmented queries.
+This is a stricter metric as the
+classifier has to achieve all the segments within a query to
+get credit.
+5.2
+Experiments on web search query data
+Bergsma and Wang [
+1
+] choose 1500 queries from 36M AOL query
+set [
+13
+] and divide the data set into train, test, validation sets (500
+each) to evaluate their segmentation techniques. As mentioned in
+Hagen et al
+.
+[
+5
+] the data set is small to perform extensive compara-
+tive analysis especially for web search queries which have a wide
+domain distribution. For a much broader analysis of the segmenta-
+tion algorithm effectiveness Hagen et al
+.
+[
+6
+] annotated 50K AOL
+queries from the same 36M AOL corpus using 10 annotators. We
+use this dataset to test our approach. Figure 3 shows a distribution
+of annotator agreement for this corpus.
+We do a 60-20-20 train-val-test split on the 50k queries. To train
+the query embeddings, we remove the test set from the 36M AOL
+queries. We use gensim [
+15
+] word2vec wrapper to build the model.
+Since queries are short texts we use a smaller context window
+(2-3). Our experiments show this smaller context window learns
+better embeddings for queries especially for the segmentation task.
+We set the dimension to 300,
+which leads to a 600 dimensional
+vector when we concatenate the 2 vectors. This 600 dimensional
+vector becomes the input feature vector to the classifier. Once the
+embeddings model is built, we build a classifier on the training set
+and tune the parameters using validation set.
+We tried multiple
+classifiers but Logistic Regression and XGBoost [
+3
+] performed the
+best. We found higher lift in the segmentation accuracy when we
+use GBMs. We report these numbers in Table 1.
+For benchmarking we build naive query segmentation model [
+5
+]
+over the same data set. We can see that a simple logistic regression
+on the embeddings vector gives better result than the raw ngram
+frequency boosting technique (Table 1). We need to note that the
+authors propose an improved model with boosting segments using
+Wikipedia Titles [
+6
+], but we dont use it to keep the models agnostic
+of external data augmentation. We plan to explore that as part of
+our future work. Google’s word2vec [
+11
+] released pretrained word
+embedding vectors on Google News. These pretrained embeddings
+were built on data set which has about 100 Billion words. It has has
+around 3 million words and phrases, each having 300 dimensional
+vector.
+We explore the idea of transfer learning to use these pretrained
+embeddings (from news data corpus) for web query segmentation.
+We follow a similar process as we did before when we trained a
+embeddings model from scratch. These pretrained vectors act as
+features for each word in a query, concatenate them and feed it to
+the classifier. XGBoost was used as the classifier and we performed
+a grid search to find the best hyper-parameters for depth of the
+tree and number of estimators. This process was repeated with pre-
+trained GloVe vectors on common crawl [
+14
+] and facebook fasttext
+[
+2
+] pretrained model over Wikipedia corpus with 2.5M word vocab-
+ulary. 2 shows the experiment results. We got the best performance
+with Glove web crawl pretrained embeddings. These numbers are
+reported in Table 2.
+Table 1: Segmentation and Query accuracies on AOL queries
+Method
+Segmentation Accuracy
+Query Accuracy
+Naive n-gram
+0.677
+0.351
+Logistic Regression
+0.731
+0.418
+5.3
+Experiments on eCommerce query data
+We annotated a 50000 query set sampled across top 15k eBay cate-
+gories over a period of 3 months. Each query received 3 annotations
+each with meaningful segments keeping search relevance in mind.
+For precision the annotators were asked to verify the segmented
+query on eBay’s search engine to ensure quality of results improve
+post segmentation. Figure 2 shows the annotator agreement dis-
+tribution. We observed, 2 or more agree on around 77% of queries
+Table 2:
+Best accuracies using pretrained word embeddings using XGBoost
+classifier (on AOL queries)
+Word Vectors
+Segmentation Accuracy
+Query Accuracy
+GloVe web crawl
+0.811
+0.552
+GloVe web crawl average
+0.781
+0.497
+Google News word2vec
+0.797
+0.523
+Facebook Fasttext wikipedia
+0.806
+0.548
+word2vec model on AOL corpus
+0.804
+0.54
+whereas all 3 annotators are in agreement around 25% times. As
+others have found out in the past experiments, query segmentation
+has lot of ambiguity around it which reflects in the difference of
+opinion in the annotations. A low percent on all 3 in agreement
+highlights the fact that segmentation tasks can be very subjective.
+Figure 2: eBay query annotation agreement
+Figure 3: AOL web search query annotation agreement
+For training we use the annotations where at least 2 out of 3
+annotators are in agreement.
+We divide this query set into 80-20% train and test split. The 80%
+training data is further split into 80-20% train and validation set.
+As shown in Figure 1 the query embeddings were learned using
+fasttext followed by training an XGBoost [
+3
+] classifier for predicting
+the segmentation breaks. A grid search for hyper parameter tuning
+got us the best segmentation accuracy at 500 estimators and with
+depth 4 on the XGBoost model with skip-gram and 800 estimators
+with depth 6 for cbow embeddings. We experimented with both
+cbow and skip-gram architectures for learning the query embed-
+dings on eBay queries. The best numbers for both query accuracy
+and segmentation accuracy were using cbow architecture. Figure
+3 summarizes the accuracies for the naive ngram model and our
+approach. The accuracy we obtain on the eCommerce data using
+our technique clearly beats the naive ngram based segmentation
+model. These numbers are also comparable with the embeddings
+experiment which was ran on AOL queries.
+Table 3: Segmentation and Query accuracies on eBay queries
+Method
+Segmentation Accuracy
+Query Accuracy
+Naive n-gram
+0.713
+0.578
+Fasttext skip-gram + XGBoost
+0.796
+0.677
+Fasttext cbow + XGBoost
+0.799
+0.683
+6
+DISCUSSION AND FUTURE WORK
+In our study, we found eCommerce queries are harder for a crowd
+sourcing annotation task because of the lack of product and domain
+knowledge across all shopping categories which can be critical
+for understanding the query intent before annotating. For example
+consider the query "infant lebron". This query does not seem obvious
+for the annotators to identify the query segment. Because, they need
+to know that lebron is a brand of athletic shoes and infant is actually
+the size description. We noticed a few annotators contesting such
+queries asking for more clarity.
+For queries like "toms men s size 12", the user is searching for
+men’s but some annotators misinterpret it as (size) S and decide
+to have a segmentation break between men and s but the model
+predicts such scenarios right by keeping men and s together as a
+single segment. There is lot of ambiguity what is a head object of
+a query and what is not.
+For example "food processor" or "coffee
+grinder" clearly belong together as one segment, but it is debatable
+if "motorcycle vest" or "golf pants" necessarily belong in one seg-
+ment. One can argue motorcycle is just a constraint applied to buy
+a particular type of vest and "motorcycle vest" together does not
+necessarily represent the head shopping object. Aspects or modi-
+fiers of a query are tricky and the ambiguity leads to a drop in the
+classifier accuracy.
+As pointed out by Hagen et al
+.
+[
+6
+], the quality and metrics used
+for segmentation task heavily depend on the downstream task. A
+deeper analysis of our downstream tasks is an area we intend to
+explore in our future work. There has been some work on boosting
+the segmentation score with Wikipedia entities and Wikipedia
+titles, we plan to explore using structured data from eCommerce
+dictionary like brands, colors, styles and other aspects to further
+augment the training data for the embeddings. We also observed
+the n-gram based approaches are very sensitive to word order in
+the queries. For example "yeezy boost 350" is a product line offering
+by adidas and the model keeps it together in one segment, but for
+variation in the order like "boost 350 yeezy" (which is one of the
+high frequency query we observed) the naive n-gram model fails to
+keep it together and wrongly segments it as boost 350
+|
+yeezy but
+our approach generalizes pretty well on word order. The context
+based cost function in all the query embedding approaches we took
+would explain that behavior.
+7
+ACKNOWLEDGEMENTS
+We would like to thank Matthias Hagen, Martin Potthast, Benno
+Stein and Christof Brautigam, authors of Hagen et al
+.
+[
+6
+] for sharing
+the 50K annotated web search query data set.
+REFERENCES
+[1]
+Shane Bergsma and Qin Iris Wang. 2007.
+Learning Noun Phrase Query Segmen-
+tation.. In EMNLP-CoNLL, Vol. 7. 819–826.
+[2]
+Piotr Bojanowski, Edouard Grave, Armand Joulin, and Tomas Mikolov. 2016.
+En-
+riching Word Vectors with Subword Information.
+arXiv preprint arXiv:1607.04606
+(2016).
+[3]
+Tianqi Chen and Carlos Guestrin. 2016.
+Xgboost: A scalable tree boosting system.
+In Proceedings of the 22Nd ACM SIGKDD International Conference on Knowledge
+Discovery and Data Mining. ACM, 785–794.
+[4]
+Jiafeng Guo, Gu Xu, Hang Li, and Xueqi Cheng. 2008. A unified and discriminative
+model for query refinement. In Proceedings of the 31st annual international ACM
+SIGIR conference on Research and development in information retrieval.
+ACM,
+379–386.
+[5]
+Matthias Hagen, Martin Potthast, Benno Stein, and Christof Braeutigam. 2010.
+The power of naive query segmentation. In Proceedings of the 33rd international
+ACM SIGIR conference on Research and development in information retrieval. ACM,
+797–798.
+[6]
+Matthias Hagen, Martin Potthast, Benno Stein, and Christof Bräutigam. 2011.
+Query segmentation revisited. In Proceedings of the 20th international conference
+on World wide web. ACM, 97–106.
+[7]
+Jian Huang, Jianfeng Gao, Jiangbo Miao, Xiaolong Li, Kuansan Wang, Fritz Behr,
+and C Lee Giles. 2010.
+Exploring web scale language models for search query
+processing. In Proceedings of the 19th international conference on World wide web.
+ACM, 451–460.
+[8]
+Rosie Jones, Benjamin Rey, Omid Madani, and Wiley Greiner. 2006.
+Generating
+query substitutions. In Proceedings of the 15th international conference on World
+Wide Web. ACM, 387–396.
+[9]
+Julia Kiseleva,
+Qi Guo,
+Eugene Agichtein,
+Daniel Billsus,
+and Wei Chai.
+2010.
+Unsupervised query segmentation using click data: preliminary results. In Pro-
+ceedings of the 19th international conference on World wide web. ACM, 1131–1132.
+[10]
+Omer Levy, Yoav Goldberg, and Ido Dagan.
+Improving Distributional Similarity
+with Lessons Learned from Word Embeddings. In Transactions of the Association
+for Computational Linguistics, Vol. 3. 211–225.
+[11]
+Tomas Mikolov, Ilya Sutskever, Kai Chen, Greg S Corrado, and Jeff Dean. 2013.
+Distributed representations of words and phrases and their compositionality. In
+Advances in neural information processing systems. 3111–3119.
+[12]
+Nish Parikh, Prasad Sriram, and Mohammad Al Hasan. 2013.
+On segmentation
+of ecommerce queries. In Proceedings of the 22nd ACM international conference
+on Conference on information & knowledge management. ACM, 1137–1146.
+[13]
+Greg Pass, Abdur Chowdhury, and Cayley Torgeson. 2006.
+A picture of search..
+In InfoScale, Vol. 152. 1.
+[14]
+Jeffrey Pennington, Richard Socher, and Christopher D Manning. 2014.
+Glove:
+Global Vectors for Word Representation.. In EMNLP, Vol. 14. 1532–1543.
+[15]
+Radim Řehůřek and Petr Sojka. 2010.
+Software Framework for Topic Modelling
+with Large Corpora. In Proceedings of the LREC 2010 Workshop on New Challenges
+for NLP Frameworks. ELRA, Valletta, Malta, 45–50.
+http://is.muni.cz/publication/
+884893/en.
+[16]
+Knut Magne Risvik, Tomasz Mikolajewski, and Peter Boros. 2003.
+Query Seg-
+mentation for Web Search.. In WWW (Posters).
+[17]
+Bin Tan and Fuchun Peng. 2008.
+Unsupervised query segmentation using gen-
+erative language models and wikipedia. In Proceedings of the 17th international
+conference on World Wide Web. ACM, 347–356.
+[18]
+Chao Zhang, Nan Sun, Xia Hu, Tingzhu Huang, and Tat-Seng Chua. 2009.
+Query
+segmentation based on eigenspace similarity. In Proceedings of the ACL-IJCNLP
+2009 Conference Short Papers. Association for Computational Linguistics, 185–
+188.

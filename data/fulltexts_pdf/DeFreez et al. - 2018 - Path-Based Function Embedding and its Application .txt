@@ -1,0 +1,3046 @@
+﻿Path-Based Function Embedding
+and its Application to Specification Mining
+Daniel DeFreez, Aditya V. Thakur, Cindy Rubio-González
+University of California, Davis
+{dcdefreez,avthakur,crubio}@ucdavis.edu
+ABSTRACT
+Identifying the relationships among program elements is useful
+for program understanding,
+debugging,
+and analysis.
+One such
+relationship is synonymy. Function synonyms are functions that
+play a similar role in code, e.g. functions that perform initialization
+for different device drivers, or functions that implement different
+symmetric-key encryption schemes. Function synonyms are not
+necessarily semantically equivalent and can be syntactically dis-
+similar; consequently, approaches for identifying code clones or
+functional equivalence cannot be used to identify them. This pa-
+per presents
+func2vec
+, an algorithm that maps each function to a
+vector in a vector space such that function synonyms are grouped
+together. We compute the function embedding by training a neu-
+ral network on sentences generated from random walks over an
+encoding of the program as a labeled pushdown system (
+ℓ
+-PDS).
+We demonstrate that func2vec is effective at identifying function
+synonyms in the Linux kernel. Furthermore, we show how function
+synonyms enable mining error-handling specifications with high
+support in Linux file systems and drivers.
+1
+INTRODUCTION
+Apart from writing new code, a software engineer spends a substan-
+tial amount of time understanding, evolving, and verifying existing
+software.
+Program comprehension [
+12
+] entails inferring a mental
+model of the relationships among various program elements [
+11
+].
+When available, documentation can aid program comprehension [
+8
+].
+For instance, documentation about high-level API functions often
+contains a “See Also” section listing other related functions,
+en-
+abling the reader to navigate to a different, relevant portion of the
+API. However, such documentation is almost never available for
+low-level code such as the Linux kernel.
+Even if such documen-
+tation is available,
+it is difficult to keep it up to date as the code
+evolves [
+10
+]. Furthermore, Linux is written in C, a language lack-
+ing features such as polymorphism and encapsulation that make
+explicit the relationships between functions.
+Identifying relationships among functions is challenging because
+related functions are often semantically different and syntactically
+dissimilar. For example, the functions
+snd_atiixp_free
+and
+snd_
+intel8x0_free
+in the Linux device drivers
+atiixp
+and
+intel8x0
+,
+respectively,
+are semantically different,
+but serve the same pur-
+pose in these device drivers.
+We refer to such functions as func-
+tion synonyms. The above functions follow a naming convention,
+but that is not necessarily the case.
+For example,
+acpi_video_
+get_brightness
+and
+intel_panel_get_backlight
+each return
+the brightness level of the backlight. Conversely, functions with
+similar names are not necessarily synonyms. Consider
+rcu_seq_
+start
+which adjusts the current sequence number, and
+kprobe_
+seq_start
+which merely returns the current sequence number.
+Figure 1: Function Synonym Clusters
+Because of the semantic and syntactic differences in the code, and
+because naming conventions are not a reliable indicator of similar-
+ity, techniques that identify code clones, check semantic equiva-
+lence, or rely on naming conventions cannot be used.
+This paper presents
+func2vec
+, a technique that computes a map
+from each function to a vector in a continuous vector space such
+that vectors for function synonyms are in close proximity without
+any previous knowledge about naming conventions. Figure 1 illus-
+trates the output of
+func2vec
+for a subset of functions in Linux; in
+particular,
+func2vec
+maps each function to a vector in
+R
+300
+, which
+is then projected onto 2-dimensions using t-SNE [
+13
+]. Functions
+that play the same role in different components — function syn-
+onyms — are close together in the
+func2vec
+embedding, forming
+clusters.
+Figure 1 shows such clusters in the PCI sound drivers.
+Function synonyms are grouped by functionality (probe, open, pre-
+pare, free, etc.). For example, the functions
+snd_atiixp_free
+and
+snd_intel8x0_free both belong to the cluster labeled free.
+This technique is the first to use static program traces to learn a
+function embedding that captures the hierarchical structure of pro-
+grams. Specifically, we encode the program as a labeled pushdown
+system (
+ℓ
+-PDS), where labels are used to represent various program
+elements such as function calls, instructions, types, and error codes.
+We generate random walks over the
+ℓ
+-PDS, and use these walks to
+learn a vector embedding using a neural network [14].
+To demonstrate the effectiveness of
+func2vec
+, we create a dis-
+tributed representation of functions for a runnable Linux kernel
+(2 million LOC).
+This paper is the first to apply such a technique
+to large-scale low-level code such as the Linux kernel. We evaluate
+func2vec
+on a manually created gold standard of 683 Linux file
+system and driver functions grouped into 127 classes. Our evalu-
+ation shows that
+func2vec
+is capable of identifying relationships
+between functions with both high precision and recall,
+87% and
+71% respectively.
+1
+arXiv:1802.07779v2 [cs.SE] 25 Feb 2018
+Furthermore,
+we present a case study showing how function
+synonyms identified by
+func2vec
+can be used to find software
+specifications from code.
+Specification mining is a popular tech-
+nique with many applications [
+1
+,
+6
+,
+22
+,
+24
+]. In general, specification
+mining requires a large number of supporting examples for each
+specification to avoid false positives, but even for a code base as
+large as Linux, many specifications do not have enough examples to
+reach a useful support (number of occurrences) threshold [
+22
+]. This
+problem is further exacerbated for error-handling specifications;
+error-handling code is not as common as normal-execution code.
+In this paper, we leverage
+func2vec
+to use multiple implementa-
+tions of Linux file systems and drivers to obtain cross-implementation
+error-handling specifications that
+have high support.
+A cross-
+implementation specification is one that consists of multiple error-
+handling specifications that would be the same if we could identify
+certain functions to be synonyms.
+An example of such a speci-
+fication is described in § 2.
+To show the usefulness of
+func2vec
+in this context, we devise and implement an algorithm for infer-
+ring error-handling specifications. We evaluate the effect of using
+func2vec
+results on mining for 5 Linux file systems, and 48 Linux
+device drivers, and show that using
+func2vec
+indeed yields better
+specifications.
+The contributions of this paper are as follows:
+• func2vec
+, a technique for learning a function embedding that
+captures the hierarchical structure of programs (§3).
+•
+An evaluation of the effectiveness of
+func2vec
+for finding func-
+tion synonyms in the Linux kernel (§4).
+•
+A formulation of error-handling specifications for low-level
+systems code (§5).
+•
+An evaluation of the usefulness of
+func2vec
+for mining cross-
+implementation error-handling specifications across 5 Linux file
+systems, and 48 Linux device drivers (§6).
+We describe related work in §7, and conclude in §8.
+2
+MOTIVATING EXAMPLE
+In this section, we present a real-world example in which identifying
+function synonyms can be useful. Specifically, we describe an error-
+handling specification found across various Linux PCI sound drivers.
+An error handler is a piece of code that is executed if an error occurs.
+For Linux code (written in C), each error handler corresponds to a
+conditional statement that checks for an error. An error-handling
+specification imposes requirements on an error handler.
+Figure 2a shows an excerpt from the function
+snd_atiixp_
+create
+in the atiixp sound driver.
+In particular,
+it shows five er-
+ror handlers (marked
+H1
+through
+H5
+).
+Here we describe a spec-
+ification associated with the error handler
+H4
+on line 1622.
+The
+specification is expressed as {
+pci_enable_device, pci_request_
+regions
+}
+e
+⇒
+{
+snd_atiixp_free
+} (simplified for clarity of explana-
+tion), which says that whenever functions
+pci_enable_device
+and
+pci_request_regions
+are successfully called,
+and an unrelated
+error occurs later on,
+then the function
+snd_atiixp_free
+must
+be called to release the resources acquired by
+pci_enable_device
+and
+pci_request_regions
+. In the specification, the actions in the
+set before the arrow correspond to the context, and the actions in
+the set after the arrow refer to the response; see §5. This is an error-
+handling specification because it applies if an error occurs in the
+given context. In the figure, we highlight the context in gray, and
+place the response actions in a box. The support of the specification
+is 2; that is, we find only 2 occurrences that follow this specification.
+Error-handling code is not as common as normal-execution code,
+thus error-handling specifications often have low support [22].
+Figure 2b shows a specification found in the intel8x0 driver. Note
+that the code fragments in Figure 2 look almost identical because we
+have not shown the irrelevant code (36 LOC in
+snd_atiixp_create
+and 193 LOC in
+snd_intel8x0_create
+). The intel8x0 specification
+is expressed as {
+pci_enable_device, pci_request_regions
+}
+e
+⇒
+{
+snd_intel8x0_free
+}, which is the same as the atiixp specification
+except for the response. This specification has a support of 7. How-
+ever,
+func2vec
+reports that
+snd_atiixp_free
+and
+snd_intel8x0_
+free
+are function synonyms, thus the above specifications describe
+a cross-implementation error-handling specification. Note that the
+above specification is also associated with handler
+H5
+as it shares
+the same context, and has the same response as H4.
+The advantage of finding cross-implementation specifications
+is that their support is higher than those of the corresponding
+individual specifications. For example, when considering 48 device
+drivers,
+func2vec
+finds 12 additional function synonyms for
+snd_
+atiixp_free
+and
+snd_intel8x0_free
+. Using this information, we
+find a cross-implementation specification with a support of 57.
+As can be seen, function synonyms are crucial for finding cross-
+implementation specifications with high support. The rest of the
+paper describes how
+func2vec
+creates function embeddings of
+programs to find function synonyms, and how this information can
+be used to enable cross-implementation specification mining.
+3
+FUNC2VEC: PATH-BASED FUNCTION
+EMBEDDING
+The goal of
+func2vec
+is to map a discrete set of functions to a con-
+tinuous vector space; that is, given a vocabulary
+L
+of program func-
+tions, each program function
+ℓ ∈ L
+is mapped to a
+d
+-dimensional
+vector in R
+d
+. To accomplish this, func2vec generates a linearized
+representation of programs, viz. “sentences” over a given vocab-
+ulary.
+func2vec
+is the first to use static program paths for this
+purpose. Intuitively, if we see many program paths with a call to
+function
+f2
+after a call to function
+f1
+, and paths with a call to
+f3
+after a call to
+f1
+, then
+f2
+and
+f3
+should be embedded close to each
+other.
+A naive approach for linearizing a program is to generate a sen-
+tence using the instructions along every valid interprocedural path
+in the program. Such an approach has the following disadvantages:
+using the entire instruction set would generate sentences with a
+very large vocabulary; there are too many program paths for this
+approach to be practical; and it does not capture the hierarchical
+structure of programs.
+The design of
+func2vec
+addresses each of these disadvantages.
+func2vec
+abstracts each program instruction to reduce the vocabu-
+lary of the sentences generated from the program path. To address
+the path explosion problem,
+func2vec
+performs a random walk of
+the program restricted to generate
+γ
+paths of length at most
+k
+start-
+ing at a call to each function. Lastly, on encountering a function call,
+the random walk either outputs the function name itself, or decides
+to step into the function definition. This strategy of the random
+2
+1585
+int
+snd_atiixp_create ( struct
+snd_card
+* card ) {
+1595
+if
+(( err = pci_enable_device ( pci ))
+<
+0)
+//H1
+1596
+return
+err ;
+1597
+1598
+chip
+=
+kzalloc ( sizeof (* chip ) ,
+...) ;
+1599
+if
+( chip
+==
+NULL )
+{ //H2
+1600
+pci_disable_device(pci);
+1601
+return
+- ENOMEM ;
+1602
+}
+1609
+if (( err = pci_request_regions ( pci ) )
+<
+0) { //H3
+1610
+pci_disable_device ( pci ) ;
+1611
+kfree ( chip ) ;
+1612
+return
+err ;
+1613
+}
+1614
+chip - > addr
+=
+pci_resource_start ( pci ,
+0) ;
+1622
+if
+( request_irq ( pci -> irq ,...) )
+{ //H4
+1623
+dev_err ( card - > dev ,
+" IRQ ␣%d" ,
+pci - > irq ) ;
+1624
+snd_atiixp_free(chip);
+1625
+return
+- EBUSY ;
+1626
+}
+1632
+if (( err = snd_device_new ( card ,...)
+<
+0) )
+{ //H5
+1633
+snd_atiixp_free(chip);
+1634
+return
+err ;
+1635
+}
+1639
+}
+(a) Function snd_atiixp_create in driver atiixp.
+2989
+int
+snd_intel8x0_create ( struct
+snd_card
+* card ) {
+3036
+if
+(( err = pci_enable_device ( pci ))
+<
+0)
+//H1
+3037
+return
+err ;
+3038
+3039
+chip
+=
+kzalloc ( sizeof (* chip ) ,
+...) ;
+3040
+if
+( chip
+==
+NULL )
+{ //H2
+3041
+pci_disable_device(pci);
+3042
+return
+- ENOMEM ;
+3043
+}
+3062
+if
+(( err = pci_request_regions ( pci ) )
+<
+0) { //H3
+3063
+kfree ( chip );
+3064
+pci_disable_device ( pci ) ;
+3065
+return
+err ;
+3066
+}
+3179
+if
+(( err
+=
+snd_intel8x0_chip_init () )
+<
+0)
+{ //H4
+3180
+snd_intel8x0_free(chip);
+3181
+return
+err ;
+3182
+}
+3183
+3184
+if
+( request_irq ( pci - > irq ,
+...) )
+{ //H5
+3185
+dev_err ( card - > dev ,
+" IRQ ␣ % d" ,
+pci - > irq ) ;
+3186
+snd_intel8x0_free(chip);
+3187
+return
+- EBUSY ;
+3188
+}
+3200
+}
+(b) Function snd_intel8x0_create in driver intel8x0.
+Figure 2: (a) An excerpt from the function snd_atiixp_create in the atiixp driver (sound/pci/atiixp.c). The function contains
+two error-handling specifications. Each specification consists of a context set (function calls highlighted in gray) and a response
+set (function calls in a box). The first specification is associated with error handler H2 and has a 1-element context (highlighted
+in gray) and a 1-element response (in a box). The second specification is associated with handlers H4 and H5. It has a 2-element
+context (highlighted in gray) and a 1-element context (in a box). Fig. 1. (b) An excerpt from the function snd_intel8x0_create
+in the intel8x0 driver (sound/pci/intel8x0.c) in which two similar error-handling specifications are found. The specifications
+across the two drivers are similar except for the functions snd_atiixp_free, and intel8x0_free. Since we identify these func-
+tions as synonyms, we refer to the set of corresponding specifications as cross-implementation specifications.
+ARCHITECTURE
+Cindy Rubio Gonzalez | February 4, 2018
+Source 
+Code
+LLVM
+l-PDS
+Random 
+Walker
+Training
+Function 
+Embedding
+Walks
+Source 
+Code
+LLVM
+l-PDS
+Random 
+Walker
+Training
+Function 
+Embedding
+Walks
+Source 
+Code
+LLVM
+l-PDS
+Random 
+Walker
+Training
+Function 
+Embedding
+Walks
+Source 
+Code
+Program 
+Encoder
+l-PDS
+Random 
+Walker
+Trainer
+Function 
+Embedding
+Walks
+Figure 3: func2vec Architecture
+walk is able to capture the hierarchical structure of programs: the
+context preceding the function call can be linked to either the func-
+tion call itself or to the context in the body of the function being
+called. Figure 3 shows the three main components of func2vec.
+3.1
+Program Encoder
+We use a pushdown system (PDS) to model the set of valid inter-
+procedural paths in the program [
+20
+]. A PDS is defined as follows:
+Definition 3.1.
+A pushdown system is a triple
+P = (P, Γ, ∆)
+where
+P
+and
+Γ
+are finite sets,
+control
+locations and stack alphabet,
+re-
+spectively. A configuration of
+P
+is a pair
+⟨p, w⟩
+, where
+p ∈ P
+and
+w ∈ Γ
+∗
+.
+∆
+contains a finite number of rules
+⟨p, γ ⟩ ,→ ⟨p
+′
+, w⟩
+, where
+p, p
+′
+∈ P
+,
+γ ∈ Γ
+,
+and
+w ∈ Γ
+∗
+,
+which define a transition relation
+⇒
+between configurations of
+P
+such that if
+r = ⟨p, γ ⟩ ,→ ⟨p
+′
+, w⟩
+,
+then ⟨p, γw
+′
+⟩ ⇒ ⟨p
+′
+, ww
+′
+⟩ for all w
+′
+∈ Γ
+∗
+.
+□
+We use
+c
+r
+=⇒ c
+′
+to denote that the rule
+r ∈ ∆
+was used to transition
+from configuration
+c
+to
+c
+′
+of
+P
+. To model control flow of a program
+a single control location
+p
+, and the following three types of rules
+r = ⟨p, γ ⟩ ,→ ⟨p, w⟩
+are sufficient: (i) internal rules with
+|w |
+=
+1
+that model intraprocedural flow; (ii) push rules with
+|w |
+=
+2 that
+model function calls, and (iii) pop rules with
+|w |
+=
+0 that model
+function returns.
+We use a mostly standard way of encoding an interprocedural
+control-flow graph (ICFG) of a program as a PDS. The main differ-
+ence is when a function call is encountered: given a call to function
+f
+whose entry node is
+e
+f
+on the ICFG edge
+n
+1
+→ n
+2
+, we not only
+add the standard call rule
+⟨p, n
+1
+⟩ ,→ ⟨p, e
+f
+n
+2
+⟩
+, but also an internal
+rule
+⟨p, n
+1
+⟩ ,→ ⟨p, n
+2
+⟩
+. This new internal rule is akin to a summary
+edge for the called procedure.
+As we will see,
+this internal rule
+allows the random walk used by
+func2vec
+(Algorithm 1) to either
+step over or step into the function call.
+3
+1
+void
+pci_disable_device ( struct
+2
+pci_dev
+* dev )
+{
+3
+4
+struct
+pci_devres
+* dr
+=
+...;
+5
+if
+( dr
+==
+NULL )
+{
+6
+dr -> enabled
+=
+0;
+7
+}
+8
+do_pci_disable_device ( dev ) ;
+9
+}
+10
+11
+int
+snd_atiixp_create (... ,
+12
+struct
+pci_dev
+* dev ,...)
+{
+13
+14
+struct
+atiixp
+* chip
+=
+...;
+15
+if
+( chip
+==
+NULL )
+{
+16
+pci_disable_device ( dev ) ;
+17
+return
+- ENOMEM ;
+18
+}
+19
+int
+err
+=...;
+20
+if
+( err
+<
+0) {
+21
+pci_disable_device ( dev ) ;
+22
+kfree ( chip );
+23
+return
+err ;
+24
+}
+25
+chip -> addr
+=
+...;
+26
+...
+27
+}
+(a) Simplified code from Figure 2a.
+atiixp
+EQ
+pci_disable_device
+ENOMEM
+LT
+pci_disable_device
+kfree
+STORE
+atiixp
+pci_devres
+EQ
+pci_devres
+do_pci_disable_device
+snd_atiixp_create
+kfree
+pci_disable_device
+n1
+n2
+n3
+n4
+n5
+n6
+n7
+n8
+n9
+n10
+n11
+n12
+n13
+n14
+n15
+n16
+n17
+n18
+n19
+n20
+n21
+n22
+n23
+n24
+n25
+n26
+n27
+n28
+n29
+do_pci_disable_device
+(b) Graphical representation of ℓ-PDS.
+Rules for snd_atiixp_create:
+(1)
+⟨p, n
+1
+⟩ ,→ ⟨p, n
+2
+⟩
+: atiixp
+(2)
+⟨p, n
+2
+⟩ ,→ ⟨p, n
+3
+⟩
+: EQ
+(3)
+⟨p, n
+3
+⟩ ,→ ⟨p, n
+4
+⟩
+(4)
+⟨p, n
+3
+⟩ ,→ ⟨p, n
+7
+⟩
+(5)
+⟨p, n
+4
+⟩ ,→ ⟨p, n
+17
+n
+5
+⟩
+(6)
+⟨p, n
+4
+⟩ ,→ ⟨p, n
+5
+⟩
+: pci_disable_device
+(7)
+⟨p, n
+5
+⟩ ,→ ⟨p, n
+6
+⟩
+: ENOMEM
+(8)
+⟨p, n
+6
+⟩ ,→ ⟨p, ϵ ⟩
+(9)
+⟨p, n
+7
+⟩ ,→ ⟨p, n
+8
+⟩
+: STORE
+(10)
+⟨p, n
+8
+⟩ ,→ ⟨p, n
+9
+⟩
+: LT
+(11)
+⟨p, n
+9
+⟩ ,→ ⟨p, n
+10
+⟩
+(12)
+⟨p, n
+9
+⟩ ,→ ⟨p, n
+14
+⟩
+(13)
+⟨p, n
+10
+⟩ ,→ ⟨p, n
+17
+n
+11
+⟩
+(14)
+⟨p, n
+10
+⟩ ,→ ⟨p, n
+11
+⟩
+: pci_disable_device
+(15)
+⟨p, n
+11
+⟩ ,→ ⟨p, n
+26
+n
+12
+⟩
+(16)
+⟨p, n
+11
+⟩ ,→ ⟨p, n
+12
+⟩
+: kfree
+(17)
+⟨p, n
+12
+⟩ ,→ ⟨p, n
+13
+⟩
+(18)
+⟨p, n
+13
+⟩ ,→ ⟨p, ϵ ⟩
+(19)
+⟨p, n
+14
+⟩ ,→ ⟨p, n
+15
+⟩
+: atiixp
+(20)
+⟨p, n
+15
+⟩ ,→ ⟨p, n
+16
+⟩
+(21)
+⟨p, n
+16
+⟩ ,→ ⟨p, ϵ ⟩
+Rules for pci_disable_device:
+(22)
+⟨p, n
+17
+⟩ ,→ ⟨p, n
+18
+⟩
+: pci_devres
+(23)
+⟨p, n
+18
+⟩ ,→ ⟨p, n
+19
+⟩
+: EQ
+(24)
+⟨p, n
+19
+⟩ ,→ ⟨p, n
+20
+⟩
+(25)
+⟨p, n
+19
+⟩ ,→ ⟨p, n
+22
+⟩
+(26)
+⟨p, n
+20
+⟩ ,→ ⟨p, n
+21
+⟩
+: pci_devres
+(27)
+⟨p, n
+21
+⟩ ,→ ⟨p, n
+23
+⟩
+(28)
+⟨p, n
+22
+⟩ ,→ ⟨p, n
+23
+⟩
+(29)
+⟨p, n
+23
+⟩ ,→ ⟨p, n
+28
+n
+24
+⟩
+(30)
+⟨p, n
+23
+⟩ ,→ ⟨p, n
+24
+⟩
+: do_pci_disable_device
+(31)
+⟨p, n
+24
+⟩ ,→ ⟨p, n
+25
+⟩
+(32)
+⟨p, n
+25
+⟩ ,→ ⟨p, ϵ ⟩
+(c) ℓ-PDS rules.
+Figure 4: Running example.
+A labeled PDS (
+ℓ
+-PDS) is a PDS in which each rule is associated
+with a sequence of labels, and these labels are concatenated as the
+ℓ-PDS makes its transitions. More formally:
+Definition 3.2.
+A labeled pushdown system (
+ℓ
+-PDS) is a triple
+L = (P, L, f )
+,
+where
+P = (P, Γ, ∆)
+is a PDS,
+L
+is a finite set of
+labels, and
+f
+:
+∆ → L
+∗
+is a map that assigns a sequence of labels
+to each rule of
+P
+. A configuration of
+L
+is a pair
+(c, l )
+, where
+c
+is a
+configuration of the PDS
+P
+and
+l
+∈ L
+∗
+.
+∆
+and
+f
+define the transition
+relation
+⇒
+l
+between configurations of
+L
+such that if
+c
+r
+=⇒ c
+′
+, then
+(c, l ) ⇒
+l
+(c
+′
+, ll
+′
+), where f (r ) = l
+′
+.
+□
+We use
+c
+r
+=⇒
+l
+c
+′
+to denote that the rule
+r ∈ ∆
+was used to transition
+from configuration
+c
+to
+c
+′
+of
+L
+. In practice, we attach labels only
+to internal rules of the
+ℓ
+-PDS. We associate a unique label for each
+instruction category, error code,
+struct
+type, and function. Each
+instruction is mapped to a list of such labels as follows:
+• We classify instructions into categories such as LOAD, STORE,
+EQ, etc. The internal rule associated with a particular instruction
+is labeled with the corresponding instruction category.
+•
+Systems code defines specific constants that are used as error
+codes; see §5. If such an error is used in the instruction, then we
+add the error-code label to the corresponding internal rule.
+•
+If the instruction loads or stores to a
+struct
+variable, then we
+add the struct-type label to the corresponding internal rule.
+•
+If the instruction is a function call,
+then we add the function
+label to the corresponding internal rule.
+Example 3.3.
+Figure 4a shows simplified functions
+snd_create_
+atiixp
+(from § 2),
+and
+pci_disable_device
+.
+Figure 4b shows a
+graphical representation of the corresponding
+ℓ
+-PDS. Figure 4c lists
+the
+ℓ
+-PDS rules; we use the notation
+r
+:
+l
+to mean that
+f (r ) = l
+in the
+ℓ
+-PDS. The instruction-category labels used in this example are {EQ,
+STORE, LT} (for simplicity, we do not include labels LOAD and RET);
+the
+struct
+-type labels are {atiixp, pci_devres}, the error-code labels
+are {
+ENOMEM
+},
+and the function labels are {
+pci_disable_device
+,
+kfree, do_pci_disable_device}.
+We describe the first
+7 rules for the function
+snd_atiixp_
+create
+in Figure 4c. The internal rule (1) corresponds to line 14
+in Figure 4a,
+where the variable
+chip
+of type
+struct atiixp
+is
+assigned. Thus, the rule is labeled with
+struct
+-type label atiixp.
+The internal rule (2) corresponds to the equality expression on
+line 15, and is attached the instruction label EQ. Unlabeled rules (3)
+and (4) correspond to the
+true
+and
+false
+branches of the condi-
+tional on line 15. Call rule (5) and internal rule (6) are associated
+with the function call
+pci_disable_device
+on line 16. Note that
+the call rule is not labeled; the internal rule has a function label
+pci_disable_device
+. Finally, rule (7) is given the error-code label
+ENOMEM, and corresponds to the return statement on line 17.
+■
+3.2
+Random Walker
+Algorithm 1 shows the algorithm to generate a random walk of a
+ℓ
+-PDS. Given a set
+S
+,
+Random(S)
+returns an element
+s ∈ S
+that is
+picked uniformly at random.
+Labels(·)
+returns the sequence of labels
+associated with a
+ℓ
+-PDS configuration. Given a
+ℓ
+-PDS
+L
+, a start
+4
+Algorithm 1: RandomWalk(L, ℓ, k)
+Input: ℓ-PDS L = (P, L, f ), start label ℓ, walk length k
+Output: walk = {ℓ
+1
+, . . . , ℓ
+n
+}
+1
+⟨p, n⟩ ,→ ⟨p, n
+′
+⟩ : l
+← Random({r : l |r ∈ ∆ and ℓ ∈ f (r )})
+2
+c ← (⟨p, n
+′
+⟩, l )
+3
+for n ← 0 to k do
+4
+c ← Random({c
+′
+|c
+r
+=⇒
+l
+c
+′
+for some r ∈ ∆})
+5
+return Labels(c)
+Algorithm 2: func2vec (L, w, d, γ , k)
+Input: ℓ-PDS L = (P, L, f ), window size w, embedding size
+d, walks per label γ , walk length k
+Output: Vector representation for labels Φ : L → R
+d
+1
+W ← ∅
+2
+for i ← 0 to γ do
+3
+foreach ℓ
+i
+∈ L
+′
+do
+4
+W ← W ∪ RandomWalk(P, ℓ
+i
+, k )
+5
+Φ ← TrainModel(W , d, w)
+label
+ℓ
+, and a walk length
+k
+, a random walk is generated as follows.
+We randomly select a rule associated with label
+ℓ
+(line 1),
+and
+initialize the configuration
+c
+(line 2). Then, in the loop at line 4 we
+update the current configuration
+c
+by picking uniformly at random
+a next configuration in the
+ℓ
+-PDS. Note that in Definition 3.2, labels
+are concatenated when the configuration is updated.
+Example 3.4.
+Consider
+ℓ =
+atiixp, and
+k =
+10. There are two rules
+associated with atiixp: rules (1) and (19) from Figure 4c. Assume
+we randomly pick rule (1). Thus, we start our random walk
+w
+at
+rule (1) with label atiixp. We then make 10 steps through the
+ℓ
+-PDS
+rules. Two possible random walks would be:
+W
+1
+def
+= atiixp EQ pci_disable_device ENOMEM
+W
+2
+def
+=
+atiixp EQ pci_devres EQ pci_devres
+do_pci_disable_device
+.
+Note that during walk
+W
+1
+internal rule (6) was chosen, while
+W
+2
+descends into the call by choosing the call rule (5).
+■
+3.3
+Model Trainer
+Given a
+ℓ
+-PDS
+L
+, a window
+w
+, a distance
+d
+, a number of walks per
+label
+γ
+, and a walk length
+k
+,
+func2vec
+(Algorithm 2) generates
+γ
+walks for each label in
+L
+, and uses them to train the model. The
+result is a vector representation for labels Φ : L → R
+d
+.
+TrainModel
+on line 5 uses a neural network to learn
+Φ
+. Tradi-
+tional language models try to estimate the probability of seeing
+a label
+ℓ
+i
+given the context of the previous labels in the random
+walk;
+viz.
+Pr
+ℓ
+i
+|ℓ
+1
+, ℓ
+2
+, . . . , ℓ
+i−1
+
+.
+Apart from learning the proba-
+bility distribution of label co-occurences,
+we also want to learn
+the embedding:
+Φ
+:
+L → R
+d
+. Thus, our problem is to estimate the
+likelihood:
+Pr
+ℓ
+i
+|Φ(ℓ
+1
+), Φ(ℓ
+2
+), . . . , Φ(ℓ
+i−1
+)
+
+. Mikolov et al
+. [14]
+in-
+troduce a technique that uses a single-layer fully-connected neural
+network to approximate this likelihood. It uses a context of size
+w
+both before and after the given word, and considers the context as
+a set ignoring the ordering constraint. This results in the the fol-
+lowing optimization problem for computing
+Φ
+:
+maximize
+Φ
+log Pr
+ℓ
+i
+|{Φ(ℓ
+i−w
+), . . . , Φ(ℓ
+i−1
+), Φ(ℓ
+i+1
+), . . . , Φ(ℓ
+i+w
+)}
+
+.
+The implemen-
+tation of
+func2vec
+uses the implementation of Mikolov et al
+. [14]
+provided in Gensim [19].
+3.4
+Applications
+The function embedding computed by
+func2vec
+can be used in a
+variety of applications:
+Identifying Function Synonyms.
+Function synonyms are close
+together in the
+func2vec
+embedding, forming clusters by role. Fig-
+ure 1 shows such clusters of function synonyms in the PCI sound
+drivers. The K-means clustering algorithm is used to partition the
+word vectors learned by
+func2vec
+into function synonyms. The
+effectiveness of
+func2vec
+to identify function synonyms in the
+Linux kernel is evaluated in §4. Furthermore, the use of such func-
+tion synonyms in mining error-handling specifications is described
+in §5 and evaluated in §6.
+Subsystem Identification.
+Functions within subsystems tend to
+be embedded closer to each other than functions between subsys-
+tems. Figure 5a shows a t-SNE projection of functions in three major
+subsystems: sound, networking, and file systems. File systems such
+as GFS2 that rely on networking are closer to the networking com-
+ponent than local-only file systems.
+Analogical Reasoning.
+The relationship between OCFS2 Dis-
+tributed Lock Manager (DLM) locking and unlocking is captured by
+the analogy
+dlmlock
+:
+dlmunlock
+::
+ocfs2_dlm_lock
+: ?. Figure 5b
+shows a PCA plot of four functions belonging to the DLM. Similar
+analogies can be answered for other DLM locking and unlocking
+pairs, such as dlmlock_remote and dlmunlock_remote.
+Alignment.
+The
+func2vec
+embedding can be used to match func-
+tions between related components. Figure 5c shows a t-SNE projec-
+tion of TCPv4 and TCPv6 function pairs that have been matched
+via Procrustes alignment [23].
+4
+FUNC2VEC EVALUATION
+We evaluated
+func2vec
+against a runnable Linux kernel with all
+file systems and PCI sound drivers included, roughly 2 million LOC.
+The resulting
+ℓ
+-PDS consists of 5,407,483 stack locations (nodes),
+6,083,632 PDS rules,
+and 77,194 labels.
+For this experiment the
+number of walks generated per label
+γ
+was 100, the walk length
+k
+was 100, the vector dimension
+d
+was 300, and the window size
+w
+was
+1. To process the Linux kernel,
+func2vec
+requires approximately
+24G of memory and two hours of compute time on Amazon EC2 R4
+instances. These instances use Intel Xeon E5-2686 v4 (Broadwell)
+Processors and DDR4 Memory.
+Gold Standard. We chose the Linux kernel to evaluate func2vec
+because it is a prominent and important piece of software. There
+does not, however, exist for Linux a benchmark of function simi-
+larity that can be used as ground truth. Moreover, heuristics such
+as relying on the naming conventions of functions or the natural
+language interpretation of function names fall flat.
+Function synonyms in Linux often follow a naming conven-
+tion,
+such as
+snd_via82xx_free
+and
+snd_cmipci_free
+for the
+via82xx
+and
+cmipci
+sound drivers. Be that as it may, function syn-
+onyms do have different names;
+acpi_video_get_brightness
+and
+intel_panel_get_backlight
+each return the brightness level of
+5
+(a) Three Linux Subsystems
+(b) DLM Analogy
+(c) TCPv4 / TCPv6 Alignment
+Figure 5: Visualization of func2vec Applications
+the backlight. Conversely, functions with similar names are not nec-
+essarily synonyms;
+rcu_seq_start
+adjusts the current sequence
+number, while
+kprobe_seq_start
+merely returns the current se-
+quence number. Other functions like
+k8_mc0_mce
+are cryptically
+named, without a single natural language word.
+Lacking an already existing benchmark, we created by hand a
+list of 9,600 relations between 683 unique functions to serve as our
+gold standard. Of the 9,600 relations, 7,822 are assertions that two
+functions must be related, and 1,778 assert that two functions must
+not be related.
+Evaluation Metrics.
+The 7,822 must relations in our gold standard
+form 127 equivalence classes. For this evaluation, the must-not rela-
+tions in the gold standard are only used to check for consistency. We
+cluster the
+func2vec
+vectors with K-Means clustering and compare
+the resulting clusters with the equivalence classes in the gold stan-
+dard. For each cluster C
+i
+and gold standard class L
+j
+, the precision,
+recall, and F-score are defined as follows.
+Precision(C
+i
+, L
+j
+) =
+|C
+i
+∩ L
+i
+|
+|C
+i
+|
+Recall(C
+i
+, L
+j
+) =
+|L
+j
+∩ C
+i
+|
+|L
+j
+|
+F (C
+i
+, L
+j
+) =
+2 × Recall(C
+i
+, L
+j
+) × Precision(C
+i
+, L
+j
+)
+Recall(C
+i
+, L
+j
+) + Precision(C
+i
+, L
+j
+)
+To get an overall score that combines precision and recall, we use
+the F-score over all gold standard classes [
+2
+, §4.1]. Since an imperfect
+cluster may partially overlap multiple gold standard classes we
+compute precision and recall scores for the product of gold standard
+classes and K-Means clusters. The precision and recall matrices are
+combined into a single F-score matrix, penalizing a cluster for either
+including extra functions or missing functions. The maximum F-
+score for each set of synonyms in the gold standard is used, creating
+a mapping between K-Means clusters and gold standard classes.
+The average F-score over all classes in the gold standard is reported
+here, weighted by the size of each gold standard class.
+F =
+Õ
+i
+L
+i
+N
+max{F (C
+i
+, L
+j
+)}
+Results.
+Our evaluation of
+func2vec
+shows that it is capable of
+identifying relationships between functions in the Linux kernel
+with both high precision and recall. We find that
+func2vec
+achieves
+an F-score of 0.77 out of 1.0 on our gold standard of 7,822 relations
+Figure 6: Specification Mining Architecture
+between 683 unique functions. This corresponds to a precision of 87%
+and recall of 71% over all classes in the gold standard.
+5
+ERROR-HANDLING SPECIFICATIONS
+To show the practical utility of identifying synonymous functions
+with
+func2vec
+,
+we present a detailed case study exploring their
+effect on mining error-handling specifications. The major phases
+of the mining process are locating error handlers, extracting error
+handler contexts and responses, and frequent itemset mining. These
+phases are shown in Figure 6 and described in this section.
+5.1
+Defining Error-Handling Specifications
+We mine error-handling specifications based on the observation
+that the actions performed after an error occurs (the error-handler
+response) frequently depend on the actions carried out before the
+error occurred (the error-handler context). Such a context and re-
+sponse pair define an error-handling specification.
+Our mining
+data-set consists of all identified error-handler contexts and re-
+sponses,
+where each context and response is associated with an
+error handler that is uniquely identified by the source location of a
+conditional branch.
+Error Handlers.
+An error handler is a piece of code that is executed
+upon detection of an error. Our evaluation targets the Linux kernel,
+which is written in C.
+Without explicit error-handling language
+constructs such as try/catch, locating error handlers in C code must
+rely on some amount of domain knowledge. We know that Linux
+defines a specific set of integer error constants, referred to as error
+codes. When returned from a function, these error codes denote that
+an error has occurred. This error-handling mechanism is known as
+the return-code idiom
+Example 5.1.
+The
+snd_atiixp_create
+function in Figure 2a con-
+tains the following five error handlers:
+6
+• H1
+(line 1596)
+handles the error generated by
+pci_enable_
+device (line 1595).
+• H2 (lines 1600–1601) handles the error generated by kzalloc.
+• H3
+(lines 1610–1612) handles the error generated by
+pci_request_
+regions.
+• H4
+(lines 1623–1625) handles the error generated by
+request_
+irq.
+• H5
+(lines 1633–1634) handles the error generated by
+snd_device_
+new.
+■
+We use two different techniques for locating error handlers in
+source code that uses the return-code idiom: (1) dataflow analysis
+based on Rubio-González et al
+. [21]
+to locate conditional branches
+testing values for error codes; and (2) find basic blocks that return
+an error code.
+Example 5.2.
+Consider the function
+snd_atiixp_create
+in Fig-
+ure 2a.
+The conditional statements for handlers
+H1
+,
+H2
+,
+H3
+,
+and
+H5
+at lines 1595, 1609, 1622 and 1632 all test the return value of a
+function, which the dataflow analysis reports may be an error code.
+These tests are either done through explicit assignment to the
+err
+variable, or directly as in the case of the statement on line 1622.
+■
+Example 5.3.
+Consider the handler H4 on line 1599 in Figure 2a.
+The conditional statement tests the return value of the function
+kzalloc
+. Because
+kzalloc
+returns
+null
+upon failure instead of an
+error code, the first technique does not detect this error handler.
+However, since an error is explicitly returned on the error path in
+line 1625, the second technique identifies the handler.
+■
+Error-Handling Context and Response Sets.
+The context and
+response set of an error handler consist of the functions called
+before and after an error is detected, respectively. In many cases,
+the order in which these functions are called does not matter. Once
+the predicate associated with the error handler is identified,
+the
+context and response sets are computed via traversing the code
+paths in the backward and forward directions, respectively.
+Example 5.4.
+Context sets
+C
+H
+and response sets
+R
+H
+associated
+with the error handlers in Ex. 5.1.
+C
+H 1
+= ∅, R
+H 1
+= ∅
+C
+H 2
+={pci_enable_device}, R
+H 2
+={pci_disable_device}
+C
+H 3
+=
+{
+pci_enable_device
+,
+kzalloc
+},
+R
+H 3
+=
+{
+pci_disable_device
+,
+kfree
+}
+C
+H 4
+={pci_enable_device, kzalloc, pci_request_regions},
+R
+H 4
+={dev_err, snd_atiixp_free}
+C
+H 5
+=
+{
+pci_enable_device
+,
+kzalloc
+,
+pci_request_regions
+,
+request_irq
+},
+R
+H 5
+={snd_atiixp_free}
+■
+Error-Handling Specifications.
+An error-handling specification is
+defined as an association rule whose antecedent is the specification
+context and consequent is the specification response. This rule simply
+means that the set of function calls in the context implies that the
+set of function calls in the response are required to happen once an
+error is detected.
+Definition 5.5.
+An error-handling specification
+S
+is defined as
+C
+S
+e
+⇒ R
+S
+, where
+C
+S
+= {c
+1
+, c
+2
+, . . . , c
+m
+}
+is the context set of func-
+tion calls for the specification
+S
+, and
+R
+S
+= {r
+1
+, r
+2
+, . . . , r
+m
+}
+is the
+response set of function calls for the specification S.
+□
+Example 5.6.
+The following error-handling specifications can be
+inferred for the atiixp sound driver:
+1
+static
+struct
+inode
+* btrfs_new_inode (...)
+{
+2
+//
+Most
+of
+the
+function
+is
+omitted
+3
+path
+=
+btrfs_alloc_path () ;
+4
+btrfs_free_path ( path ) ;
+5
+ret
+=
+...
+6
+if
+( ret )
+{
+7
+//
+btrfs_free_path
+not
+required
+8
+}
+9
+}
+Figure 7: Code snippet from the btrfs file system. The path
+is freed prior to the error handler on line 6 is reached.
+• S
+1
+def
+= {pci_enable_device}
+e
+⇒ {pci_disable_device}
+• S
+2
+def
+=
+{
+pci_enable_device, kzalloc
+}
+e
+⇒
+{
+kfree, pci_disable_
+device}
+• S
+3
+def
+= {pci_enable_device, kzalloc,
+pci_request_regions}
+e
+⇒ {snd_atiixp_free}
+■
+Definition 5.7.
+An error-handling specification
+S
+def
+= C
+S
+e
+⇒ R
+S
+is
+applicable to an error-handler
+H
+, denoted by
+S ▷ H
+, iff
+C
+S
+⊆ C
+H
+and
+C
+S
+∪ R
+S
+⊈ C
+H
+, where
+C
+H
+and
+R
+H
+are the context and response
+sets of the error handler H , respectively.
+□
+Example 5.8.
+Looking at the context and response sets for error-
+handlers
+H1
+through
+H5
+in Ex. 5.4 and the specifications in Ex. 5.6,
+we see that S
+1
+▷ H 2, S
+2
+▷ H 3, S
+3
+▷ H 4, and S
+3
+▷ H 5.
+■
+The first term
+C
+S
+⊆ C
+H
+in Definition 5.7 says that the entire
+specification context must apply to the handler context. Otherwise
+the specification does not speak to what the required response
+actions are.
+The second term
+C
+S
+∪ R
+S
+⊈ C
+H
+is added for cases
+where the required response actions have already happened prior
+to a particular error handler being reached, as illustrated by the
+following example.
+Example 5.9.
+Consider the specification
+S
+def
+=
+{
+btrfs_alloc_
+path
+}
+e
+⇒
+{
+btrfs_free_path
+}, and the code snippet from the btrfs
+file system, shown in Figure 7:
+The context set
+C
+H
+for the error handler
+H
+at line 6 is {
+btrfs_
+alloc_path
+,
+btrfs_free_path
+}.
+If we restrict Definition 5.7 to
+only contain the term
+C
+S
+⊆ C
+H
+, then we would say that specifica-
+tion
+S
+is applicable to the error handler
+H
+. Clearly this is incorrect,
+as the path has been allocated and then freed prior to the error
+handler being reached. Consequently, without the second term in
+Definition 5.7, the error handler
+H
+would be flagged as a violation,
+even though the path has already been freed.
+■
+Definition 5.10.
+An error-handling specification
+S
+def
+= C
+S
+e
+⇒ R
+S
+is satisfied by an error-handler
+H
+, denoted by
+S ▶ H
+, iff
+S ▷ H
+and
+R
+S
+⊆ R
+H
+, where R
+H
+is the response set of H .
+□
+Given a error-handling specification and an error handler, our
+miner is able to report a violation of the specification using Defini-
+tion 5.10.
+Example 5.11.
+Looking at the context and response sets for the
+error-handlers in Ex. 5.4 and the specifications in Ex. 5.6, we see that
+S
+1
+▶ H
+2,
+S
+2
+▶ H
+3,
+S
+3
+▶ H
+4, and
+S
+3
+▶ H
+5. If the call on line 1633
+in Figure 2a was missing, then we would say that
+S
+3
+̸
+▶ H
+5; i.e.,
+S
+3
+would not be satisfied by H5.
+■
+7
+The above definitions of error-handling specifications and satis-
+fiability can be extended to handle synonymous functions. Let
+F
+be
+the set of functions in the program we are mining.
+Π
+:
+F → F
+is a
+said to be a partition function iff
+Π(f
+1
+) = Π(f
+2
+)
+for all functions
+f
+1
+and
+f
+2
+that are identical or synonyms. We abuse notation slightly by
+extending the partition function that applies to a single function to
+a set of functions:
+Π({ f
+1
+, f
+2
+, . . . , f
+n
+}) = {Π(f
+1
+), Π( f
+2
+), . . . , Π( f
+n
+)}
+.
+Similarly, given an error-handling specification
+S
+def
+= C
+S
+e
+⇒ R
+S
+, we
+use Π(S) to mean Π(C
+S
+)
+e
+⇒ Π(R
+S
+).
+Definition 5.12.
+Given a partition function
+Π
+, a set
+X
+of error-
+handling specifications is said to be a cross-implementation error-
+handling specification with respect to
+Π
+iff
+Π(S)
+= Π(S
+′
+)
+for all
+S, S
+′
+∈ X .
+□
+Example 5.13.
+Let the partition function Π be such that
+Π(snd_atiixp_free) = Π(snd_intel8x0_free). Then
+{{pci_enable_device, pci_request_regions}
+e
+⇒ {snd_attixp-
+_free}, {pci_enable_device, pci_request_regions}
+e
+⇒ {snd-
+_intel8x0_free}}
+is a cross-implementation error-handling spec-
+ification with respect to Π, as described in §2.
+■
+Using this notation,
+Definitions 5.7 and 5.10 can be naturally
+extended to cross-implementation error-handling specifications.
+Definition 5.14.
+A cross-implementation error-handling specifi-
+cation
+X
+is applicable to an error-handler
+H
+, denoted by
+X ▷ H
+, iff
+there exists S ∈ X such that S ▷ H .
+□
+Definition 5.15.
+A cross-implementation error-handling specifi-
+cation
+X
+is satisfied by an error-handler
+H
+, denoted by
+X ▶ H
+, iff
+there exists S ∈ X such that S ▶ H .
+□
+5.2
+Mining Error-Handling Specifications
+Given the set of error handlers with their respective context and
+response sets, we use frequent itemset mining to infer likely error-
+handling specifications. Prior to mining, the error-handling contexts
+and responses are normalized using the partition function
+Π
+(§ 3).
+The mined specifications involve the normalized functions.
+The
+final step is to expand these specifications into a set of specifications
+by replacing each normalized function with the set of functions
+that maps to it.
+Frequent Itemset Mining.
+Let
+T
+be a set of transactions, where
+each transaction
+T ∈ T
+is a set of items. A frequent itemset mining
+algorithm returns the sets of items that frequently co-occur in the
+same transaction in T .
+Definition 5.16.
+The support of a set of items
+I
+given a set of
+transactions T is defined as supp(I )
+def
+=
+|
+{T ∈ T
+|
+I
+⊆ T }
+|
+.
+□
+Frequent itemset mining algorithms take the minimum support
+as a parameter,
+and return all sets of items that have a support
+greater than or equal to the minimum support.
+6
+SPECIFICATION MINING EVALUATION
+The experiments in this section are designed to answer the fol-
+lowing question: What is the effect of
+func2vec
+on the quality of
+mined specifications?
+Table 1: Number of error handlers.
+Implementation
+# Handlers
+Implementation
+# Handlers
+btrfs
+1884
+OCFS2
+2103
+ext2
+47
+Shared (VFS)
+887
+ext4
+680
+48 sound drivers
+3173
+GFS2
+539
+Total
+9313
+Table 2: Specification mining with and without function syn-
+onyms. We inspected the top 150 specifications for file sys-
+tems, and the top 50 for sound drivers.
+Synonyms?
+True
+False
+Min. Sup.
+Avg. Precision
+File Systems
+No
+125
+25
+31
+0.77
+Yes
+141
+9
+76
+0.92
+Drivers
+No
+44
+6
+6
+0.75
+Yes
+50
+0
+52
+1.0
+In this evaluation we focus on mining error-handling specifica-
+tions, which is considered to be an exceptionally difficult task [
+22
+].
+We mine error-handling specifications in 5 Linux file systems (btrfs,
+ext2, ext4, GFS2, and OCFS2), and 48 drivers. We chose Linux file
+systems and drivers because of the dire consequences of error han-
+dling defects, but the mining approach is general and can be applied
+to other parts of Linux, or to any C program that uses the return-
+code idiom for error handling. Frequent itemset mining is used to
+infer specifications in this evaluation, but function synonyms can
+be used to enhance a wide variety of mining techniques.
+As shown in Figure 6, our miner takes as input (1) error handler
+context and response sets, and (2) synonymous function informa-
+tion. Our implementation relies extensively on the LLVM compiler
+infrastructure [
+9
+]. To locate error handlers, we use a combination
+of an existing LLVM-based error-propagation analysis [
+21
+] and
+a custom clang plugin.
+Table 1 shows the total number of error
+handlers found.
+Function synonyms are identified by
+func2vec
+.
+Finally, Eclat/LCM [3] is used to compute frequent itemsets.
+6.1
+Error-Handling Specifications
+We mined specifications for file systems and drivers separately. In
+each case there were two runs:
+(1) without function synonyms,
+and (2) using function synonyms. Table 2 shows the results, which
+are described below. In each case, we ranked the specifications by
+number of supporting examples and inspected the highest ranked
+specifications. We measured the impact of function synonyms by
+counting the number of true specifications in the top 150 for file
+systems,
+and the top 50 for sound drivers.
+In addition to simply
+counting the number of true and false positives, we also calculated
+the average precision, which takes into account the relative position
+of true and false results [28].
+File Systems.
+Without synonyms,
+we found that 125 out of the
+150 top specifications were true, and the remaining 25 were false
+positives.
+With synonyms,
+141 out of 150 top were true.
+Of the
+top 150 specifications, 130 rely on function synonyms. This means
+that only 20 specifications had a high enough support without
+using synonyms to be in the top 150 (when using synonyms during
+8
+1
+static
+int
+gfs2_get_flags (...)
+{
+2
+...
+3
+gfs2_holder_init ( ip -> i_gl ,
+...) ;
+4
+error
+=
+gfs2_glock_nq (& gh ) ;
+5
+if
+( error )
+6
+//
+missing
+call
+to
+gfs2_holder_uninit
+7
+return
+error ;
+8
+...
+9
+gfs2_glock_dq (& gh ) ;
+10
+gfs2_holder_uninit (& gh ) ;
+11
+return
+error ;
+12
+}
+Figure 8: Bug found in GFS2. The function should not exit
+on line 7 without calling gfs2_holder_uninit.
+mining, not all specifications need make use of a synonym). Not only
+does the use of function synonyms yield more true specifications
+in the top 150, but the true specifications are more likely to appear
+higher in the list. This is reflected in the higher average precision
+score.
+Drivers.
+We inspected the top 50 specifications. Without synonyms,
+44 out of 50 top specifications are true specifications, and 6 are false
+positives. With synonyms, all 50 specifications are true; there are
+no false positives in the top 50. Of these 50, 46 made use of at least
+one pair of function synonyms. As with the file systems, we see that
+the quality of the mined specifications has improved, reducing the
+number of false positives making visible specifications that would
+otherwise be entirely unreported. This impact is also captured by
+the minimum support of any specification in the top 50,
+i.e.
+the
+support of the 50th specification in the ranked list. Without using
+synonyms,
+the 50th specification had a support of merely 6,
+in
+contrast to a support of 52 when using synonyms.
+Examples.
+Table 3 shows two examples of cross-implementation
+error-handling specifications.
+The first example shows a specifi-
+cation found across device drivers. All 14 functions found in the
+response sets (e.g.,
+snd_korg1212_free
+,
+snd_intel8x0_free
+, etc.)
+are function synonyms reported by
+func2vec
+. Being aware of these
+synonyms helps the miner to determine that these specifications
+can be merged. This results in a cross-implementation specification
+with a support of 57 and a rank of #4. Without synonyms, most of
+these individual specifications would not be reported at all, given a
+reasonable support threshold of 5. The second example is pulled
+from the GFS2 file system.
+In this case the miner and
+func2vec
+,
+working together, have identified the fact that the function
+gfs2_
+glock_dq_uninit
+is synonymous with the actions performed by
+calling both gfs2_glock_dq and gfs2_holder_uninit.
+6.2
+Specification Violations
+Our miner can also be used to find violations to the specifications
+reported. The GFS2 specification shown in Table 3 led to the dis-
+covery of two previously unknown bugs in the GFS2 file system.
+The patch we submitted to fix these bugs was accepted by Red Hat
+and merged into Linux version 4.7.
+Figure 8 shows one of the two bugs.
+The function first calls
+gfs2_holder_init
+,
+which acquires a reference to a glock.
+The
+function then attempts to enqueue this holder structure.
+On the
+normal path where
+gfs2_glock_nq
+succeeds, there is no problem,
+Table 3: Examples of cross-implementation error-handling
+specifications. For brevity, we have removed the pci_ prefix
+in pci_enable_device, and pci_request_regions.
+Supp.
+Specification
+11
+{enable_device, request_regions}
+e
+⇒ {snd_korg1212_free}
+7
+{enable_device, request_regions}
+e
+⇒ {snd_intel8x0_free}
+6
+{enable_device, request_regions}
+e
+⇒ {snd_intel8x0m_free}
+5
+{enable_device, request_regions}
+e
+⇒ {snd_cmipci_free}
+4
+{enable_device, request_regions}
+e
+⇒ {snd_ice1712_free}
+4
+{enable_device, request_regions}
+e
+⇒ {snd_vt1724_free}
+3
+{enable_device, request_regions, pci_ioremap_bar}
+e
+⇒
+{snd_cs4281_free}
+3
+{enable_device, request_regions}
+e
+⇒ {snd_via82xx_free}
+3
+{enable_device, request_regions}
+e
+⇒ {snd_ensoniq_free}
+3
+{enable_device, request_regions, pci_ioremap_bar}
+e
+⇒
+{snd_ad1889_free}
+2
+{enable_device, request_regions}
+e
+⇒ {snd_m3_free}
+2
+{enable_device, request_regions, pci_ioremap_bar}
+e
+⇒
+{snd_atiixp_free}
+2
+{enable_device, request_regions}
+e
+⇒ {snd_sonicvibes_free}
+2
+{enable_device, request_regions}
+e
+⇒ {snd_es1968_free}
+72
+{gfs2_holder_init}
+e
+⇒ {gfs2_holder_uninit}
+49
+{gfs2_holder_init}
+e
+⇒ {gfs2_holder_uninit, gfs2_glock_dq}
+45
+{gfs2_glock_nq}
+e
+⇒ {gfs2_holder_uninit}
+39
+{gfs2_holder_init, gfs2_glock_nq}
+e
+⇒ {gfs2_holder_uninit}
+29
+{gfs2_holder_init, gfs2_glock_nq}
+e
+⇒
+{gfs2_holder_uninit, gfs2_glock_dq}
+23
+{gfs2_holder_init}
+e
+⇒ {gfs2_glock_dq_uninit}
+22
+{gfs2_holder_init}
+e
+⇒
+{gfs2_glock_dq_uninit, gfs2_holder_uninit, gfs2_glock_dq}
+as at the end of the function
+gfs2_glock_dq
+and
+gsf2_holder_
+unininit
+are called.
+If
+gfs2_glock_nq
+fails on line 4,
+however,
+gfs2_holder_uninit
+is never called even though
+gfs2_holder_
+init
+completed successfully. As is common with error handling
+bugs, only in rare circumstances will this problem be encountered
+because it requires
+gfs2_glock_nq
+to fail.
+But when the bug is
+triggered the consequences are severe, resulting in an inaccurate
+reference count for the glock.
+7
+RELATED WORK
+Distributed Representations.
+Distributed representations have
+been extensively studied in natural language processing and cog-
+nition [
+7
+]. Recent advances have resulted in scalable approaches
+to computing such distributed representations (or vector embed-
+dings) given a corpus of sentences;
+for instance,
+word2vec
+[
+14
+],
+and Glove [
+17
+].
+DeepWalk [
+18
+] computes vector embeddings of
+nodes in a graph.
+DeepWalk is similar to
+func2vec
+in that they
+both use random walks to generate a corpus of sentences. However,
+DeepWalk generates walks consisting of nodes,
+while
+func2vec
+generates walks consisting of labels along edges.
+func2vec
+also
+abstracts the program code into a
+ℓ
+-PDS. Ye et al
+. [27]
+apply vector
+9
+representations to information retrieval in software engineering
+by using word2vec on documentation associated with code.
+Nguyen et al
+. [16]
+recently computed distributed representations
+of API functions using
+word2vec
+. They generated sentences using
+the program AST, as opposed to interprocedural paths, and used
+their technique to migrate API usages from Java to C#.
+Error-handling Specification Mining.
+One of the key develop-
+ments in the error-handling specification mining literature has been
+the use of normal paths to mine specifications for error-handling
+paths. This line of thought was first mentioned in [
+26
+], and was
+subsequently used in several other papers [1, 6, 22, 24, 26].
+Weimer and Necula
+[26]
+find association rules of
+the form
+FC
+a
+⇒ FC
+e
+, where function call
+FC
+a
+should be followed by call
+FC
+e
+,
+and
+FC
+e
+is found at least once in exception-handling code.
+Improving on [
+26
+], Thummalapenta and Xie
+[24]
+mine conditional
+association rules of the form
+(FC
+1
+c
+...FC
+n
+c
+) ∧ FC
+a
+⇒ FC
+1
+e
+...FC
+n
+e
+,
+which denotes a sequence of function calls prior to the target
+function
+FC
+a
+that throws an exception,
+and then a sequence of
+recovery function calls. Acharya and Xie
+[1]
+mine error-handling
+specifications from interprocedural traces. Cleanup functions are
+identified from error traces, which are then used along with normal
+traces to find specifications. Goues and Weimer
+[6]
+broaden this
+notion of trace reliability to include a number of other features (e.g.,
+execution frequency, cloning, code age, density, etc.), and signifi-
+cantly improve the false positive rate reported in [
+26
+]. Collectively,
+these approaches have been successful at finding defects in error-
+handling code that shares function calls with normal paths.
+But
+there exist functions that are only called on error paths, and that are
+only meaningful to Linux. Thus the correct use of these functions
+cannot be deduced from normal paths or outside programs, and
+they would be missed by the above approaches.
+Much of the work on error-handling specifications has focused
+on languages with exception-handling support, such as Java or C++.
+Several approaches [
+4
+,
+24
+–
+26
+] find error-handling specifications in
+Java programs using static analysis. Buse and Weimer
+[4]
+infer and
+characterize exception-causing conditions, which are then used as
+documentation. Weimer and Necula
+[25]
+use dataflow analysis to
+locate resource management mistakes in error-handling code and
+propose a language extension to improve reliability.
+A common
+mistake found might be the failure to release resources or to clean
+up properly along all paths. Identifying blocks of error-handling
+code in these languages is comparatively easy,
+but as we have
+shown, it is more challenging to distinguish between normal and
+error-handling paths in Linux.
+Implementation Inconsistencies.
+Engler et al
+. [5]
+use the notion
+of internal consistency to find programming errors. One of their
+techniques for finding related pieces of code relied on the idiomatic
+use of function pointers to define multiple implementations of a
+single interface. Min et al
+. [15]
+compare multiple file systems by
+leveraging the VFS interface to identify implementations of the
+same functionality. These are complementary to our work.
+8
+CONCLUSION
+We introduced the notion of function synonyms: functions that play
+a similar role in code. Synonymous functions might be syntactically
+dissimilar and might not be semantically equivalent. We presented
+func2vec
+, an algorithm that maps each function to a vector in a
+vector space such that function synonyms are grouped together.
+Specifically,
+func2vec
+computes a function embedding by training
+a neural network on sentences generated using random walks of
+the interprocedural control-flow graph of the program. We showed
+the effectiveness and scalability of
+func2vec
+by using 127 known
+classes of synonymous functions, with a total of 683 functions, in
+the Linux kernel.
+We also showed how
+func2vec
+can improve the quality of error-
+handling specifications. A challenge in mining these specifications
+is that because error-handling code is not as common as normal-
+execution code,
+the support of these specifications is often too
+low. Our experimental evaluation on 5 Linux file systems and 48
+Linux device drivers shows that this challenge is overcome by using
+func2vec
+to identify function synonyms across implementations,
+and then using this information to mine error-handling specifica-
+tions with higher support.
+ACKNOWLEDGMENTS
+This work was supported in part by NSF grant CCF-1464439, and
+Amazon Web Services Cloud Credits for Research.
+REFERENCES
+[1]
+Mithun Acharya and Tao Xie. 2009.
+Mining API Error-Handling Specifications
+from Source Code.
+In Fundamental Approaches to Software Engineering,
+12th
+International Conference, FASE 2009, Held as Part of the Joint European Confer-
+ences on Theory and Practice of Software,
+ETAPS 2009,
+York,
+UK,
+March 22-29,
+2009. Proceedings (Lecture Notes in Computer Science), Marsha Chechik and Mar-
+tin Wirsing (Eds.), Vol. 5503. Springer, 370–384.
+DOI:
+http://dx.doi.org/10.1007/
+978-3-642-00593-0_25
+[2]
+Enrique Amigó, Julio Gonzalo, Javier Artiles, and Felisa Verdejo. 2009.
+A com-
+parison of extrinsic clustering evaluation metrics based on formal constraints.
+Information retrieval 12, 4 (2009), 461–486.
+[3]
+Christian Borgelt.
+2016.
+Eclat/LCM - Frequent Item Set Mining.
+http://www.
+borgelt.net/eclat.html. (2016).
+Accessed: 2016-04-29.
+[4]
+Raymond P.
+L.
+Buse and Westley Weimer.
+2008.
+Automatic documentation
+inference for exceptions. In ISSTA, Barbara G. Ryder and Andreas Zeller (Eds.).
+ACM, 273–282.
+[5]
+Dawson R. Engler, David Yu Chen, and Andy Chou. 2001.
+Bugs as Inconsistent
+Behavior: A General Approach to Inferring Errors in Systems Code. In Proceedings
+of the 18th ACM Symposium on Operating System Principles, SOSP 2001, Chateau
+Lake Louise,
+Banff,
+Alberta,
+Canada,
+October 21-24,
+2001,
+Keith Marzullo and
+M. Satyanarayanan (Eds.). ACM, 57–72.
+DOI:
+http://dx.doi.org/10.1145/502034.
+502041
+[6]
+Claire Le Goues and Westley Weimer. 2009.
+Specification Mining with Few False
+Positives. In Tools and Algorithms for the Construction and Analysis of Systems,
+15th International Conference,
+TACAS 2009,
+Held as Part of the Joint European
+Conferences on Theory and Practice of Software, ETAPS 2009, York, UK, March 22-29,
+2009. Proceedings (Lecture Notes in Computer Science), Stefan Kowalewski and
+Anna Philippou (Eds.), Vol. 5505. Springer, 292–306.
+DOI:
+http://dx.doi.org/10.
+1007/978-3-642-00768-2_26
+[7]
+Geoffrey E Hinton, James L Mcclelland, and David E Rumelhart. 1986. Distributed
+representations, Parallel distributed processing: explorations in the microstruc-
+ture of cognition, vol. 1: foundations.
+(1986).
+[8]
+Mira Kajko-Mattsson. 2005. A survey of documentation practice within corrective
+maintenance.
+Empirical Software Engineering 10, 1 (2005), 31–55.
+[9]
+Chris Lattner and Vikram S. Adve. 2004.
+LLVM: A Compilation Framework for
+Lifelong Program Analysis & Transformation. In CGO’04. 75–88.
+[10]
+Timothy C Lethbridge, Janice Singer, and Andrew Forward. 2003.
+How software
+engineers use documentation: The state of the practice.
+IEEE software 20, 6 (2003),
+35–39.
+[11]
+Stanley Letovsky. 1987.
+Cognitive processes in program comprehension.
+Journal
+of Systems and software 7, 4 (1987), 325–339.
+[12]
+Walid Maalej, Rebecca Tiarks, Tobias Roehm, and Rainer Koschke. 2014.
+On the
+Comprehension of Program Comprehension.
+ACM Trans. Softw. Eng. Methodol.
+23, 4 (2014), 31:1–31:37.
+[13]
+Laurens van der Maaten and Geoffrey Hinton. 2008.
+Visualizing data using t-SNE.
+Journal of Machine Learning Research 9, Nov (2008), 2579–2605.
+10
+[14]
+Tomas Mikolov, Kai Chen, Greg S. Corrado, and Jeffrey Dean.
+2013.
+Efficient
+Estimation of Word Representations in Vector Space.
+(2013).
+http://arxiv.org/
+abs/1301.3781
+[15]
+Changwoo Min, Sanidhya Kashyap, Byoungyoung Lee, Chengyu Song, and Tae-
+soo Kim.
+2015.
+Cross-checking semantic correctness:
+the case of finding file
+system bugs. In Proceedings of the 25th Symposium on Operating Systems Princi-
+ples. ACM, 361–377.
+[16]
+Trong Duc Nguyen, Anh Tuan Nguyen, Hung Dang Phan, and Tien N. Nguyen.
+2017.
+Exploring API embedding for API usages and applications. In Proceedings of
+the 39th International Conference on Software Engineering, ICSE 2017, Buenos Aires,
+Argentina, May 20-28, 2017, Sebastián Uchitel, Alessandro Orso, and Martin P.
+Robillard (Eds.). IEEE / ACM, 438–449.
+DOI:
+http://dx.doi.org/10.1109/ICSE.2017.
+47
+[17]
+Jeffrey Pennington, Richard Socher, and Christopher D Manning. 2014.
+Glove:
+Global Vectors for Word Representation.. In EMNLP, Vol. 14. 1532–1543.
+[18]
+Bryan Perozzi, Rami Al-Rfou, and Steven Skiena. 2014. Deepwalk: Online learning
+of social representations. In Proceedings of the 20th ACM SIGKDD international
+conference on Knowledge discovery and data mining (KDD). ACM, 701–710.
+[19]
+Radim Řehůřek and Petr Sojka. 2010.
+Software Framework for Topic Modelling
+with Large Corpora. In Proceedings of the LREC 2010 Workshop on New Challenges
+for NLP Frameworks. ELRA, Valletta, Malta, 45–50.
+http://is.muni.cz/publication/
+884893/en.
+[20]
+Thomas W. Reps, Stefan Schwoon, Somesh Jha, and David Melski. 2005. Weighted
+pushdown systems and their application to interprocedural dataflow analysis.
+Sci. Comput. Program. 58, 1-2 (2005), 206–263.
+DOI:
+http://dx.doi.org/10.1016/j.
+scico.2005.02.009
+[21]
+Cindy Rubio-González, Haryadi S. Gunawi, Ben Liblit, Remzi H. Arpaci-Dusseau,
+and Andrea C. Arpaci-Dusseau. 2009.
+Error propagation analysis for file systems.
+In Proceedings of the 2009 ACM SIGPLAN Conference on Programming Language
+Design and Implementation, PLDI 2009, Dublin, Ireland, June 15-21, 2009, Michael
+Hind and Amer Diwan (Eds.).
+ACM,
+270–280.
+DOI:
+http://dx.doi.org/10.1145/
+1542476.1542506
+[22]
+Suman Saha, Jean-Pierre Lozi, Gaël Thomas, Julia L. Lawall, and Gilles Muller.
+2013.
+Hector: Detecting Resource-Release Omission Faults in error-handling
+code for systems software. In 2013 43rd Annual IEEE/IFIP International Conference
+on Dependable Systems and Networks (DSN), Budapest, Hungary, June 24-27, 2013.
+IEEE Computer Society, 1–12.
+DOI:
+http://dx.doi.org/10.1109/DSN.2013.6575307
+[23]
+Peter H. Schönemann. 1966.
+A generalized solution of the orthogonal procrustes
+problem.
+Psychometrika 31, 1 (1966), 1–10.
+[24]
+Suresh Thummalapenta and Tao Xie. 2009.
+Mining exception-handling rules as
+sequence association rules. In 31st International Conference on Software Engineer-
+ing, ICSE 2009, May 16-24, 2009, Vancouver, Canada, Proceedings. IEEE, 496–506.
+DOI:http://dx.doi.org/10.1109/ICSE.2009.5070548
+[25]
+Westley Weimer and George C.
+Necula.
+2004.
+Finding and preventing run-
+time error handling mistakes. In Proceedings of the 19th Annual ACM SIGPLAN
+Conference on Object-Oriented Programming, Systems, Languages, and Applications,
+OOPSLA 2004, October 24-28, 2004, Vancouver, BC, Canada, John M. Vlissides and
+Douglas C. Schmidt (Eds.). ACM, 419–431.
+DOI:
+http://dx.doi.org/10.1145/1028976.
+1029011
+[26]
+Westley Weimer and George C. Necula. 2005.
+Mining Temporal Specifications
+for Error Detection. In Tools and Algorithms for the Construction and Analysis
+of Systems, 11th International Conference, TACAS 2005, Held as Part of the Joint
+European Conferences on Theory and Practice of Software, ETAPS 2005, Edinburgh,
+UK,
+April
+4-8,
+2005,
+Proceedings (Lecture Notes in Computer Science),
+Nicolas
+Halbwachs and Lenore D. Zuck (Eds.), Vol. 3440. Springer, 461–476.
+DOI:
+http:
+//dx.doi.org/10.1007/978-3-540-31980-1_30
+[27]
+Xin Ye, Hui Shen, Xiao Ma, Razvan Bunescu, and Chang Liu. 2016.
+From word
+embeddings to document similarities for improved information retrieval in soft-
+ware engineering. In Proceedings of the 38th International Conference on Software
+Engineering. ACM, 404–415.
+[28]
+Mu Zhu. 2004.
+Recall, precision and average precision.
+Department of Statistics
+and Actuarial Science, University of Waterloo, Waterloo 2 (2004), 30.
+11

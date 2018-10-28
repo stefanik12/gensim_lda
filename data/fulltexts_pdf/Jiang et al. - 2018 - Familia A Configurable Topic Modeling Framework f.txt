@@ -1,0 +1,2168 @@
+﻿Familia: A Configurable Topic Modeling Framework for
+Industrial Text Engineering
+∗†
+DI JIANG
+‡
+, YUANFENG SONG
+‡
+, RONGZHONG LIAN, SIQI BAO, JINHUA PENG, HUANG
+HE, and HUA WU,
+Natural Language Processing Department, Baidu Inc., China
+In the last decade,
+a variety of topic models have been proposed for text engineering.
+However,
+except
+Probabilistic Latent Semantic Analysis (PLSA) and Latent Dirichlet Allocation (LDA), most of existing topic
+models are seldom applied or considered in industrial scenarios.
+This phenomenon is caused by the fact
+that there are very few convenient tools to support these topic models so far. Intimidated by the demanding
+expertise and labor of designing and implementing parameter inference algorithms, software engineers are
+prone to simply resort to PLSA/LDA, without considering whether it is proper for their problem at hand or
+not.
+In this paper, we propose a configurable topic modeling framework named Familia, in order to bridge the
+huge gap between academic research fruits and current industrial practice. Familia supports an important
+line of topic models that are widely applicable in text engineering scenarios. In order to relieve burdens of
+software engineers without knowledge of Bayesian networks, Familia is able to conduct automatic parameter
+inference for a variety of topic models. Simply through changing the data organization of Familia, software
+engineers are able to easily explore a broad spectrum of existing topic models or even design their own
+topic models, and find the one that best suits the problem at hand. With its superior extendability, Familia
+has a novel sampling mechanism that strikes balance between effectiveness and efficiency of parameter
+inference. Furthermore, Familia is essentially a big topic modeling framework that supports parallel parameter
+inference and distributed parameter storage. After being open-sourced at Github, Familia rapidly becomes
+the second most popular project in topic model area, and is widely used in both industrial community and
+academia. The utilities and necessity of Familia are demonstrated in real-life industrial applications. Familia
+would significantly enlarge software engineers’ arsenal of topic models and pave the way for utilizing highly
+customized topic models in real-life problems.
+CCS Concepts:
+• Information systems → Data mining
+;
+• Computing methodologies → Topic model-
+ing;
+Additional Key Words and Phrases: Text Semantics, Topic Model, Search Engine
+1
+INTRODUCTION
+Topic models have become one kind of important tools for text engineering. In the last decade, a wide
+spectrum of topic models has been proposed in academia and demonstrates promising performance.
+However, for industrial topic modeling, Probabilistic Latent Semantic Analysis (PLSA) [
+11
+] and
+Latent Dirichlet Allocation (LDA) [
+1
+] are the working horses so far [
+2
+][
+31
+].
+With the richness
+of the other topic models, to name a few, TOT [
+35
+], Bilingual Topic Model [
+7
+], Pair Model [
+14
+],
+GeoFolk [
+32
+], LATM [
+34
+] and Multifaceted Topic Model [
+33
+], we rarely witness employment of
+them in industrial applications. For example, Bilingual Topic Model [
+7
+] is more suitable for modeling
+the query log data in search engine area, however, there are very few convenient tools to support it
+so far.
+∗
+Some components of Familia have been open-sourced at Github (https://github.com/baidu/Familia).
+†
+This is an extended and revised version of a preliminary paper that was presented in arXiv [15].
+‡
+Both authors contributed equally to the paper
+Authors’ address: Di Jiang; Yuanfeng Song; Rongzhong Lian; Siqi Bao; Jinhua Peng; Huang He; Hua Wu, Natural Language
+Processing Department, Baidu Inc. China, {jiangdi,songyuanfeng,lianrongzhong,baosiqi,pengjinhua,hehuang,wu_hua}@
+baidu.com.
+arXiv:1808.03733v2 [cs.CL] 14 Aug 2018
+Fig. 1.
+Comparison between Familia and other topic modeling tools
+The huge gap between the abundance of topic models proposed in academia and their rare
+appearance in industry is mainly caused by the following reasons:
+(1)
+Most of existing topic models do not have implementation for convenient usage. Implementing
+these topic models from scratch is both time-consuming and error-prone;
+(2)
+Although many tasks cannot be suitably supported by existing topic models, designing a
+proper topic model and the corresponding parameter inference algorithms are daunting for
+engineers;
+(3)
+Most advanced techniques for efficient parameter inference are exclusively designed for
+PLSA/LDA.
+Lacking highly efficient parameter inference algorithm impedes most topic
+models’ applicability in industry.
+Due to the above reasons, engineers’ topic modeling choice is usually limited to PLSA/LDA, which,
+however,
+may not fit well their task at hand.
+Such improper practice heavily undermines the
+effectiveness of topic models in real-life applications.
+In this paper, we propose a novel topic modeling framework, Familia, which is easily configurable
+and can be utilized as off-the-shelf tool for software engineers without much knowledge of Bayesian
+networks. Compared with other industrial topic modeling tools (Fig. 1), Familia supports a broad
+line of topic models, which are of significant presence in the literature as well as heavily demanded
+in industry.
+Software engineers can investigate many topic models for their tasks at hand by
+simply changing the training data organization. Moreover, Familia takes over all the burdens of
+parameter inference, parallel computing and post-modeling utilities. Specifically, Familia contains
+three parameter inference methods: Gibbs sampling (GS) and Metropolis Hastings (MH) with alias
+table [
+19
+], based on which a hybrid sampling mechanism is also designed to strike a balance between
+effectiveness and efficiency. To meet the requirements of topic modeling for massive data, Familia is
+inherently built upon the Parameter Server (PS) architecture [
+5
+][
+38
+][
+20
+]. Multiple computing nodes
+can be harnessed for parallel parameter inference and distributed storage. Furthermore, Familia
+contains multiple built-in post-modeling utilities such as dimensionality reduction and semantic
+matching, which can be readily applied in many downstream applications.
+The contributions of this paper are summarized as follows:
+(1)
+We identify the huge gap between topic model research in academia and industrial practice
+of topic modeling. We propose a novel framework, named Familia, which bridges this gap.
+To the best of our knowledge, it is the first framework that supports multiple topic models
+in a user-friendly manner. A variety of topic models can be modeled by Familia, to name a
+few, LDA [
+1
+], Supervised LDA [
+23
+], Sentence LDA [
+16
+], TOT [
+35
+], Bilingual Topic Model [
+7
+],
+Pair Model [
+14
+], GeoFolk [
+32
+], LATM [
+34
+] and Multifaceted Topic Model [
+33
+]. Besides these
+2
+existing models, users can design their own topic models for specific tasks as long as they
+follow the generative process of Familia.
+(2)
+We systematically investigate the performance of GS and MH with different topic models.
+We further propose a hybrid sampling mechanism to balance the effectiveness and efficiency
+of parameter inference. Based on the earned insights, we provide practical suggestions on
+choosing sampling method for different topic models.
+(3)
+We demonstrate the utilities and necessity of Familia in several real-life industrial cases
+and application that impact millions of users, which also acts like a guide for users to select
+appropriate topic models for their tasks and apply them in a proper way using Familia.
+Currently Familia has been widely used in both industrial community and academia, and has
+become the second most popular project (with more than 1.3k stars and 350 forks) among all
+the open-sourced topic model tools in Github.
+The rest of this paper is organized as follows.
+In Section 2,
+we review the related work.
+In
+Section 3,
+we describe the utilities of topic models.
+In Section 4,
+we discuss the mathematical
+foundations of Familia. In Section 5, we detail the parameter inference algorithms. In Section 6, we
+describe some issues of system implementation. In Section 7, we present the experimental results.
+Then we discuss several industrial cases in Sections 8. Finally, we conclude this paper in Section 9.
+2
+RELATED WORK
+The present work is related to a wide range of topic models in the literature and the recent advances
+of parameter inference algorithms of LDA.
+2.1
+Topic Models
+LDA [
+1
+] plays an important role in the field of topic modeling. In the last decade, many extensions of
+LDA have been proposed to meet specific needs of many applications. For example, [
+35
+] presented
+the Topic-over-Time (TOT) that captures latent topics and their changes over time. Supervised LDA
+[
+23
+] captured the regularity of labelled documents by introducing response signals. Location Aware
+Topic Model (LATM) [
+34
+] is designed to explicitly model the information between locations and
+words. GeoFolk [
+32
+] focuses on discovering latent topics from social media by using text features as
+well as spatial information. [
+16
+] proposed Sentence LDA that assumes all words from one sentence
+are generated from one topic. A bilingual topic model was proposed in [
+7
+] as a language modeling
+framework,
+in which the topics are learned from query-title pairs.
+Multi-Faceted Topic Model
+(MfTM) [
+33
+] was proposed to capture the temporal characteristics of each topic by jointly modeling
+latent semantics among terms and entities. Although the aforementioned ones take only a small
+portion of topic models in the literature, they are suitable choices in many industrial scenarios.
+However, to the best of our knowledge, none of them are supported by existing industrial topic
+model systems such as PLDA+ [
+22
+], Peacock [
+36
+] and Gensim [
+28
+]. However, compared to Familia,
+these existing systems only support limited kinds of topic models, and to the best of our knowledge,
+none of above topic models except LDA are supported by existing systems.
+2.2
+Advanced Parameter Inference of LDA
+The latest advances of parameter inference of LDA roughly fall into two major categories:
+(1)
+Parallel parameter inference; (2) Efficient sampling algorithms. We review the related works from
+the two categories respectively.
+2.2.1
+Parallel Parameter Inference.
+Parallelization is a straightforward approach for speeding
+up parameter inference. [
+24
+] proposed distributed algorithm for LDA. Their algorithm partitioned
+the data across separate processors and conduct inference in a parallel approach. Each processor
+3
+performs Gibbs sampling over local data and then a global synchronization merges updates from
+all processors. It was shown that the converged probability for distributed learning is similar to
+that obtained with single-processor. Thereafter, [
+36
+] proposed a distributed topic modeling system
+named Peacock, which is a hierarchical distributed architecture for training LDA. More recently,
+[
+40
+] proposed a model-parallel scheme that leverages dependency to efficiently train LDA and the
+scheme is frugal on memory consumption and network communication.
+2.2.2
+Efficient Sampling Algorithms.
+Another major research trend of LDA parameter inference
+is to design efficient sampling algorithms. Conventional Gibbs sampling [
+8
+] has a complexity of
+K
+per sample when the topic amount is set to
+K
+. [
+26
+] introduced FastLDA, which has a complexity of
+significantly less than
+K
+per sample. [
+39
+] proposed SparseLDA that contains both an algorithm
+and data structures for efficiently conducting Gibbs sampling. [
+19
+] proposed an algorithm which
+achieves
+O(K
+d
+)
+sampling complexity, where
+K
+d
+is the instantiated topics in the document. As one
+step further,
+[
+40
+] proposed LightLDA,
+which uses an Metropolis-Hastings sampling algorithm
+and achieves
+O(
+1
+)
+time complexity per token. Recently, [
+3
+] proposed WarpLDA, which achieves
+both
+O(
+1
+)
+time complexity per token and
+O(K)
+scope of random access. With their effectiveness,
+these techniques are exclusively designed for LDA. Their applicability has never been explored in a
+broader scope of topic models, on which how to conduct efficient sampling is still an open question.
+2.2.3
+Variational Bayesian Inference.
+Variational inference has also been widely used for approx-
+imating intractable integrals arising in Bayesian inference. The concept is initially from statistical
+physics, and [
+25
+] adopts it to probabilistic inference, which fits a neural network using Mean-field
+variational inference methods. Meanwhile, [
+9
+] also combines variational algorithms with neural
+network models. In early 1990s, variational inference methods are generalized to many probabilistic
+models [
+29
+] [
+13
+] and [
+17
+]. LDA [
+1
+] relies on Mean-field variational inference method before various
+sampling algorithms becoming popular. Recent works in this area focus on making variational
+inference methods more scalable, easy to derive and supporting more complex models[
+18
+] [
+27
+].
+For example, stochastic variational inference [10] scales variational inference to massive data.
+3
+INDUSTRIAL UTILITIES
+Based on a comprehensive survey of industrial applications, we find that the industrial utilities of
+topic models essentially fall into two major categories: (1) dimensionality reduction; (2) semantic
+matching. In this section, we describe the details of these two utilities, which motivate the design
+philosophy of Familia.
+3.1
+Dimensionality Reduction
+Topic models are powerful tools for representing high dimensional data in a lower dimension [
+39
+].
+Through applying topic models, each “document” can be represented with its topic distribution.
+This can be considered as dimensionality reduction, since the topic space is typically much smaller
+than the original data space. The topical representation of each document can be conveniently
+utilized as features in downstream tasks such as document clustering and document classification
+[1].
+3.2
+Semantic Matching
+Another utility of topic models is semantic matching, i.e., calculating a score to indicate the relevance
+between a “query”
+q
+and a “document”
+d
+[
+37
+][
+31
+]. There exist two paradigms of deriving the score.
+The first one is based upon Jensen-Shannon divergence [21]:
+4
+Score(q, d) = 1 − JSD(t
+q
+∥ t
+d
+) = 1 −
+1
+2
+D(t
+q
+∥ M) −
+1
+2
+D(t
+d
+∥ M),
+(1)
+where
+t
+q
+is the topic distribution of
+q
+,
+t
+d
+is the topic distribution of
+d
+,
+M =
+1
+2
+(t
+q
++ t
+d
+)
+and
+D(·)
+stands for Kullback-Leibler divergence. A more convenient approach is based on calculating the
+overall probability of each item in q generated by d:
+Score(q, d) =
+Ö
+w ∈q
+P (w |d) =
+Ö
+w ∈q
+Õ
+z
+P (w |z)P (z |d),
+(2)
+where
+w
+is the item in
+q
+,
+P (z |d)
+is the probability of
+d
+generating
+z
+and
+P (w |z)
+is the probability
+of z generating w.
+4
+GENERATIVE ASSUMPTION
+In this section, we discuss the mathematical foundations of Familia. Since Familia aims to define
+the generative process of a series of topic models, we abstract the data organization and structure
+shared by all these models. We describe Familia in conventional topic model terminologies, and
+three newly introduced terminologies are formally defined as follows:
+(1)
+blob: the basic unit in which all the items are generated by the same topic, such as a sentence for
+SentenceLDA.
+(2)
+factor: the basic unit in which all the item are generated by the same distribution and the same
+topic; for example, all the words in one sentence usually comprise one factor for TOT. In terms of
+the distribution being continuous or discrete, the factors can be further categorized as continuous
+factor and discrete factor. For example, all the timestamps in one sentence usually belong to the
+same continuous factor for TOT.
+(3)
+item: the basic unit of an observed variable, such as a word, a timestamp, etc
+The generative process is depicted in Algorithm 1. In order to generate a document
+d
+, we first
+draw
+θ
+d
+, which is a Multinomial distribution over topics. Then, for each blob, we draw a topic
+z
+.
+Based upon
+z
+, for each discrete factor
+i
+, we generate discrete items
+u
+according to the corresponding
+discrete distribution
+ϕ
+i z
+. The continuous items are generated in an analogous approach. Finally, if
+the topic model needs to capture the supervised signal (e.g., the category of the document or the
+rating of the quality of the document), the signal is further drawn from a Gaussian distribution
+that uses
+z
+d
+as parameters. Specifically,
+z
+d
+=
+1
+N
+Í
+N
+n=1
+z
+n
+, where
+N
+is the amount of tokens in the
+document.
+It is easy to see that Algorithm 1 is a generic process for many topic models.
+A variety of
+topic models can be modeled by Algorithm 1 ,
+to name a few,
+LDA[
+1
+] ,
+Supervised LDA[
+23
+],
+Sentence LDA[
+16
+], TOT[
+35
+], Bilingual Topic Model[
+7
+], Pair Model[
+14
+], GeoFolk [
+32
+], LATM[
+34
+]
+and Multifaceted Topic Model[
+33
+] . Besides these existing models, users can design their own topic
+models for specific tasks as long as they follow the generative process in Algorithm 1. It is not
+difficult to see that the topic models supported by Familia can be conveniently applied to scenarios
+where the two utilities discussed in Section 3 are used.
+5
+PARAMETER INFERENCE
+We proceed to discuss how to conduct parameter inference for Familia. We detail the mathematical
+derivation for the most complicated scenario where there simultaneously exist discrete factors,
+continuous factors and the supervised response. The other simpler scenarios can be trivially derived
+based upon the following discussion. The generative process of Algorithm 1 can be By translated
+into joint distribution, and the objective is to maximize the likelihood of the observed items and
+5
+ALGORITHM 1: Generative Process of Familia
+for each topic k ∈ 1, ..., K do
+for each discrete factor i
+∈ 1, ..., M do
+draw a discrete factor distribution ϕ
+ik
+∼ Dirichlet(β
+i
+)
+end
+for each continuous factor j
+∈ 1, ..., N do
+generate a continuous factor distribution ψ
+jk
+end
+end
+for each document d ∈ 1, ..., D do
+generate topic distribution θ
+d
+∼ Dirichlet(α )
+for each blob b in d do
+generate a topic z ∼ θ
+d
+for each discrete factor i
+∈ 1, ..., M do
+generate items u ∼ ϕ
+i z
+end
+if there exists continuous factor then
+for each continuous factor j
+∈ 1, ..., N do
+generate items v ∼ ψ
+j z
+end
+end
+end
+if
+there exists supervised signal then
+draw signal y
+d
+∼ P(y
+d
+|z
+d
+, η, σ
+2
+), where P (y
+d
+|z
+d
+, η, σ
+2
+) = N (y
+d
+|η
+T
+z
+d
+, σ
+2
+)
+end
+end
+the supervised signals. The complete likelihood
+P (u
+1...M
+, v
+1. . .N
+, y
+1. . .D
+, z|α , β, Ψ, η, σ )
+is presented
+as follows:
+P (u
+1...M
+, v
+1. . .N
+, y
+1. . .D
+, z|α , β, Ψ, η, σ ) =
+P (z|α )
+M
+Ö
+i=1
+P (u
+i
+|z, β )
+| {z }
+d iscr e t e
+f ac t or s
+N
+Ö
+j=1
+P (v
+j
+|z, Ψ)
+| {z }
+cont inuous
+f ac t or s
+D
+Ö
+d=1
+P (y
+d
+|z
+d
+, η, σ
+2
+)
+| {z }
+super vised
+siдnal
+=
+
+Γ(
+Í
+T
+z=1
+α
+z
+)
+Î
+T
+z=1
+Γ(α
+z
+)
+
+D
+D
+Ö
+d=1
+Î
+T
+z=1
+Γ(m
+dz
++ α
+z
+)
+Γ(
+Í
+T
+z=1
+(m
+dz
++ α
+z
+))
+M
+Ö
+i =i
+
+Γ(
+Í
+U
+i
+u
+i
+=1
+β
+u
+i
+)
+Î
+U
+i
+u
+i
+=1
+Γ(β
+u
+i
+)
+
+T
+T
+Ö
+z=1
+Î
+U
+i
+u
+i
+=1
+Γ(n
+zu
+i
++ β
+u
+i
+)
+Γ(
+Í
+U
+i
+u=1
+(n
+zu
+i
++ β
+u
+i
+))
+N
+Ö
+j=1
+D
+Ö
+d=1
+L
+d
+Ö
+l =1
+P (v
+jd l
+|ψ
+z
+jd l
+)
+D
+Ö
+d=1
+P (y
+d
+|z
+d
+, η, σ
+2
+)
+(3)
+where
+m
+dz
+denotes the number of sentences that are generated by topic
+z
+in document
+d
+.
+n
+zv
+is the
+number of times that
+v
+is generated by topic
+z
+through Multinomial distribution and
+Γ(·)
+indicates
+Gamma function. The goal of parameter inference is to estimate
+Θ
+,
+Φ
+,
+Ψ
+,
+η
+and
+σ
+in Algorithm 1
+through sampling the latent topic
+z
+of each blob. In this following two subsections, we describe
+how to sample
+z
+through Gibbs sampling and Metropolis Hastings based on Eq. (3). Utilizing the
+6
+sampled
+z
+to estimate the parameters of discrete distributions is well-documented in literature [
+16
+].
+We will detail how to utilize
+z
+to estimate the parameters of continuous distribution in Section 5.3.
+5.1
+Gibbs Sampling
+According to Bayes rule and Eq. (3), the full conditional of blob
+b
+belonging to topic
+k
+in document
+d is as follows:
+P (z
+b
+= k |u
+1...M
+, v
+1. . .N
+, y
+1. . .D
+, z
+−b
+, α , β, Ψ, η, σ ) =
+m
+dk
++ α
+k
+Í
+K
+k
+′
+=1
+(m
+dk
+′
++ α
+k
+′
+)
+M
+Ö
+i =i
+Γ(
+Í
+U
+i
+u=1
+(n
+ku
++ β
+u
+))
+Γ(
+Í
+U
+i
+u=1
+(n
+ku
++ β
+u
++ N
+bu
+))
+Ö
+u
+i
+∈b
+Γ(n
+ku
+i
++ β
+u
+i
++ N
+bu
+i
+)
+Γ(n
+ku
+i
++ β
+u
+i
+)
+N
+Ö
+j=1
+L
+b
+Ö
+l =1
+P (v
+j l
+|z
+k
+) × P (y
+d
+|z
+d
+, η, σ
+2
+)
+(4)
+In order to sample a new topic for the blob
+b
+, we need to calculate the above conditional probability
+for all topics and conduct normalization. Hence, the time complexity for sampling a topic for a
+blob is O(K ), where K is the topic amount.
+5.2
+Metropolis Hastings
+If the topic amount
+K
+is large, the
+O(K)
+per blob complexity is time-consuming. We now propose
+an efficient alternative based upon Metropolis Hastings (MH), which has been successfully applied
+in [
+19
+] [
+40
+] for LDA. For the convenience of designing proper proposals for MH, we first conduct
+approximation to Eq. (4) as follows:
+Q(z
+b
+= k |u
+1...M
+, v
+1. . .N
+, y
+1. . .D
+, z
+−b
+, α , β, Ψ, η, σ ) ≈
+m
+dk
++ α
+k
+Í
+K
+k
+′
+=1
+(m
+dk
+′
++ α
+k
+′
+)
+| {z }
+document-topic proposal
+M
+Ö
+i =i
+Ö
+u
+i
+∈b
+n
+ku
+i
++ β
+u
+i
+Í
+U
+i
+u=1
+(n
+ku
++ β
+u
+)
+| {z }
+discrete item-topic proposal
+N
+Ö
+j=1
+L
+b
+Ö
+l =1
+P (v
+j l
+|z
+k
+)
+| {z }
+continuous Item-topic proposal
+×
+P (y
+d
+|z
+d
+, η, σ
+2
+)
+| {z }
+supervised signal proposal
+(5)
+The above equation approximates Eq. (4) when an item appears multiple times with in a blob. Based
+on this approximation, we discuss the MH sampling method for Familia. MH needs proper proposals
+to work. We now discuss four proposals which fall into two major categories: document-based
+proposal and item-based proposal.
+• Document-based Proposals:
+The first document-specific proposal is the document-topic proposal:
+Q
+d
+(k) ∝
+m
+dk
++ α
+k
+Í
+K
+k
+′
+=1
+(m
+dk
+′
++ α
+k
+′
+)
+(6)
+According to the MH algorithm, the acceptance ratio from state i to j is:
+min {1,
+Q(j)Q
+d
+(i )
+Q(i)Q
+d
+(j )
+}
+(7)
+7
+The second document-specific proposal is the supervised signal proposal:
+Q
+y
+d
+(k) ∝ P (y
+d
+|z
+d
+, η, σ
+2
+)
+(8)
+According to the MH algorithm, the acceptance ratio from state i to j is:
+min {1,
+Q(j)Q
+y
+d
+(i )
+Q(i)Q
+y
+d
+(j )
+}
+(9)
+• Item-based Proposals:
+The first item-based proposal is the discrete item-topic proposal, which is denoted as Q
+u
+(k ):
+Q
+u
+(k) ∝
+n
+ku
+i
++ β
+u
+i
+Í
+U
+i
+u=1
+(n
+ku
++ β
+u
+)
+(10)
+According to the MH algorithm, the acceptance ratio from state i to j is:
+min {1,
+Q(j)Q
+u
+(i )
+Q(i)Q
+u
+(j )
+}
+(11)
+The second item-based proposal is the continuous Item-topic proposal, which is denoted as
+Q
+v
+(k)
+:
+Q
+v
+(k) ∝ P (v
+j l
+|z
+k
+)
+(12)
+According to the MH algorithm, the acceptance ratio from state i to j is:
+min {1,
+Q(j)Q
+v
+(i )
+Q(i)Q
+v
+(j )
+}
+(13)
+It is easy to see that each proposal encourages the sparsity of their corresponding component
+in Eq.
+(5).
+For fast sampling from each proposal,
+a data structure named alias table [
+19
+][
+40
+] is
+utilized to reduce the sampling complexity (see Fig.
+2).
+Theoretically,
+an alias table need to be
+created for each document and each item. A caveat is that document-topic proposal does not need
+to explicitly establish alias table [
+40
+], because sampling from the document-topic proposal can
+be cheaply simulated through returning the topic assignment of a randomly sampled blob in the
+document. The MH method is formally presented in Algorithm 2. When sampling a new topic for a
+blob, the algorithm sequentially utilizes document-based proposals and item-based proposals to
+update the topic candidates. For each topic candidate, the algorithm chooses whether to accept
+it according to the acceptance ratio,
+just like the standard Metropolis Hastings.
+Note that this
+process can be repeated for several iterations and each iteration is formally defined as an MH step.
+In the experiment section, we will show the extent to which the number of MH steps can affect the
+performance of the MH method.
+Fig.
+2.
+An example of Alias Table construction,
+which transform a non-uniform sampling process into a
+uniform sampling one. The whole process enables O(1) amortized sampling complexity.
+8
+ALGORITHM 2: Metropolis Hastings of Familia
+for each document d ∈ 1, ..., D do
+for each blob b in d do
+for a predefined number of MH steps do
+propose a topic z
+1
+based on document-topic proposal according to Eq. (6)
+update the topic to z
+′
+1
+according to acceptance ratio according to Eq. (7)
+propose a topic z
+2
+based on alias table of y
+d
+according to Eq. (8)
+update the topic to z
+′
+2
+according to acceptance ratio according to Eq. (9)
+for each discrete factor i
+∈ 1, ..., M do
+for item u in this factor do
+propose a topic z
+u3
+based on alias table of u according to Eq. (10)
+update the topic to z
+′
+u3
+according to acceptance ratio according to Eq. (11)
+end
+end
+for each continuous factor j
+∈ 1, ..., N do
+for item v in this factor do
+propose a topic z
+v4
+based on alias table of v according to Eq. (12)
+update the topic to z
+′
+v4
+according to acceptance ratio according to Eq. (13)
+end
+end
+end
+end
+end
+5.3
+Issues of Continuous Distributions
+For topic models with continuous factors, updating the parameters of continuous distributions is
+computationally expensive, especially for distributed environment in which the synchronization of
+these parameters is needed. In Familia, we choose a well-adopted practice [
+35
+][
+32
+]: we update the
+parameters of the continuous distributions after each major iteration (i.e., scanning through the
+whole corpus of training data). For Gaussian distributions, we straightforwardly update the param-
+eters by the sample mean and sample variance. If the continuous distribution is Beta distribution
+Beta(ψ
+k 1
+, ψ
+k 2
+), we update the parameters ψ
+k 1
+and ψ
+k 2
+for the kth topic as follows:
+ψ
+k 1
+=
+¯
+s
+k
+(
+¯
+s
+k
+(1 −
+¯
+s
+k
+)
+v
+2
+k
+− 1),
+(14)
+ψ
+k 2
+= (1 −
+¯
+s
+k
+)(
+¯
+s
+k
+(1 −
+¯
+s
+k
+)
+v
+2
+k
+− 1),
+(15)
+where
+¯
+s
+k
+and
+v
+2
+k
+denote the sample mean and biased sample variance of topic
+k
+’s items. As for
+supervised signals [
+23
+], we denote the
+(D × K)
+matrix whose
+d
+th row is
+z
+T
+d
+as
+A
+, and the
+D ×
+1
+vector of supervised signals as Y , the η and σ are updated as follows:
+η = (A
+T
+A)
+−1
+A
+T
+Y
+(16)
+σ =
+1
+D
+(Y
+T
+Y − Y
+T
+A(A
+T
+A)
+−1
+A
+T
+Y )
+(17)
+In practice,
+the above matrix manipulation can be approximated by techniques to reduce the
+computational cost and scale to large data set.
+9
+5.4
+Hybrid Sampling Mechanism
+So far, we have discussed two basic sampling techniques that are supported in Familia. The major
+advantage of MH is efficiency: the per blob sampling complexity can be reduced as low as
+O(
+1
+)
+for
+some topic models through utilizing alias tables. However, as we will show later in Section 7, the
+models trained by GS are usually better than MH. Hence, it is desirable to design a mechanism that
+tradeoffs the efficiency of MH and effectiveness of GS. To meet this requirement, Familia enables
+the users to choose the sampling method for each iteration. Such flexibility makes it possible to
+investigate many hybrid sampling mechanisms which collectively apply GS and MH.
+6
+SYSTEM IMPLEMENTATION
+In this section, we describe some important issues about system implementation of Familia. In
+Section 6.1, we describe the data organization of Familia. In Section 6.2, we discuss the data and
+parameter storage.
+6.1
+Data Organization
+In Familia, data organization is critical for automating parameter inference because it provides
+basic information of Bayesian network structure of the topic model. Based on data organization,
+Familia can deduce each component in Eq. (4) and Eq. (5) and then conduct parameter inferences
+without imposing any burden on human to derive the mathematical equations. Documents are
+grouped as blocks to facilitate distributed computing. In each document, the blob is utilized as the
+basic unit whose content shares the same topic. A blob contains multiple factors and a factor can
+contain any amount of items. The data organization of Familia is presented as follows:
+block
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+document
+1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+supervised signal
+blob
+1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+factor
+1
+
+
+
+
+
+
+
+
+item
+1
+item
+2
+...
+factor
+2
+......
+blob
+2
+......
+document
+2
+......
+The above data organization is generic. In practice, the “item” in Familia data organization can be
+specialized into words(discrete), tags(discrete) or even timestamps(continuous).
+Now we demonstrate how to specialize the above data organization for several common topic
+models in Figure 3. For example, the data organization of LDA is described in Figure 3a.
+LDA only contains one kind of items: the words.
+It assumes that words are exchangeable in
+document. Hence, each blob only contains one factor and each factor contains one single word.
+The data organization of TOT is described in Figure 3d.
+Each blob in TOT data organization contains two kinds of factors. Relying on such data organi-
+zation, it is easy to see that GS and MH discussed in Section 5 can be automatically conducted for
+topic models which are described by Algorithm 1.
+10
+(a) LDA
+(b) Sentence LDA
+(c) Supervised LDA
+(d) TOT
+Fig. 3.
+Common Topic Models Examples and their Corresponding Data Organization in Familia
+Fig. 4.
+Parameter Server Architecture
+6.2
+Data and Parameter Storage
+Familia adopts classic Parameter Server (PS) [
+38
+][
+20
+] architecture (see Figure 4) for distributed
+computing. Both training data and topic model parameters are distributed on multiple computing
+nodes. The training data (i.e., the training data blocks) are sharded by their identifiers on workers
+while topic model parameters of discrete distributions are sharded by item identifiers on servers.
+Each worker only pulls the parameters that are needed for processing the current block to the
+local memory. After the sampling procedure, each worker pushes the update information back to
+servers. Detailed description of PS is beyond the scope of this paper, interested readers may refer
+to [38][20] for more information.
+7
+EXPERIMENTS
+In this section, we report the experimental results. We first investigate the performance of a series
+of sampling methods across topic models and data sets in Section 7.1. Then we demonstrate the
+scalability of Familia on multiple computing nodes in Section 7.2.
+7.1
+Performance of Sampling Methods
+We systematically investigate the performance of different sampling methods in terms of LDA,
+Sentence LDA and TOT. In order to minimize effect beyond algorithmic performance, experiments
+in this subsection are conducted on a single computing node. NIPS dataset from UCI Bag of Words
+11
+(a) LDA (K=50)
+(b) LDA (K=100)
+(c) Sentence LDA (K=50)
+(d) Sentence LDA (K=100)
+(e) TOT (K=50)
+(f) TOT (K=100)
+Fig. 5.
+Comparison of Sampling Methods (Iteration) (Best Viewed in Color)
+Data Set
+1
+is utilized for experiments of LDA. Amazon data
+2
+is utilized for Sentence LDA. As for TOT,
+we utilize the 21 decades of U.S. Presidential State-of-the-Union Addresses
+3
+for the experiments.
+Due to space limitation, we present the results when the topic amount is set to 50 and 100. Similar
+insights can be obtained when the topic amount is set to other values.
+The log likelihood of each sampling methods is plotted against iteration in Figure 5 and against
+time in Figure 6. Therein, MH-step1 is MH with only one MH step. Analogously, MH-step2 and
+MH-step4 are MH with 2 and 4 MH steps respectively.
+4MH-1GS is the sampling method that
+performs one iteration of GS after every 4 iterations of MH. 9MH-1GS performs one iteration of
+GS after every 9 iterations of MH. GS-to-MH starts with GS for the first 100 iterations and then
+switches to MH for the remaining iterations. MH-to-GS starts with MH for the first 100 iterations
+and then switches to MH for the remaining iterations. Note that space limitation prevents us from
+presenting more parameter settings for each sampling method.
+However,
+the results shown in
+Figures 5 and 6 are sufficient to showcase our insights obtained from this study.
+We first investigate the performance of MH in terms of the number of steps. From Figure 5, we
+observe that larger MH steps usually result in better performance. In most cases, 4-step is better
+than 2-step and further better than 1-step. The experimental results of all the three topic models
+verify the above argument. We proceed to compare the performance of different sampling methods.
+A possible explanation is that more MH steps help the sampling method to explore more states if
+the Markov chain has low conductance.
+For these three topic models, 4MH-1GS usually achieves the best performance while MH (includ-
+ing all the three MH methods with different steps) usually demonstrates the worst performance.
+The performance of GS and the other hybrid methods is between 4MH-1GS and MH. 4MH-1GS
+1
+https://archive.ics.uci.edu/ml/datasets/Bag+of+Words
+2
+http://uilab.kaist.ac.kr/research/WSDM11
+3
+http://www.gutenberg.org/dirs/etext04/suall11.txt
+12
+(a) LDA (K=50)
+(b) LDA (K=100)
+(c) Sentence LDA (K=50)
+(d) Sentence LDA (K=100)
+(e) TOT (K=50)
+(f) TOT (K=100)
+Fig. 6.
+Comparison of Sampling Methods (Time) (Best Viewed in Color)
+is better than 9MH-1GS, showing that fairly high frequency of switching MH and GS is effective
+to improve the model quality. The hybrid methods have higher chance to prevent the sampling
+algorithm getting “stuck” in a subset of Markov chain states. Hence, MH is not a good choice if the
+quality of the resultant model is highly valued.
+From Figure 6, we observe that MH-step1 achieves a fairly good model within the least time
+while GS takes the longest time.
+The time consumed by hybrid sampling methods is between
+MH-step1 and GS. The superiority of MH in efficiency is achieved by reusing the alias tables, which
+can reduce the amortized time complexity to as low as
+O(
+1
+)
+per blob. In contrast, the complexity of
+GS is O(K ) per blob, since it needs to calculate the probability for each topic.
+Based upon above observations, we obtain the following important insights, which are valid
+across the three different topic models:
+1.
+GS achieves higher likelihood than MH while MH
+consumes less time to achieve a fairly good result; 2. Some hybrid sampling methods can achieve
+even better result than GS while consumes less time than GS. 3. If the quality of the model is the
+emphasis, hybrid sampling methods like 4MH-1GS should be chosen because it achieves the best
+model quality with fairly good efficiency.
+If efficiency is the focus,
+MH may be chosen since it
+consumes the least time to generate a reasonably good model.
+7.2
+Scalability of Familia
+We proceed to demonstrate the scalability of Familia with 1, 5, 10 and 20 computing nodes. The
+log likelihood of the three topic models trained on 10 nodes is presented in Figure 7, from which
+we observe that the results obtained from 10 nodes is aligned with those from a single node,
+showing that the quality of these three models trained by different sampling methods is not heavily
+affected by the distributed environment. Although all sampling methods achieve slightly lower
+log likelihood than those of single node,
+such degradation is modest in practice.
+In distributed
+environment, 4MH-1GS is the method with the best performance and MH methods usually achieve
+13
+(a) LDA (node=10, K=100)
+(b) Sentence LDA (node=10, K=100)
+(c) TOT (node=10, K=100)
+Fig. 7.
+Comparison of Sampling Methods (Parallel-Iteration) (Best Viewed in Color)
+(a) LDA (K=100)
+(b) Sentence LDA (K=100)
+(c) TOT (K=100)
+Fig. 8.
+Speedup Analysis (Best Viewed in Color)
+the lowest likelihood. The insights discussed in Section 7.1 still hold for training topic models in
+distributed environment. Similar phenomenon is observed when the number of nodes is set to 5 or
+20 and their results are skipped due to space limitation.
+Another important question is how much speedup we obtain when multiple computing nodes
+are involved. The speedup analysis of the three topic models is presented in Figure 8. High speedup
+ratio is an indicator of low communication and synchronization cost. With training topic models
+with PS, low communication cost is primarily achieved by the sparsity of the model under training.
+The sparser the model is,
+the less the parameters that each worker needs to pull from servers.
+When sorted by speedup ratio, the ranking of these sampling methods varies from model to model,
+showing a specific sampling method has different capability of promoting the sparsity of a topic
+model. However, for all the three topic models, GS always has the best speedup ratio, indicating
+that GS is quite effective in promoting the sparsity of the model. Compared with LDA and Sentence
+LDA,
+all sampling methods of TOT have lower speedup ratios due to the synchronization of
+continuous parameters at each iteration. Hence, topic models without continuous factors can take
+full advantage of the asynchronous parallelization of PS. Topic models with continuous factors
+usually have lower speedup ratio due to the synchronous parallelization caused by continuous
+parameters.
+8
+INDUSTRIAL CASES AND APPLICATION
+Currently, Familia has been widely used in both industrial community and academia. In this section,
+we first propose a guide for users to select appropriate topic models for their tasks and apply them
+in a proper way using Familia in Subsection 8.1 and 8.2. The success of the cases cannot be achieved
+if LDA is the only topic model in software engineers’ arsenal. Then a real-life industrial application
+14
+(a) News Topics Distribution as Aug-
+mented Features of GBDT
+(b) Experimental Results of News Classification
+Fig. 9.
+Classification of News Articles
+is presented to further showcase the benefit acquired from the aforementioned paradigms and
+models using Familia in Subsection 8.3.
+8.1
+Semantic Representation
+We first discuss some cases involving semantic representation. The semantic representation derived
+by topic modeling typically works as features for other machine learning models.
+8.1.1
+Document Classification.
+The first case is
+classification of news articles
+. For news feed
+service,
+the articles collected from various sources often contain low-quality ones.
+In order to
+improve user experience, we need to design a classifier to distinguish the good ones from the bad
+ones. Conventionally, the classifier is built upon some handcrafted features, which include source
+sites, text length, the total number of images, etc. We could employ topic model to obtain the topical
+distribution of each article and augment the handcrafted features with this distribution (shown
+in Figure 9a). As an experiment, we prepare 7,000 news articles, which are manually labeled into
+5 categories, in which 0 stands for those of the lowest quality, and 4 represents for the best. We
+train Gradient Boosting Decision Tree (GBDT) on 5,000 articles with different features and test
+the trained classifier on the other 2,000 articles. Figure 9b shows the result from the two classifiers
+using different sets of features: baseline, baseline+LDA. The results of using features of topic model
+are significantly better, showing that topic model is an effective way for document representation.
+8.1.2
+Document Clustering.
+Straightforwardly, the semantic representation of documents could
+be utilized for clustering. In the task of
+clustering new articles
+, we use LDA to compute the topic
+distribution of news articles and cluster the articles by K-means.
+Figure 10 shows two clusters
+which are obtained by clustering 1000 articles into ten groups. Cluster1 is of articles related to
+interior design and Cluster2 contains articles about the stock market. The result shows that news
+articles can be semantically clustered based on their topic distributions.
+8.1.3
+Dimensionality Reduction in News Quality Evaluation.
+Quality evaluation is critical for
+news recommendation. We now show how topic distributions of each news articles are utilized for
+news quality evaluation. The topic distribution of each news article is added as extra features for
+Gradient Boosting Decision Tree [
+6
+]. We utilize one-day news articles collected by a commercial
+spider for training and 2000 news articles for testing. Each article is labeled by human experts
+with a quality indicator ranging from 0 to 2, where 0 indicates a poor quality while 2 shows that
+15
+Fig. 10.
+Example of Clustering News Articles
+Fig. 11.
+News Quality Evaluation
+the article is of high quality. We compare different feature settings (i.e., baseline, baseline+LDA
+and baseline+Supervised LDA) in terms of the precision of separating news from different quality
+category. The baseline is composed of statistical features such as article length, image amount,
+entity amount, etc. Two insights are obtained from the experimental result shown in Figure 11: (1)
+The lower-dimensional topic representation is a good feature for article quality evaluation and it is
+effective in boosting the performance; (2) Supervised LDA outperforms LDA since it incorporates
+quality signals in its generative process and the resultant topic space is more effective for this
+particular task.
+8.2
+Semantic Matching
+Another paradigm is semantic matching,
+which can be further categorized as short-short text
+matching, short-long text matching and long-long text matching.
+8.2.1
+Short-Short Text Matching.
+The need for short-short text matching is common in web
+search, where we need to compute the semantic similarity between queries and web page titles.
+Due to the difficulty of topic modeling on short text, embedding-based models such as Word2Vec
+and Topical Word Embeddings (TWE) are much more common for this task. Assume we want to
+compute the semantic similarity between a query
+q =
+“recommend good movies” and a web page
+title
+t =
+“2016 good movies in China”, we first convert the queries into their embeddings (i.e.,
+®
+q
+and
+®
+t ) and then compute the semantic similarity between these embeddings with the metric of cosine
+similarity.
+16
+(a) Baseline: An ad about Love Story Micro-movie
+(b) Result with SentenceLDA Feature: An ad about Aijia Wed-
+ding Photography
+Fig. 12.
+Semantic Matching of Query-Ad
+CosineSimilarity(®
+q,
+®
+t ) =
+®
+q ·
+®
+t
+| ®
+q | |
+®
+t |
+(18)
+There are more sophisticated short-short text matching mechanisms in literature, interested readers
+may refer to deep neural network based models such as Deep Structured Semantic Model (DSSM)
+[12] and Convolutional Latent Semantic Model (CLSM) [30].
+8.2.2
+Short-Long Text Matching.
+In many online applications, we need to compute the semantic
+similarity between query and document. Since query is typically short and document content is
+much longer, short-long text matching is needed in this scenario. Due to the difficulty of topic
+inference on short text,
+we compute the probability of the short text generated from the topic
+distribution of the long text as follows:
+Similarity(q, c) =
+Ö
+w ∈q
+Õ
+k
+P (w |z
+k
+)P (z
+k
+|c ),
+(19)
+where q stands for query, c for document content, w for words in query and z
+k
+for topics.
+We first discuss the task of
+online advertising
+, in which we need to compute the semantic
+similarity between query and ad pages. We treat each textual field on ad page as a sentence and
+apply SentenceLDA for this task. After obtaining the topic distribution of each ad page, we apply
+Eq.(19) to compute the semantic similarity between query and the ad page. Such similarity can be
+utilized as a feature in downstream ranking models. For a query “recording of wedding ceremony”,
+we compare its ranking results from two strategies in Figure 12. We can see that the result with
+SentenceLDA feature is better at satisfying the underlying need of the query.
+An extreme case of short-long text matching is the task of
+keyword extraction from docu-
+ment
+. We extract a set of keywords from documents as concise and explicit representation of the
+document. The conventional way of extracting keywords from texts relies upon the TF and IDF
+information. If we want to introduce the semantic importance, we can use Eq.(20) to compute the
+similarity of a word and the document as follows:
+Similarity(w, c) =
+K
+Õ
+k=1
+cos( ®
+v
+w
+,
+®
+z
+k
+)P (z
+k
+|c ),
+(20)
+where
+c
+stands for document content,
+w
+for each word,
+®
+v
+w
+for word embedding for word
+w
+and
+®
+z
+k
+for vector representation of topic
+z
+. We use Eq.(20) to compute the similarity between each word
+and the whole article. Top-10 keywords (with stop words eliminated) extracted by TWE are shown
+in Figure 13, and we can see that the keywords from TWE preserve the important information in
+the news.
+17
+Fig. 13.
+Keyword Extraction based on TWE
+8.2.3
+Long-Long Text Matching.
+We can evaluate the semantic similarity between long texts
+by the distance of their topical distributions.
+Such semantic similarity can be further utilized
+as a feature in various machine learning models.
+The distance metrics of gauging two topical
+distributions include Hellinger Distance (HD) and Jensen-Shannon Divergence (JSD). Hellinger
+Distance is formally defined as follows:
+HD(P, Q) =
+1
+√
+2
+v
+u
+t
+K
+Õ
+i=1
+(
+√
+p
+i
+−
+√
+q
+i
+)
+2
+,
+(21)
+where
+p
+i
+and
+q
+i
+are the
+i
+-th element of the corresponding distributions. The definition of Jensen-
+Shannon Divergence (JSD) is as follows:
+JSD(P ||Q) =
+1
+2
+(KLD(P ||M) + KLD(Q ||M))
+(22)
+M =
+1
+2
+(P + Q)
+(23)
+KLD(P ||M) =
+K
+Õ
+i=1
+p
+i
+ln
+p
+i
+m
+i
+(24)
+where KLD stands for Kullback-Leibler Divergence.
+8.3
+Application
+We proceed to discuss the task of
+personalized fiction recommendation
+. Matrix factorization
+is a common approach for industrial recommendation systems. SVDFeature [
+4
+] is a framework
+designed to efficiently solve the feature-based matrix factorization. SVDFeature is quite flexible
+and is able to accommodates global features, user features and item features. SVDFearure can be
+mathematically described as follows:
+y = µ + (
+Õ
+j
+b
+(д)
+j
+γ
+j
++
+Õ
+j
+b
+(u )
+j
+α
+j
++
+Õ
+j
+b
+(i )
+j
+β
+j
+) + (
+Õ
+j
+p
+j
+α
+j
+)
+T
+(
+Õ
+j
+q
+j
+β
+j
+),
+(25)
+where
+y
+is target,
+µ
+is a constant indicating the global mean value of target,
+α
+represents user
+feature,
+β
+represents item feature,
+γ
+represents global feature,
+b
+(д)
+is weight of global feature,
+b
+(u )
+is weight of user feature, b
+(i )
+is weight of item feature, p and q are model parameters.
+In the scenario of personalized fiction recommendation, each user has some historically down-
+loaded fictions. By conduct topic modeling on these fictions, we can obtain the user’s topic repre-
+sentation, which works as a user profile of reading interests. By computing the JSD between the
+topic distribution of each fiction and the user profile, we can quantify the probability that user is
+interested in this fiction. We augment the aforementioned SVDFeature framework with the JSD
+value as a global feature (Figure 14). From a comparative study shown in Figure 15, we can see that
+18
+Fig. 14.
+SVDFeature with Topic Feature
+Fig. 15.
+Fiction Recommendation Performance
+adding JSD is effective to improve the performance of SVDFeature. SVDFeature with JSD constantly
+outperform its original counterpart in terms of both Precision and NDCG.
+9
+CONCLUSION
+In this paper, we propose a configurable topic modeling framework named Familia for industrial
+text engineering. The framework provides novel functionalities such as topic model customization,
+automatic parameter inference and post-modeling utilities. Based on the hybrid sampling mecha-
+nism of Familia, we further provide practical suggestions of choosing proper sampling methods for
+different topic models. Equipped with Familia, software engineers can easily test different assump-
+tions of the latent structure of their data without tediously deriving mathematical equations and
+implementing sampling algorithms from scratch. We wish that Familia would help the technique
+of topic modeling to be utilized in more proper and convenient manner in industrial scenarios.
+REFERENCES
+[1]
+David M Blei, Andrew Y Ng, and Michael I Jordan. 2003.
+Latent dirichlet allocation.
+the Journal of machine Learning
+research 3 (2003), 993–1022.
+[2]
+Alexey Borisov,
+Pavel Serdyukov,
+and Maarten de Rijke.
+2016.
+Using Metafeatures to Increase the Effectiveness
+of Latent Semantic Models in Web Search. In Proceedings of the 25th International Conference on World Wide Web.
+International World Wide Web Conferences Steering Committee, 1081–1091.
+[3]
+Jianfei Chen, Kaiwei Li, Jun Zhu, and Wenguang Chen. 2016.
+WarpLDA: a Cache Efficient O (1) Algorithm for Latent
+Dirichlet Allocation.
+stat 1050 (2016), 2.
+[4]
+Tianqi Chen, Weinan Zhang, Qiuxia Lu, Kailong Chen, Zhao Zheng, and Yong Yu. 2012.
+Svdfeature: a toolkit for
+feature-based collaborative filtering.
+Journal of Machine Learning Research 13, Dec (2012), 3619–3622.
+[5]
+Jeffrey Dean, Greg Corrado, Rajat Monga, Kai Chen, Matthieu Devin, Mark Mao, Andrew Senior, Paul Tucker, Ke
+Yang, Quoc V Le, and others. 2012.
+Large scale distributed deep networks. In Advances in neural information processing
+systems. 1223–1231.
+[6]
+Jerome H Friedman. 2002.
+Stochastic gradient boosting.
+Computational Statistics & Data Analysis 38, 4 (2002), 367–378.
+[7]
+Jianfeng Gao, Kristina Toutanova, and Wen-tau Yih. 2011.
+Clickthrough-based latent semantic models for web search.
+In Proceedings of the 34th international ACM SIGIR conference on Research and development in Information Retrieval.
+19
+ACM, 675–684.
+[8]
+Thomas L Griffiths and Mark Steyvers. 2004.
+Finding scientific topics.
+Proceedings of the National academy of Sciences
+101, suppl 1 (2004), 5228–5235.
+[9]
+Geoffrey E. Hinton and Drew Van Camp. 1993.
+Keeping the neural networks simple by minimizing the description
+length of the weights. In Proceedings of COLT-93. 5–13.
+[10]
+Matthew D Hoffman, David M Blei, Chong Wang, and John Paisley. 2013.
+Stochastic variational inference.
+Computer
+Science 14, 1 (2013), 1303–1347.
+[11]
+Thomas Hofmann. 1999.
+Probabilistic latent semantic indexing. In Proceedings of the 22nd annual international ACM
+SIGIR conference on Research and development in information retrieval. ACM, 50–57.
+[12]
+Po-Sen Huang, Xiaodong He, Jianfeng Gao, Li Deng, Alex Acero, and Larry Heck. 2013.
+Learning deep structured
+semantic models for web search using clickthrough data. In Proceedings of the 22nd ACM international conference on
+Conference on information & knowledge management. ACM, 2333–2338.
+[13]
+Tommi S. Jaakkola and Michael I. Jordan. 1996.
+A variational approach to Bayesian logistic regression models and
+their extensions.
+(1996).
+[14]
+Jagadeesh Jagarlamudi and Jianfeng Gao. 2013.
+Modeling click-through based word-pairs for web search. In Proceedings
+of the 36th international ACM SIGIR conference on Research and development in information retrieval. ACM, 483–492.
+[15]
+Di Jiang, Zeyu Chen, Rongzhong Lian, Siqi Bao, and Chen Li. 2017.
+Familia: An Open-Source Toolkit for Industrial
+Topic Modeling.
+arXiv preprint arXiv:1707.09823 (2017).
+[16]
+Yohan Jo and Alice H Oh. 2011.
+Aspect and sentiment unification model for online review analysis. In Proceedings of
+the fourth ACM international conference on Web search and data mining. ACM, 815–824.
+[17]
+Michael I. Jordan, Zoubin Ghahramani, Tommi S. Jaakkola, and Lawrence K. Saul. 1999.
+An Introduction to Variational
+Methods for Graphical Models.
+Machine Learning 37, 2 (1999), 183–233.
+[18]
+Diederik P Kingma and Max Welling. 2013.
+Auto-Encoding Variational Bayes.
+(2013).
+[19]
+Aaron Q Li,
+Amr Ahmed,
+Sujith Ravi,
+and Alexander J Smola.
+2014.
+Reducing the sampling complexity of topic
+models. In Proceedings of the 20th ACM SIGKDD international conference on Knowledge discovery and data mining. ACM,
+891–900.
+[20]
+Mu Li, Li Zhou, Zichao Yang, Aaron Li, Fei Xia, David G Andersen, and Alexander Smola. 2013.
+Parameter server for
+distributed machine learning. In Big Learning NIPS Workshop, Vol. 6. 2.
+[21]
+Jianhua Lin. 1991.
+Divergence measures based on the Shannon entropy.
+IEEE Transactions on Information theory 37, 1
+(1991), 145–151.
+[22]
+Zhiyuan Liu, Yuzhou Zhang, Edward Y Chang, and Maosong Sun. 2011.
+Plda+: Parallel latent dirichlet allocation with
+data placement and pipeline processing.
+ACM Transactions on Intelligent Systems and Technology (TIST) 2, 3 (2011), 26.
+[23]
+Jon D Mcauliffe and David M Blei. 2008.
+Supervised topic models. In Advances in neural information processing systems.
+121–128.
+[24]
+David Newman, Arthur Asuncion, Padhraic Smyth, and Max Welling. 2009.
+Distributed algorithms for topic models.
+Journal of Machine Learning Research 10, Aug (2009), 1801–1828.
+[25]
+C Peterson. 1987.
+a mean field theory learning algorithm for neural network.
+Complex Systems 1, 3 (1987), 995–1019.
+[26]
+Ian Porteous,
+David Newman,
+Alexander Ihler,
+Arthur Asuncion,
+Padhraic Smyth,
+and Max Welling.
+2008.
+Fast
+collapsed gibbs sampling for latent dirichlet allocation. In Proceedings of the 14th ACM SIGKDD international conference
+on Knowledge discovery and data mining. ACM, 569–577.
+[27]
+Rajesh Ranganath, Sean Gerrish, and David M Blei. 2013.
+Black Box Variational Inference.
+Computer Science (2013),
+814–822.
+[28]
+Radim Řehůřek and Petr Sojka. 2010.
+Software Framework for Topic Modelling with Large Corpora. In Proceedings
+of the LREC 2010 Workshop on New Challenges for NLP Frameworks. ELRA, Valletta, Malta, 45–50.
+http://is.muni.cz/
+publication/884893/en.
+[29]
+Lawrence K. Saul and Michael I. Jordan. 1995.
+Exploiting Tractable Substructures in Intractable Networks.
+Advances in
+Neural Information Processing Systems 8 (1995), 486–492.
+[30]
+Yelong Shen,
+Xiaodong He,
+Jianfeng Gao,
+Li
+Deng,
+and Grégoire Mesnil.
+2014.
+A latent semantic model
+with
+convolutional-pooling structure for information retrieval. In Proceedings of the 23rd ACM International Conference on
+Conference on Information and Knowledge Management. ACM, 101–110.
+[31]
+Xiance Si, Edward Y Chang, Zoltán Gyöngyi, and Maosong Sun. 2010. Confucius and its intelligent disciples: integrating
+social with search.
+Proceedings of the VLDB Endowment 3, 1-2 (2010), 1505–1516.
+[32]
+Sergej Sizov. 2010. Geofolk: latent spatial semantics in web 2.0 social media. In Proceedings of the third ACM international
+conference on Web search and data mining. ACM, 281–290.
+[33]
+Jan Vosecky, Di Jiang, Kenneth Wai-Ting Leung, Kai Xing, and Wilfred Ng. 2014.
+Integrating social and auxiliary
+semantics for multifaceted topic modeling in Twitter.
+ACM Transactions on Internet Technology (TOIT) 14, 4 (2014), 27.
+[34]
+Chong Wang, Jinggang Wang, Xing Xie, and Wei-Ying Ma. 2007.
+Mining geographic knowledge using location aware
+20
+topic model. In Proceedings of the 4th ACM workshop on Geographical information retrieval. ACM, 65–70.
+[35]
+Xuerui Wang and Andrew McCallum. 2006. Topics over time: a non-Markov continuous-time model of topical trends. In
+Proceedings of the 12th ACM SIGKDD international conference on Knowledge discovery and data mining. ACM, 424–433.
+[36]
+Yi Wang, Xuemin Zhao, Zhenlong Sun, Hao Yan, Lifeng Wang, Zhihui Jin, Liubin Wang, Yang Gao, Jia Zeng, Qiang
+Yang, and others. 2014.
+Towards topic modeling for big data.
+ACM Transactions on Intelligent Systems and Technology
+9, 4 (2014).
+[37]
+Xing Wei and W Bruce Croft. 2006.
+LDA-based document models for ad-hoc retrieval. In Proceedings of the 29th annual
+international ACM SIGIR conference on Research and development in information retrieval. ACM, 178–185.
+[38]
+Eric P Xing, Qirong Ho, Wei Dai, Jin Kyu Kim, Jinliang Wei, Seunghak Lee, Xun Zheng, Pengtao Xie, Abhimanu Kumar,
+and Yaoliang Yu. 2015.
+Petuum: A new platform for distributed machine learning on big data.
+IEEE Transactions on Big
+Data 1, 2 (2015), 49–67.
+[39]
+Limin Yao, David Mimno, and Andrew McCallum. 2009.
+Efficient methods for topic model inference on streaming
+document collections. In Proceedings of the 15th ACM SIGKDD international conference on Knowledge discovery and
+data mining. ACM, 937–946.
+[40]
+Jinhui Yuan, Fei Gao, Qirong Ho, Wei Dai, Jinliang Wei, Xun Zheng, Eric Po Xing, Tie-Yan Liu, and Wei-Ying Ma. 2015.
+Lightlda: Big topic models on modest computer clusters. In Proceedings of the 24th International Conference on World
+Wide Web. International World Wide Web Conferences Steering Committee, 1351–1361.
+21
